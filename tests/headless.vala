@@ -1,0 +1,99 @@
+using MajorisImage;
+
+async void verify (string directory, string large_path) throws Error {
+    var source = new ImageSource (File.new_for_path (Path.build_filename (directory, "rgb16.png")));
+    var registry = new DecoderRegistry ();
+    var document = yield registry.open (source);
+    assert (document.width == 24 && document.height == 16);
+    assert (document.bit_depth == 16);
+    assert ((document.capabilities & ImageCapabilities.HIGH_DEPTH) != 0);
+    assert (document.preview.bytes.get_size () == (size_t) document.preview.stride * document.preview.height);
+    var rgb8 = yield registry.open (new ImageSource (File.new_for_path (Path.build_filename (directory, "rgb8.png"))));
+    assert (rgb8.bit_depth == 8);
+    var pixels = yield document.render_region (0, 0, 1, 1, 1);
+    assert (pixels.width == 1 && pixels.height == 1 && pixels.bytes.get_size () == 16);
+    var output = yield new ThumbnailService ().generate (source, 64);
+    var cached = yield new ThumbnailService ().generate (source, 64);
+    assert (cached.compare (output) == 0);
+    unowned uint8[] png = output.get_data ();
+    assert (png[0] == 137 && png[1] == 'P' && png[2] == 'N' && png[3] == 'G');
+
+    var vector = new ImageSource (File.new_for_path (Path.build_filename (directory, "vector.svg")));
+    var svg = yield registry.open (vector);
+    assert (svg.vector && svg.supports_regions);
+
+    var multipart = new ImageSource (File.new_for_path (Path.build_filename (directory, "multipart.exr")));
+    var exr = yield registry.open (multipart);
+    assert (exr.hdr && exr.bit_depth == 32 && exr.page_count >= 2);
+    var part = yield exr.open_page (1);
+    assert (part.page == 1 && part.hdr && part.supports_regions);
+
+    var options = new DecodeOptions ();
+    options.sdr_presentation = true;
+    var sdr = yield registry.open (multipart, options);
+    assert (sdr.tone_mapped);
+    double original_y = luminance (exr.preview, 16, 8);
+    double mapped_y = luminance (sdr.preview, 16, 8);
+    assert (Math.fabs (mapped_y - 1.6 * original_y / (1 + 1.6 * original_y)) < 0.0001);
+    assert (Math.fabs (sample (sdr.preview, 16, 8, 3) - 0.75) < 0.0001);
+    var sdr_tile = yield sdr.render_region (16, 8, 1, 1, 1, true);
+    assert (Math.fabs (luminance (sdr_tile, 0, 0) - mapped_y) < 0.0001);
+
+    int64 began = get_monotonic_time ();
+    var large_source = new ImageSource (File.new_for_path (large_path));
+    var large = yield registry.open (large_source);
+    assert (large.width == 20000 && large.height == 10000 && large.supports_regions);
+    assert (large.preview.bytes.get_size () < 21 * 1024 * 1024);
+    var tile = yield large.render_region (19900, 9900, 100, 100, 100);
+    assert (tile.width == 100 && tile.height == 100);
+    stdout.printf ("200 MP TIFF preview and region %.3f s\n", (get_monotonic_time () - began) / 1000000.0);
+
+    var cancel = new Cancellable ();
+    cancel.cancel ();
+    try {
+        yield registry.open (source, null, cancel);
+        assert_not_reached ();
+    } catch (IOError.CANCELLED e) { }
+    var corrupt = new ImageSource (File.new_for_path (Path.build_filename (directory, "corrupt.bin")));
+    try {
+        yield registry.open (corrupt);
+        assert_not_reached ();
+    } catch (ImageError.UNSUPPORTED e) { }
+
+    string temp = DirUtils.make_tmp ("majoris-export-test-XXXXXX");
+    var target = File.new_for_path (Path.build_filename (temp, "export.png"));
+    try {
+        var transform = new RenderOptions ();
+        transform.turns = 1;
+        yield new EncoderRegistry ().encode (source, target, new ExportOptions (), transform);
+        var exported = yield registry.open (new ImageSource (target));
+        assert (exported.width == 16 && exported.height == 24 && exported.bit_depth == 16);
+    } finally {
+        FileUtils.unlink (target.get_path ());
+        DirUtils.remove (temp);
+    }
+}
+
+private float sample (PixelBuffer pixels, int x, int y, int channel) {
+    unowned uint8[] data = pixels.bytes.get_data ();
+    float value = 0;
+    Memory.copy (&value, &data[y * pixels.stride + 16 * x + 4 * channel], 4);
+    return value;
+}
+
+private double luminance (PixelBuffer pixels, int x, int y) {
+    return 0.2126 * sample (pixels, x, y, 0) + 0.7152 * sample (pixels, x, y, 1) +
+           0.0722 * sample (pixels, x, y, 2);
+}
+
+int main (string[] args) {
+    var loop = new MainLoop ();
+    int result = 0;
+    verify.begin (args[1], args[2], (obj, response) => {
+        try { verify.end (response); }
+        catch (Error e) { stderr.printf ("%s\n", e.message); result = 1; }
+        loop.quit ();
+    });
+    loop.run ();
+    return result;
+}

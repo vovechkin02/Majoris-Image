@@ -1,0 +1,9 @@
+usr/include/majoris-image-1/
+usr/include/majoris-image-gtk4-1/
+usr/lib/*/libmajoris-image.so
+usr/lib/*/libmajoris-image-gtk4.so
+usr/lib/*/pkgconfig/majoris-image-1.pc
+usr/lib/*/pkgconfig/majoris-image-gtk4-1.pc
+usr/share/vala/vapi/majoris-image*.vapi
+usr/share/vala/vapi/majoris-image*.deps
+usr/share/gir-1.0/MajorisImage*.gir

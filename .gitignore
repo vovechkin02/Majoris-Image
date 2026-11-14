@@ -1,0 +1,14 @@
+/build/
+/build-*/
+/debian/.debhelper/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/debian/tmp/
+/debian/libmajoris-image*/
+/debian/majoris-image-worker/
+/debian/majoris-image-thumbnailer/
+/obj-*/
+*.deb
+*.buildinfo
+*.changes

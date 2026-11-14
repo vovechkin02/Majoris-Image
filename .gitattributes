@@ -1,0 +1,6 @@
+* text=auto eol=lf
+debian/rules text eol=lf
+*.png binary
+*.tiff binary
+*.exr binary
+*.bin binary

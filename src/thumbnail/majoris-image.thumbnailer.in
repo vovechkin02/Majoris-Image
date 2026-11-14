@@ -1,0 +1,4 @@
+[Thumbnailer Entry]
+TryExec=@THUMBNAILER@
+Exec=@THUMBNAILER@ %u %o %s
+MimeType=image/jpeg;image/png;image/tiff;image/webp;image/gif;image/avif;image/heif;image/heic;image/jxl;image/x-exr;image/svg+xml;image/svg+xml-compressed;image/x-adobe-dng;image/x-canon-cr2;image/x-canon-cr3;image/x-nikon-nef;image/x-sony-arw;image/x-fuji-raf;image/x-panasonic-rw2;

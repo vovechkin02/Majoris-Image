@@ -1,0 +1,5 @@
+option('gtk', type: 'boolean', value: true, description: 'Build the GTK4 viewer and example')
+option('ultrahdr', type: 'feature', value: 'auto', description: 'Enable libuhdr gain-map decoding and encoding')
+option('glycin', type: 'feature', value: 'auto', description: 'Enable Glycin animation and compatibility previews')
+option('introspection', type: 'feature', value: 'auto', description: 'Generate GObject introspection data')
+option('tests', type: 'boolean', value: true, description: 'Build verification targets')

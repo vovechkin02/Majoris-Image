@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.16"/>
+  <object class="GtkApplicationWindow" id="window">
+    <property name="title">Majoris Image Demo</property>
+    <property name="default-width">960</property>
+    <property name="default-height">720</property>
+    <child>
+      <object class="GtkBox">
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkBox">
+            <property name="spacing">6</property>
+            <child><object class="GtkButton" id="open"><property name="label">Open…</property></object></child>
+            <child><object class="GtkButton" id="fit"><property name="label">Fit</property></object></child>
+            <child><object class="GtkButton" id="actual"><property name="label">Actual size</property></object></child>
+            <child><object class="GtkButton" id="in"><property name="label">Zoom in</property></object></child>
+            <child><object class="GtkButton" id="out"><property name="label">Zoom out</property></object></child>
+            <child><object class="GtkButton" id="rotate"><property name="label">Rotate</property></object></child>
+            <child><object class="GtkButton" id="play"><property name="label">Play</property></object></child>
+            <child><object class="GtkButton" id="prev"><property name="label">Previous page</property></object></child>
+            <child><object class="GtkButton" id="next"><property name="label">Next page</property></object></child>
+            <child><object class="GtkButton" id="metadata"><property name="label">Metadata</property></object></child>
+            <child><object class="GtkDropDown" id="policy"><property name="tooltip-text">Presentation mode</property></object></child>
+          </object>
+        </child>
+        <child>
+          <object class="MajorisImageView" id="viewer">
+            <property name="fit-mode">contain</property>
+            <property name="allow-zoom">true</property>
+            <property name="allow-pan">true</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkLabel" id="status">
+            <property name="wrap">true</property>
+            <property name="xalign">0</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

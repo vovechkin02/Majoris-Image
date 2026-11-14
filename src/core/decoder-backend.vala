@@ -1,0 +1,77 @@
+namespace MajorisImage {
+    [Flags]
+    public enum ImageCapabilities {
+        STILL = 1, ANIMATION = 2, MULTI_IMAGE = 4, HIGH_DEPTH = 8, HDR = 16,
+        REGION = 32, THUMBNAIL = 64, EMBEDDED_PREVIEW = 128, METADATA = 256,
+        ENCODE = 512, VECTOR = 1024, GAIN_MAP = 2048
+    }
+    public enum RawState { NOT_RAW, RAW_PREVIEW_AVAILABLE, RAW_DEVELOPING, RAW_DEVELOPED, RAW_UNSUPPORTED, RAW_DEVELOPMENT_FAILED }
+    internal enum DecodeFailure { UNSUPPORTED, CODEC_MISSING, CORRUPT, CRASH, TIMEOUT, MEMORY, COLOR_PROFILE, FAILURE }
+
+    /** An application-registered worker executable using the version 1 protocol. */
+    public interface DecoderBackend : Object {
+        public abstract string id { get; }
+        public abstract string executable { get; }
+        public abstract ImageCapabilities capabilities { get; }
+        public abstract string[] mime_types { owned get; }
+        public abstract bool accepts (string mime, Bytes signature);
+    }
+
+    public sealed class ImageProbe : Object {
+        internal int protocol_version { get; set; default = 1; }
+        public int width { get; set; }
+        public int height { get; set; }
+        public int pages { get; set; default = 1; }
+        public int depth { get; set; default = 8; }
+        public string mime { get; set; default = "application/octet-stream"; }
+        public string loader { get; set; default = ""; }
+        public bool raw { get; set; }
+        public bool hdr { get; set; }
+        public bool gain_map { get; set; }
+        public bool animated { get; set; }
+        public int loop_count { get; set; }
+        public int frame_duration_ms { get; set; }
+        public bool vector { get; set; }
+        public bool region { get; set; }
+        public string metadata { get; set; default = "{}"; }
+        public string image_names { get; set; default = ""; }
+        public ImageCapabilities capabilities { get {
+            var flags = ImageCapabilities.STILL | ImageCapabilities.THUMBNAIL | ImageCapabilities.METADATA;
+            if (pages > 1 && !animated) flags |= ImageCapabilities.MULTI_IMAGE;
+            if (animated) flags |= ImageCapabilities.ANIMATION;
+            if (depth > 8) flags |= ImageCapabilities.HIGH_DEPTH;
+            if (hdr) flags |= ImageCapabilities.HDR;
+            if (region) flags |= ImageCapabilities.REGION;
+            if (raw) flags |= ImageCapabilities.EMBEDDED_PREVIEW;
+            if (vector) flags |= ImageCapabilities.VECTOR;
+            if (gain_map) flags |= ImageCapabilities.GAIN_MAP;
+            return flags;
+        } }
+        internal string serialize () {
+            var node = Json.gobject_serialize (this);
+            node.get_object ().set_int_member ("protocol-version", 1);
+            var generator = new Json.Generator ();
+            generator.set_root (node);
+            return generator.to_data (null);
+        }
+        internal static ImageProbe deserialize (string text) throws Error {
+            var parser = new Json.Parser ();
+            parser.load_from_data (text);
+            var root = parser.get_root ();
+            if (root == null || root.get_node_type () != Json.NodeType.OBJECT)
+                throw new ImageError.INVALID_RESPONSE ("Invalid decoder manifest");
+            var object = root.get_object ();
+            var version = object.get_member ("protocol-version");
+            if (version == null || version.get_value_type () != typeof (int64) || version.get_int () != 1)
+                throw new ImageError.INVALID_RESPONSE ("Unsupported decoder manifest version");
+            object.remove_member ("protocol-version");
+            object.remove_member ("capabilities");
+            var result = Json.gobject_deserialize (typeof (ImageProbe), root) as ImageProbe;
+            if (result == null || result.width < 1 || result.height < 1 ||
+                result.width > 1000000 || result.height > 1000000 ||
+                result.pages < 1 || result.pages > 100001 || result.depth < 1 || result.depth > 64 || result.loader == "")
+                throw new ImageError.INVALID_RESPONSE ("Invalid image dimensions, page count, precision or decoder");
+            return result;
+        }
+    }
+}

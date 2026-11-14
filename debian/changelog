@@ -1,3 +1,12 @@
+majoris-image (1.0.1) unstable; urgency=medium
+
+  * Preserve viewer requests and playback intent across remapping.
+  * Add headless Glycin fallback and atomic shared thumbnail generation.
+  * Expand RAW precision metadata and animated-format regression coverage.
+  * Provide stock Debian and gain-map-enabled Majoris package builds.
+
+ -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 12:00:00 +1100
+
 majoris-image (1.0.0) unstable; urgency=medium
 
   * Initial standalone release of the Majoris Image libraries.

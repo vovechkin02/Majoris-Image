@@ -23,12 +23,16 @@ namespace MajorisImage {
         public int height { get; set; }
         public int pages { get; set; default = 1; }
         public int depth { get; set; default = 8; }
+        public int source_bit_depth { get; set; }
+        public bool has_alpha { get; set; }
+        public bool embedded_preview { get; set; }
         public string mime { get; set; default = "application/octet-stream"; }
         public string loader { get; set; default = ""; }
         public bool raw { get; set; }
         public bool hdr { get; set; }
         public bool gain_map { get; set; }
         public bool animated { get; set; }
+        public bool timed_sequence { get; set; }
         public int loop_count { get; set; }
         public int frame_duration_ms { get; set; }
         public bool vector { get; set; }
@@ -42,7 +46,7 @@ namespace MajorisImage {
             if (depth > 8) flags |= ImageCapabilities.HIGH_DEPTH;
             if (hdr) flags |= ImageCapabilities.HDR;
             if (region) flags |= ImageCapabilities.REGION;
-            if (raw) flags |= ImageCapabilities.EMBEDDED_PREVIEW;
+            if (embedded_preview) flags |= ImageCapabilities.EMBEDDED_PREVIEW;
             if (vector) flags |= ImageCapabilities.VECTOR;
             if (gain_map) flags |= ImageCapabilities.GAIN_MAP;
             return flags;

@@ -1,7 +1,13 @@
 #!/usr/bin/make -f
 
+ifneq ($(filter pkg.majoris-image.gainmap,$(DEB_BUILD_PROFILES)),)
+gainmap = enabled
+else
+gainmap = disabled
+endif
+
 %:
 	dh $@ --buildsystem=meson
 
 override_dh_auto_configure:
-	dh_auto_configure -- -Dglycin=enabled -Dintrospection=enabled
+	dh_auto_configure -- -Dglycin=enabled -Dintrospection=enabled -Dultrahdr=$(gainmap)

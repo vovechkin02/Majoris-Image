@@ -2,7 +2,7 @@
 
 int main(int argc, char **argv)
 {
-    if (argc != 3 || VIPS_INIT(argv[0])) return 1;
+    if (argc != 5 || VIPS_INIT(argv[0])) return 1;
     VipsImage *black = NULL, *mid = NULL, *tiff = NULL, *raster = NULL;
     int rc = 1;
     if (vips_black(&black, 20000, 10000, "bands", 3, NULL) ||
@@ -23,6 +23,17 @@ int main(int argc, char **argv)
     vips_image_set_int(raster, "loop", 1);
     vips_image_set_array_int(raster, "delay", delays, 3);
     if (vips_gifsave(raster, argv[2], NULL)) goto done;
+    vips_image_set_int(raster, "loop", 0);
+    int alternate[] = {40, 170, 250};
+    vips_image_set_array_int(raster, "delay", alternate, 3);
+    if (vips_webpsave(raster, argv[3], "lossless", TRUE, NULL)) goto done;
+    if (vips_type_find("VipsOperation", "jp2ksave")) {
+        VipsImage *first = NULL;
+        if (vips_crop(raster, &first, 0, 0, 8, 8, NULL)) goto done;
+        int result = vips_jp2ksave(first, argv[4], "lossless", TRUE, NULL);
+        g_object_unref(first);
+        if (result) goto done;
+    } else if (!g_file_set_contents(argv[4], "", 0, NULL)) goto done;
     rc = 0;
 done:
     if (rc) g_printerr("%s\n", vips_error_buffer());

@@ -10,6 +10,10 @@ int main(int argc, char **argv)
     if (!source) return 2;
     int mode = fgetc(source);
     fclose(source);
+    if (mode == 'q') {
+        fputs("{\"kind\":\"missing-codec\",\"message\":\"No native test codec\"}\n", stderr);
+        return 1;
+    }
     if (mode == 'C') raise(SIGSEGV);
     if (mode == 'T') { sleep(10); return 1; }
     if (mode == 'R') {

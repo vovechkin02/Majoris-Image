@@ -7,11 +7,16 @@ namespace MajorisImage {
         public int page { get; private set; }
         public int page_count { get; private set; }
         public int bit_depth { get; private set; }
+        /** Source sample precision, or zero when the decoder cannot establish it. */
+        public int source_bit_depth { get; private set; }
+        public int pixel_buffer_bit_depth { get { return 32; } }
+        public bool has_alpha { get; private set; }
         public bool hdr { get; private set; }
         public bool tone_mapped { get; private set; }
         public bool vector { get; private set; }
         public bool supports_regions { get; private set; }
         public bool animated { get; private set; }
+        public bool timed_sequence { get; private set; }
         public int frame { get; private set; }
         public int frame_count { get; private set; }
         public int loop_count { get; private set; }
@@ -23,6 +28,7 @@ namespace MajorisImage {
         public string warning { get; private set; }
         public ImageMetadata metadata { get; private set; }
         public PixelBuffer preview { get; private set; }
+        internal ImageProbe probe { get; private set; }
         private DecodeOptions options;
         private WorkerClient worker;
         private string identity;
@@ -30,6 +36,7 @@ namespace MajorisImage {
         internal ImageDocument (ImageSource source, ImageProbe probe, PixelBuffer preview,
                                 DecodeOptions options, WorkerClient worker, string identity) {
             this.source = source;
+            this.probe = probe;
             this.preview = preview;
             this.options = options;
             this.worker = worker;
@@ -43,17 +50,22 @@ namespace MajorisImage {
             page = probe.animated ? 0 : options.page;
             frame = probe.animated ? options.page : 0;
             bit_depth = probe.depth;
+            source_bit_depth = probe.source_bit_depth;
+            has_alpha = probe.has_alpha;
             hdr = probe.hdr;
             tone_mapped = hdr && options.sdr_presentation;
             vector = probe.vector;
             supports_regions = probe.region && source.file.is_native ();
             animated = probe.animated;
+            timed_sequence = probe.timed_sequence;
             raw_state = probe.raw ? (options.raw_preview_only ? RawState.RAW_PREVIEW_AVAILABLE :
                                      RawState.RAW_DEVELOPED) : RawState.NOT_RAW;
             decoder = probe.loader;
             capabilities = probe.capabilities;
             mime_type = probe.mime;
-            warning = options.raw_preview_only && probe.raw ? "Showing the camera's embedded RAW preview" : "";
+            if (options.raw_preview_only && probe.raw) warning = "Showing the camera's embedded RAW preview";
+            else if (probe.timed_sequence && !probe.animated) warning = "The installed decoder supplied a still preview of this timed sequence";
+            else warning = "";
             metadata = new ImageMetadata (probe.metadata);
         }
 
@@ -70,14 +82,22 @@ namespace MajorisImage {
         }
 
         private async ImageDocument open_index (int index, Cancellable? cancel) throws Error {
+            var stop = cancel ?? new Cancellable ();
+            yield verify_source (stop);
+            if (decoder == "Glycin" && !animated && index == 0) return this;
             var requested = options.copy ();
             requested.page = index;
-            return yield DecoderRegistry.open_with (worker, source, requested, cancel ?? new Cancellable ());
+            if (animated && mime_type == "image/apng" && index != frame)
+                return yield GlycinFallback.open (source, requested, stop,
+                    new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"), 120, probe);
+            if (animated && index == frame) return this;
+            return yield DecoderRegistry.open_with (worker, source, requested, stop);
         }
 
         /** Coordinates refer to the oriented page at its original resolution. */
         public async PixelBuffer render_region (int x, int y, int width, int height, int edge,
                                                 bool tone_map = false, Cancellable? cancel = null) throws Error {
+            if (decoder == "Glycin") throw new ImageError.UNSUPPORTED ("Glycin still-image fallback does not provide region decoding");
             if (x < 0 || y < 0 || width < 1 || height < 1 || x > this.width - width ||
                 y > this.height - height || edge < 1 || edge > 4096)
                 throw new IOError.INVALID_ARGUMENT ("Invalid image region or output size");

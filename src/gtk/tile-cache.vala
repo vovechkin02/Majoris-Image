@@ -20,12 +20,14 @@ namespace MajorisImage {
         private Gee.HashMap<string, ImageTile> tiles = new Gee.HashMap<string, ImageTile> ();
         private Gee.ArrayQueue<ImageTile> pending = new Gee.ArrayQueue<ImageTile> ();
         private ImageDocument? document;
+        private bool tone_map;
         private uint active;
         private uint generation;
         public signal void changed ();
 
-        public void reset (ImageDocument? source) {
+        public void reset (ImageDocument? source, bool tone_map = false) {
             generation++;
+            this.tone_map = tone_map;
             foreach (var tile in tiles.values) tile.request?.cancel ();
             document = source != null && source.supports_regions ? source : null;
             tiles.clear ();
@@ -120,15 +122,15 @@ namespace MajorisImage {
                 if (tiles[tile.key] != tile) continue;
                 tile.request = new Cancellable ();
                 active++;
-                load.begin (document, tile, generation, tile.request);
+                load.begin (document, tile, generation, tone_map, tile.request);
             }
         }
 
-        private async void load (ImageDocument source, ImageTile tile, uint request_generation, Cancellable stop) {
+        private async void load (ImageDocument source, ImageTile tile, uint request_generation, bool tone_map, Cancellable stop) {
             try {
                 int edge = (int) Math.ceil (int.max (tile.decode_width, tile.decode_height) * tile.level);
                 var pixels = yield source.render_region (tile.decode_x, tile.decode_y,
-                    tile.decode_width, tile.decode_height, edge, true, stop);
+                    tile.decode_width, tile.decode_height, edge, tone_map, stop);
                 if (!stop.is_cancelled () && generation == request_generation && tiles[tile.key] == tile)
                     tile.texture = texture_for_pixels (pixels);
             } catch (Error e) {

@@ -1,4 +1,4 @@
-project('majoris-image', ['c', 'cpp', 'vala'], version: '1.0.0',
+project('majoris-image', ['c', 'cpp', 'vala'], version: '1.0.1',
   license: 'GPL-3.0-or-later', meson_version: '>=1.4',
   default_options: ['c_std=gnu11', 'cpp_std=c++17', 'warning_level=1'])
 
@@ -14,6 +14,7 @@ config = configuration_data()
 config.set_quoted('WORKER_PATH', get_option('prefix') / get_option('libexecdir') / 'majoris-image-worker')
 configure_file(output: 'config.h', configuration: config)
 
+glycin = dependency('glycin-1', required: get_option('glycin'))
 subdir('src/core')
 subdir('native')
 subdir('src/worker')

@@ -4,9 +4,11 @@ Priority: optional
 Maintainer: Majoris contributors <packages@majoris.invalid>
 Build-Depends: debhelper-compat (= 13), meson (>= 1.4), ninja-build, valac, pkgconf,
  libglib2.0-dev, libgee-0.8-dev, libjson-glib-dev, zlib1g-dev,
- libgtk-4-dev (>= 4.16), libglycin-1-dev, libglycin-gtk4-1-dev,
+ libgtk-4-dev (>= 4.16), libglycin-1-dev, libglycin-gtk4-1-dev, glycin-loaders,
  libvips-dev, libraw-dev, liblcms2-dev, libheif-dev, libjxl-dev, libopenexr-dev,
- librsvg2-dev, libgexiv2-dev, bubblewrap, util-linux, xvfb, xauth, girepository-tools
+ librsvg2-dev, libgexiv2-dev, bubblewrap, xvfb, xauth, girepository-tools,
+ libheif-plugin-libde265, libheif-plugin-dav1d,
+ libuhdr-dev (>= 2.0.2) <pkg.majoris-image.gainmap>
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 
@@ -14,6 +16,7 @@ Package: libmajoris-image-1
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}, majoris-image-worker (= ${binary:Version})
+Recommends: glycin-loaders
 Description: shared sandboxed image processing library
  Majoris Image provides asynchronous image opening, metadata, floating-point
  image data, region rendering, export and headless PNG thumbnail generation.
@@ -30,7 +33,7 @@ Description: reusable Majoris Image GTK4 widget
 Package: majoris-image-worker
 Architecture: any
 Multi-Arch: foreign
-Depends: ${shlibs:Depends}, ${misc:Depends}, bubblewrap, util-linux
+Depends: ${shlibs:Depends}, ${misc:Depends}, bubblewrap
 Recommends: libheif-plugin-libde265, libheif-plugin-dav1d
 Suggests: gvfs-backends
 Description: isolated Majoris Image decoding worker
@@ -40,7 +43,8 @@ Description: isolated Majoris Image decoding worker
 Package: majoris-image-thumbnailer
 Section: graphics
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, glycin-loaders,
+ libheif-plugin-libde265, libheif-plugin-dav1d
 Description: desktop thumbnail generator using Majoris Image
  Generates colour-managed PNG thumbnails for supported image formats using
  the Majoris Image worker.

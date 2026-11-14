@@ -23,6 +23,25 @@ namespace MajorisImage {
         return image;
     }
 
+    private void update_metadata (string source, DecodeOptions options, WorkerRequest request,
+                                  ImageProbe probe) throws Error {
+        var metadata = MetadataReader.read (source, options.page, request.hdr_hint, probe);
+        metadata.set_int_member ("source-bit-depth", probe.source_bit_depth);
+        metadata.set_int_member ("effective-bit-depth", probe.depth);
+        metadata.set_int_member ("pixel-buffer-bit-depth", 32);
+        metadata.set_boolean_member ("alpha", probe.has_alpha);
+        metadata.set_boolean_member ("embedded-preview", probe.raw && options.raw_preview_only);
+        if (probe.raw && !options.raw_preview_only) {
+            metadata.set_int_member ("raw-quality", options.raw_quality);
+            metadata.set_boolean_member ("camera-white-balance", options.camera_white_balance);
+        }
+        var node = new Json.Node (Json.NodeType.OBJECT);
+        node.set_object (metadata);
+        var generator = new Json.Generator ();
+        generator.set_root (node);
+        probe.metadata = generator.to_data (null);
+    }
+
     public int main (string[] args) {
         if (args.length != 6 || Vips.init ("majoris-image-worker") != 0) return 2;
         Vips.cache_set_max_mem (128 * 1024 * 1024);
@@ -40,15 +59,8 @@ namespace MajorisImage {
             int edge = int.parse (args[5]);
             if (edge < 0 || edge > 4096) throw new IOError.INVALID_ARGUMENT ("Invalid output edge");
             var probe = ImageInspector.inspect (source, request.hdr_hint, options.page);
-            if (operation == "probe" || operation == "decode") {
-                var metadata = MetadataReader.read (source, options.page, request.hdr_hint, probe);
-                var node = new Json.Node (Json.NodeType.OBJECT);
-                node.set_object (metadata);
-                var generator = new Json.Generator ();
-                generator.set_root (node);
-                probe.metadata = generator.to_data (null);
-            }
             if (operation == "probe") {
+                update_metadata (source, options, request, probe);
                 FileUtils.set_contents (output, probe.serialize ());
                 return 0;
             }
@@ -68,10 +80,14 @@ namespace MajorisImage {
             ImageProcessor.check (Vips.autorot (input, out oriented, null));
             probe.width = oriented.width ();
             probe.height = oriented.height ();
+            probe.has_alpha = input.has_alpha ();
             if (options.raw_preview_only && probe.raw) {
+                probe.depth = input.format () == 2 || input.format () == 3 ? 16 : 8;
+                probe.embedded_preview = true;
                 probe.region = false;
                 probe.loader = "LibRaw embedded preview";
             }
+            if (operation == "decode") update_metadata (source, options, request, probe);
             if (probe.vector && edge > 0) {
                 var crop = request.transform;
                 input = ImageNative.svg_region (source, crop.crop_x, crop.crop_y, crop.crop_width,

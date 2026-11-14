@@ -1,14 +1,20 @@
 core_sources = files(
   'image-error.vala', 'image-source.vala', 'image-document.vala',
-  'decoder-backend.vala', 'decoder-registry.vala', 'encoder-registry.vala',
+  'decoder-backend.vala', 'decoder-registry.vala', 'glycin-fallback.vala', 'encoder-registry.vala',
   'render-options.vala', 'export-options.vala', 'thumbnail-service.vala', 'preload-manager.vala',
   'job-scheduler.vala', 'worker-request.vala', 'worker-client.vala', 'worker-failure.vala',
   'worker-path.c', 'thumbnail-png.c',
 )
 core_dependencies = [gio, gee, json, math, dependency('zlib')]
+core_vala_args = ['--shared-library=libmajoris-image.so.1', '--hide-internal']
+if glycin.found()
+  core_dependencies += [glycin]
+  core_sources += files('glycin-pixels.c')
+  core_vala_args += ['--define=HAVE_GLYCIN']
+endif
 core_library = shared_library('majoris-image', core_sources, dependencies: core_dependencies, include_directories: include_directories('../..'),
   version: meson.project_version(), soversion: '1', install: true,
-  vala_args: ['--shared-library=libmajoris-image.so.1', '--hide-internal'],
+  vala_args: core_vala_args,
   vala_header: 'majoris-image.h', vala_vapi: 'majoris-image-1.vapi', vala_gir: 'MajorisImage-1.0.gir',
   install_dir: [get_option('libdir'), get_option('includedir') / 'majoris-image-1', get_option('datadir') / 'vala/vapi', get_option('datadir') / 'gir-1.0'])
 core_gir_dir = meson.current_build_dir()

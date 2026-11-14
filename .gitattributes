@@ -4,3 +4,4 @@ debian/rules text eol=lf
 *.tiff binary
 *.exr binary
 *.bin binary
+*.avif binary

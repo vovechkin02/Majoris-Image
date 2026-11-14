@@ -20,7 +20,16 @@ char *majoris_codec_raw_info(const char *source) {
         int_member(b, "raw-width", raw->sizes.raw_width); int_member(b, "raw-height", raw->sizes.raw_height);
         int_member(b, "colors", raw->idata.colors); int_member(b, "cfa", raw->idata.filters);
         int_member(b, "white-level", raw->color.maximum); int_member(b, "black-level", raw->color.black);
-        int_member(b, "orientation", raw->sizes.flip); int_member(b, "iso", raw->other.iso_speed);
+        int flip = raw->sizes.flip;
+        static const int exif_orientation[] = {1, 2, 4, 3, 5, 8, 6, 7};
+        int_member(b, "orientation", flip);
+        if (flip >= 0 && flip < 8) int_member(b, "exif-orientation", exif_orientation[flip]);
+        unsigned white = raw->color.maximum;
+        int bits = 0;
+        while (white) { bits++; white >>= 1; }
+        int_member(b, "sensor-white-level-bits", bits);
+        int_member(b, "preview-byte-count", raw->thumbnail.tlength);
+        int_member(b, "iso", raw->other.iso_speed);
         json_builder_set_member_name(b, "aperture"); json_builder_add_double_value(b, raw->other.aperture);
         json_builder_set_member_name(b, "shutter"); json_builder_add_double_value(b, raw->other.shutter);
         json_builder_set_member_name(b, "focal-length"); json_builder_add_double_value(b, raw->other.focal_len);

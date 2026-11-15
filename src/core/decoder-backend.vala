@@ -3,7 +3,7 @@ namespace MajorisImage {
     public enum ImageCapabilities {
         STILL = 1, ANIMATION = 2, MULTI_IMAGE = 4, HIGH_DEPTH = 8, HDR = 16,
         REGION = 32, THUMBNAIL = 64, EMBEDDED_PREVIEW = 128, METADATA = 256,
-        ENCODE = 512, VECTOR = 1024, GAIN_MAP = 2048
+        ENCODE = 512, VECTOR = 1024, GAIN_MAP = 2048, COLOUR_MANAGED = 4096
     }
     public enum RawState { NOT_RAW, RAW_PREVIEW_AVAILABLE, RAW_DEVELOPING, RAW_DEVELOPED, RAW_UNSUPPORTED, RAW_DEVELOPMENT_FAILED }
     internal enum DecodeFailure { UNSUPPORTED, CODEC_MISSING, CORRUPT, CRASH, TIMEOUT, MEMORY, COLOR_PROFILE, FAILURE }
@@ -25,6 +25,8 @@ namespace MajorisImage {
         public int depth { get; set; default = 8; }
         public int source_bit_depth { get; set; }
         public bool has_alpha { get; set; }
+        public bool colour_managed { get; set; }
+        public string colour_diagnostic { get; set; default = ""; }
         public bool embedded_preview { get; set; }
         public string mime { get; set; default = "application/octet-stream"; }
         public string loader { get; set; default = ""; }
@@ -35,6 +37,8 @@ namespace MajorisImage {
         public bool timed_sequence { get; set; }
         public int loop_count { get; set; }
         public int frame_duration_ms { get; set; }
+        public int64 frame_timestamp_us { get; set; }
+        public int64 frame_duration_us { get; set; }
         public bool vector { get; set; }
         public bool region { get; set; }
         public string metadata { get; set; default = "{}"; }
@@ -45,6 +49,7 @@ namespace MajorisImage {
             if (animated) flags |= ImageCapabilities.ANIMATION;
             if (depth > 8) flags |= ImageCapabilities.HIGH_DEPTH;
             if (hdr) flags |= ImageCapabilities.HDR;
+            if (colour_managed) flags |= ImageCapabilities.COLOUR_MANAGED;
             if (region) flags |= ImageCapabilities.REGION;
             if (embedded_preview) flags |= ImageCapabilities.EMBEDDED_PREVIEW;
             if (vector) flags |= ImageCapabilities.VECTOR;

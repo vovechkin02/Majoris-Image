@@ -1,55 +1,33 @@
-#include <vips/vips.h>
-#include <libheif/heif.h>
-#include <stdio.h>
+#include "bridge.h"
+#include "glycin-discovery.h"
+#include <json-glib/json-glib.h>
 
-static gboolean installed(const char *nickname)
+static void add_mime(GString *mimes, GHashTable *seen, const char *mime)
 {
-    return vips_type_find("VipsOperation", nickname) != 0;
+    if (g_hash_table_contains(seen, mime)) return;
+    g_hash_table_add(seen, g_strdup(mime));
+    g_string_append_printf(mimes, "%s;", mime);
 }
 
 int main(int argc, char **argv)
 {
     if (argc != 5 || VIPS_INIT(argv[0])) return 1;
-    g_autoptr(GString) mimes = g_string_new(
-        "image/x-exr;image/x-adobe-dng;image/x-canon-cr2;image/x-canon-cr3;"
-        "image/x-canon-crw;image/x-nikon-nef;image/x-nikon-nrw;image/x-sony-arw;"
-        "image/x-sony-sr2;image/x-fuji-raf;image/x-panasonic-rw2;image/x-olympus-orf;"
-        "image/x-pentax-pef;image/x-samsung-srw;image/x-minolta-mrw;");
-    const struct { const char *operation, *mimes; } formats[] = {
-        {"jpegload", "image/jpeg;"},
-        {"pngload", "image/png;image/apng;"},
-        {"tiffload", "image/tiff;"},
-        {"webpload", "image/webp;"},
-        {"gifload", "image/gif;"},
-        {"jp2kload", "image/jp2;"},
-        {"jxlload", "image/jxl;"},
-        {"svgload", "image/svg+xml;image/svg+xml-compressed;"},
-        {"radload", "image/vnd.radiance;"},
-        {"ppmload", "image/x-portable-anymap;image/x-portable-bitmap;image/x-portable-graymap;image/x-portable-pixmap;"}
-    };
-    for (guint i = 0; i < G_N_ELEMENTS(formats); i++)
-        if (installed(formats[i].operation)) g_string_append(mimes, formats[i].mimes);
-    if (installed("heifload")) {
-        if (heif_have_decoder_for_format(heif_compression_AV1))
-            g_string_append(mimes, "image/avif;");
-        if (heif_have_decoder_for_format(heif_compression_HEVC))
-            g_string_append(mimes, "image/heif;image/heic;");
+    g_autoptr(GString) mimes = g_string_new(NULL);
+    g_autoptr(GHashTable) seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    g_autoptr(JsonParser) parser = json_parser_new();
+    g_autofree char *catalogue = majoris_codec_codec_json();
+    if (!json_parser_load_from_data(parser, catalogue, -1, NULL)) return 1;
+    JsonArray *entries = json_node_get_array(json_parser_get_root(parser));
+    for (guint i = 0; i < json_array_get_length(entries); i++) {
+        JsonObject *entry = json_array_get_object_element(entries, i);
+        if (!json_object_get_boolean_member_with_default(entry, "thumbnail", FALSE)) continue;
+        JsonArray *formats = json_object_get_array_member(entry, "mime-types");
+        for (guint j = 0; j < json_array_get_length(formats); j++)
+            add_mime(mimes, seen, json_array_get_string_element(formats, j));
     }
-
     if (g_str_equal(argv[4], "glycin")) {
-        /* Match the default installed loader config used by the fallback. */
-        g_autoptr(GKeyFile) loaders = g_key_file_new();
-        if (g_key_file_load_from_file(loaders,
-            "/usr/share/glycin-loaders/1+/conf.d/glycin-image-rs.conf", G_KEY_FILE_NONE, NULL)) {
-            const char *legacy[] = { "image/bmp", "image/vnd.microsoft.icon", "image/qoi",
-                "image/x-qoi", "image/x-tga", "image/vnd-ms.dds", "image/x-dds" };
-            for (guint i = 0; i < G_N_ELEMENTS(legacy); i++) {
-                g_autofree char *group = g_strconcat("loader:", legacy[i], NULL);
-                g_autofree char *exec = g_key_file_get_string(loaders, group, "Exec", NULL);
-                if (exec && g_file_test(exec, G_FILE_TEST_IS_EXECUTABLE))
-                    g_string_append_printf(mimes, "%s;", legacy[i]);
-            }
-        }
+        g_auto(GStrv) formats = majoris_discover_glycin_loaders();
+        for (char **mime = formats; *mime; mime++) add_mime(mimes, seen, *mime);
     }
 
     g_autoptr(GKeyFile) output = g_key_file_new();

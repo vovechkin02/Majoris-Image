@@ -3,12 +3,12 @@
 set -eu
 source_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 scratch=$(mktemp -d)
-trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/demo-resources.c" "$scratch/thumbnail.png"; rmdir "$scratch"' EXIT
+trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/files" "$scratch/photos" "$scratch/photo.png" "$scratch/demo-resources.c" "$scratch/thumbnail.png"; rmdir "$scratch"' EXIT
 cd "$scratch"
 unset MAJORIS_IMAGE_WORKER
 
-pkg-config --atleast-version=1.0.1 majoris-image-1
-pkg-config --atleast-version=1.0.1 majoris-image-gtk4-1
+pkg-config --atleast-version=1.1.0 majoris-image-1
+pkg-config --atleast-version=1.1.0 majoris-image-gtk4-1
 valac --pkg majoris-image-1 "$source_root/tests/benchmark.vala" -o headless
 ./headless open "$source_root/tests/fixtures/rgb16.png"
 if ldd ./headless | grep -E 'libgtk|libgdk-'; then
@@ -16,11 +16,17 @@ if ldd ./headless | grep -E 'libgtk|libgdk-'; then
     exit 1
 fi
 cc "$source_root/examples/builder.c" $(pkg-config --cflags --libs majoris-image-gtk4-1) -o builder
-xvfb-run -a ./builder
+xvfb-run -a ./builder "$source_root/tests/fixtures/rgb16.png"
 glib-compile-resources --sourcedir="$source_root/examples" --generate-source \
     --target=demo-resources.c "$source_root/examples/demo.gresource.xml"
 valac --pkg majoris-image-gtk4-1 "$source_root/examples/demo.vala" demo-resources.c -o demo
 xvfb-run -a sh -c 'status=0; timeout 3 ./demo || status=$?; test "$status" -eq 124'
+valac --pkg majoris-image-gtk4-1 "$source_root/examples/files-preview.vala" -o files
+valac --pkg majoris-image-gtk4-1 "$source_root/examples/photos-viewer.vala" -o photos
+xvfb-run -a ./files "$source_root/tests/fixtures/rgb16.png" "$source_root/tests/fixtures/multipart.exr"
+if [ -f "$source_root/tests/fixtures/large.tiff" ]; then
+    xvfb-run -a ./photos "$source_root/tests/fixtures/large.tiff" "$source_root/tests/fixtures/multipart.exr" photo.png
+fi
 xvfb-run -a /usr/bin/python3 - <<'PY'
 import gi
 gi.require_version("Gtk", "4.0")

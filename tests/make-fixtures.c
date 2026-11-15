@@ -1,9 +1,11 @@
-#include <vips/vips.h>
+#include "bridge.h"
 
 int main(int argc, char **argv)
 {
-    if (argc != 5 || VIPS_INIT(argv[0])) return 1;
+    if (argc != 7 || VIPS_INIT(argv[0])) return 1;
     VipsImage *black = NULL, *mid = NULL, *tiff = NULL, *raster = NULL;
+    VipsImage *working = NULL, *profiled = NULL;
+    g_autoptr(GError) error = NULL;
     int rc = 1;
     if (vips_black(&black, 20000, 10000, "bands", 3, NULL) ||
         vips_linear1(black, &mid, 0, 32768, NULL) ||
@@ -34,9 +36,21 @@ int main(int argc, char **argv)
         g_object_unref(first);
         if (result) goto done;
     } else if (!g_file_set_contents(argv[4], "", 0, NULL)) goto done;
+    const float linear[] = {.18f, .32f, .12f, .5f, .4f, .2f};
+    working = vips_image_new_from_memory_copy(linear, sizeof linear, 2, 1, 3, VIPS_FORMAT_FLOAT);
+    working->Type = VIPS_INTERPRETATION_scRGB;
+    profiled = majoris_codec_convert_profile(working, "display-p3", 16, &error);
+    if (!profiled) {
+        g_printerr("%s\n", error->message);
+        goto done;
+    }
+    if (vips_pngsave(profiled, argv[5], "bitdepth", 16, NULL) ||
+        vips_tiffsave(profiled, argv[6], NULL)) goto done;
     rc = 0;
 done:
     if (rc) g_printerr("%s\n", vips_error_buffer());
+    g_clear_object(&profiled);
+    g_clear_object(&working);
     g_clear_object(&raster);
     g_clear_object(&tiff);
     g_clear_object(&mid);

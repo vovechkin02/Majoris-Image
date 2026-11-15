@@ -2,3 +2,5 @@ examples/builder.c
 examples/demo.vala
 examples/demo.ui
 examples/demo.gresource.xml
+examples/files-preview.vala
+examples/photos-viewer.vala

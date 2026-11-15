@@ -11,6 +11,8 @@ namespace MajorisImage {
         public int source_bit_depth { get; private set; }
         public int pixel_buffer_bit_depth { get { return 32; } }
         public bool has_alpha { get; private set; }
+        public bool colour_managed { get; private set; }
+        public string colour_diagnostic { get; private set; }
         public bool hdr { get; private set; }
         public bool tone_mapped { get; private set; }
         public bool vector { get; private set; }
@@ -21,6 +23,8 @@ namespace MajorisImage {
         public int frame_count { get; private set; }
         public int loop_count { get; private set; }
         public int frame_duration_ms { get; private set; }
+        public int64 frame_timestamp_us { get; private set; }
+        public int64 frame_duration_us { get; private set; }
         public RawState raw_state { get; private set; }
         public ImageCapabilities capabilities { get; private set; }
         public string decoder { get; private set; }
@@ -47,15 +51,19 @@ namespace MajorisImage {
             frame_count = probe.animated ? probe.pages : 1;
             loop_count = probe.loop_count;
             frame_duration_ms = probe.frame_duration_ms;
+            frame_timestamp_us = probe.frame_timestamp_us;
+            frame_duration_us = probe.frame_duration_us > 0 ? probe.frame_duration_us : (int64) frame_duration_ms * 1000;
             page = probe.animated ? 0 : options.page;
             frame = probe.animated ? options.page : 0;
             bit_depth = probe.depth;
             source_bit_depth = probe.source_bit_depth;
             has_alpha = probe.has_alpha;
+            colour_managed = probe.colour_managed;
+            colour_diagnostic = probe.colour_diagnostic;
             hdr = probe.hdr;
             tone_mapped = hdr && options.sdr_presentation;
             vector = probe.vector;
-            supports_regions = probe.region && source.file.is_native ();
+            supports_regions = options.allow_regions && probe.region && source.file.is_native ();
             animated = probe.animated;
             timed_sequence = probe.timed_sequence;
             raw_state = probe.raw ? (options.raw_preview_only ? RawState.RAW_PREVIEW_AVAILABLE :
@@ -65,7 +73,7 @@ namespace MajorisImage {
             mime_type = probe.mime;
             if (options.raw_preview_only && probe.raw) warning = "Showing the camera's embedded RAW preview";
             else if (probe.timed_sequence && !probe.animated) warning = "The installed decoder supplied a still preview of this timed sequence";
-            else warning = "";
+            else warning = probe.loader == "Glycin" ? probe.colour_diagnostic : "";
             metadata = new ImageMetadata (probe.metadata);
         }
 
@@ -87,6 +95,7 @@ namespace MajorisImage {
             if (decoder == "Glycin" && !animated && index == 0) return this;
             var requested = options.copy ();
             requested.page = index;
+            if (decoder == "libheif-sequence") requested.sequence_frames = frame_count;
             if (animated && mime_type == "image/apng" && index != frame)
                 return yield GlycinFallback.open (source, requested, stop,
                     new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"), 120, probe);
@@ -97,7 +106,6 @@ namespace MajorisImage {
         /** Coordinates refer to the oriented page at its original resolution. */
         public async PixelBuffer render_region (int x, int y, int width, int height, int edge,
                                                 bool tone_map = false, Cancellable? cancel = null) throws Error {
-            if (decoder == "Glycin") throw new ImageError.UNSUPPORTED ("Glycin still-image fallback does not provide region decoding");
             if (x < 0 || y < 0 || width < 1 || height < 1 || x > this.width - width ||
                 y > this.height - height || edge < 1 || edge > 4096)
                 throw new IOError.INVALID_ARGUMENT ("Invalid image region or output size");
@@ -108,9 +116,17 @@ namespace MajorisImage {
             transform.crop_height = (double) height / this.height;
             var requested = options.copy ();
             requested.source_hdr = hdr ? 1 : 0;
+            if (decoder == "libheif-sequence") requested.sequence_frames = frame_count;
             requested.sdr_presentation = tone_map;
             var stop = cancel ?? new Cancellable ();
             yield verify_source (stop);
+            if (decoder == "Glycin") {
+                requested.preview_size = edge;
+                var fallback = yield GlycinFallback.open (source, requested, stop,
+                    new ImageError.UNSUPPORTED ("Glycin could not re-decode this region"), 120,
+                    animated ? probe : null, transform);
+                return fallback.preview;
+            }
             string output = yield worker.run (source.file, "tile", transform, stop, edge, requested);
             try {
                 var pixels = yield WorkerClient.read_pixels (output, stop);

@@ -2,6 +2,7 @@ namespace MajorisImage {
     public class RenderOptions : Object {
         public int version { get; set; default = 2; }
         public int turns { get; set; }
+        public bool nearest_neighbour { get; set; }
         public bool flip_x { get; set; }
         public bool flip_y { get; set; }
         public double angle { get; set; }

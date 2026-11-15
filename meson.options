@@ -4,3 +4,4 @@ option('glycin', type: 'feature', value: 'auto', description: 'Enable headless G
 option('introspection', type: 'feature', value: 'auto', description: 'Generate GObject introspection data')
 option('tests', type: 'boolean', value: true, description: 'Build verification targets')
 option('raw_fixtures', type: 'string', value: '', description: 'Directory containing licensed camera RAW regression inputs')
+option('sequence', type: 'feature', value: 'auto', description: 'Enable libavif and compatible libheif timed sequences')

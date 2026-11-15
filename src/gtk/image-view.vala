@@ -29,12 +29,7 @@ namespace MajorisImage {
         public PresentationPolicy presentation_policy { get; set; default = PresentationPolicy.AUTOMATIC; }
         public PresentationStatus presentation_status { get; private set; }
         public string presentation_diagnostic { get {
-            if (!hdr_source) return "";
-            if (presentation_policy == PresentationPolicy.SDR) return "SDR policy: colour-managed tone mapping.";
-            if (get_native ()?.get_surface () == null) return "No mapped output surface. HDR is tone-mapped to SDR.";
-            return presentation_policy == PresentationPolicy.HDR_PREFERRED
-                ? "Native HDR requested. GDK cannot verify HDR output for this surface. Showing tone-mapped SDR."
-                : "Automatic policy: GDK cannot verify HDR output for this surface. Showing tone-mapped SDR.";
+            return document != null ? Presentation.inspect (this, presentation_policy, hdr_source).diagnostic : "";
         } }
         public bool animated { get; private set; }
         public bool playing { get; private set; }
@@ -71,10 +66,16 @@ namespace MajorisImage {
         private bool frame_pending;
         private uint playback_generation;
         private Cancellable playback = new Cancellable ();
+        private int64 frame_delay;
+        private int64 frames_presented;
+        private AnimationFrame? prefetched;
+        private bool advance_due;
+        private bool manual_advance;
+        private weak Gdk.Surface? watched_surface;
+        private ulong entered_monitor;
+        private ulong left_monitor;
 #if HAVE_GLYCIN
         private Gly.Image? animation;
-        private int64 frame_delay;
-        private int frames_presented;
 #endif
 
         public static void register_type () { typeof (ImageView).ensure (); }
@@ -90,13 +91,13 @@ namespace MajorisImage {
             notify["presentation-policy"].connect (update_presentation);
             notify["scale-factor"].connect (update_presentation);
             map.connect (() => {
+                watch_output ();
                 update_presentation ();
                 update_transform ();
-#if HAVE_GLYCIN
                 if (playback_requested) play ();
-#endif
             });
             unmap.connect (() => {
+                watch_output (false);
                 tiles.reset (null);
                 suspend_playback ();
                 notify_property ("presentation-diagnostic");
@@ -161,7 +162,9 @@ namespace MajorisImage {
             playback_generation++;
             playback.cancel ();
             playback = new Cancellable ();
-            frame_pending = animation_loading = false;
+            frame_pending = animation_loading = advance_due = manual_advance = false;
+            prefetched = null;
+            frames_presented = 0;
 #if HAVE_GLYCIN
             animation = null;
 #endif
@@ -223,7 +226,7 @@ namespace MajorisImage {
             try {
                 yield present_document (value, request, stop);
 #if HAVE_GLYCIN
-                if (is_current (request) && value.animated && !value.hdr)
+                if (is_current (request) && use_streaming_loader (value))
                     yield prepare_animation (value.source.file, request, playback);
 #endif
             }
@@ -233,24 +236,31 @@ namespace MajorisImage {
         private bool is_current (uint request) { return !disposed && request == generation; }
 
         private async void present_document (ImageDocument value, uint request, Cancellable stop) throws Error {
-            PixelBuffer? sdr = null;
-            if (value.hdr && !value.tone_mapped)
-                sdr = yield value.render_region (0, 0, value.width, value.height,
-                    int.max (value.preview.width, value.preview.height), true, stop);
+            var decision = Presentation.inspect (this, presentation_policy, value.hdr);
+            var pixels = yield Presentation.pixels (value, decision, stop);
             stop.set_error_if_cancelled ();
-            if (is_current (request)) show_document (value, sdr);
+            if (is_current (request)) show_document (value, pixels);
             stop.set_error_if_cancelled ();
+        }
+
+        private void watch_output (bool attach = true) {
+            if (watched_surface != null) {
+                watched_surface.disconnect (entered_monitor);
+                watched_surface.disconnect (left_monitor);
+            }
+            watched_surface = attach ? get_native ()?.get_surface () : null;
+            if (watched_surface != null) {
+                entered_monitor = watched_surface.enter_monitor.connect ((monitor) => update_presentation ());
+                left_monitor = watched_surface.leave_monitor.connect ((monitor) => update_presentation ());
+            }
         }
 
         private void update_presentation () {
             if (disposed) return;
-            // GTK 4.18 exposes texture colour states, but no surface scanout verification.
-            // The stored base texture and every tile therefore share the SDR path.
             if (document != null) {
-                presentation_status = !hdr_source ? PresentationStatus.SDR :
-                    presentation_policy == PresentationPolicy.HDR_PREFERRED ?
-                    PresentationStatus.HDR_UNAVAILABLE : PresentationStatus.SDR_TONE_MAPPED;
-                tiles.reset (get_mapped () && !animated ? document : null, hdr_source);
+                var decision = Presentation.inspect (this, presentation_policy, hdr_source);
+                presentation_status = decision.status;
+                tiles.reset (get_mapped () && !animated ? document : null, decision.tone_map);
             }
             notify_property ("presentation-diagnostic");
             queue_draw ();
@@ -270,6 +280,11 @@ namespace MajorisImage {
             warning = value.warning;
             metadata = value.metadata;
             hdr_source = value.hdr;
+            animated = value.animated;
+            current_frame = value.frame;
+            frame_duration_ms = value.frame_duration_ms;
+            frame_delay = value.frame_duration_us;
+            frames_presented = value.frame + 1;
             update_presentation ();
             state = value.raw_state == RawState.RAW_PREVIEW_AVAILABLE ? ViewState.PREVIEW_READY : ViewState.READY;
             thaw_notify ();
@@ -277,6 +292,12 @@ namespace MajorisImage {
         }
 
         public async void load_file (File file, DecodeOptions? options = null, Cancellable? cancel = null) throws Error {
+            yield load_source (new ImageSource (file), options, cancel);
+        }
+
+        /** Keep the supplied source alive, including privately staged stream or memory inputs. */
+        public async void load_source (ImageSource source, DecodeOptions? options = null,
+                                        Cancellable? cancel = null) throws Error {
             if (disposed) throw new IOError.CLOSED ("Image view is disposed");
             uint request = clear_request ();
             if (!is_current (request)) throw new IOError.CANCELLED ("Image request was replaced");
@@ -285,7 +306,6 @@ namespace MajorisImage {
             state = ViewState.LOADING;
             var decode = (options ?? new DecodeOptions ()).copy ();
             decode.sdr_presentation = false;
-            var source = new ImageSource (file);
             var registry = new DecoderRegistry ();
             try {
                 ImageDocument? preview = null;
@@ -304,9 +324,8 @@ namespace MajorisImage {
                     stop.set_error_if_cancelled ();
                     if (is_current (request)) yield present_document (result, request, stop);
 #if HAVE_GLYCIN
-                    if (is_current (request) && result.page == 0 && !result.hdr &&
-                        (result.animated || result.mime_type in new string[] { "image/png", "image/gif", "image/webp" }))
-                        yield prepare_animation (file, request, playback);
+                    if (is_current (request) && use_streaming_loader (result))
+                        yield prepare_animation (source.file, request, playback);
 #endif
                 } catch (Error e) {
                     if (preview == null || stop.is_cancelled ()) throw e;
@@ -349,6 +368,13 @@ namespace MajorisImage {
         }
 
 #if HAVE_GLYCIN
+        private bool use_streaming_loader (ImageDocument value) {
+            // Sequential Glycin loading is inexpensive for the established
+            // GIF, WebP and APNG loaders. Other decoders use indexed documents.
+            return !value.hdr && value.frame == 0 && value.mime_type in new string[] {
+                "image/png", "image/apng", "image/gif", "image/webp" };
+        }
+
         private async void prepare_animation (File file, uint request, Cancellable stop) {
             if (animation_loading || !is_current (request)) return;
             animation_loading = true;
@@ -356,6 +382,7 @@ namespace MajorisImage {
                 var loader = new Gly.Loader (file);
                 loader.set_sandbox_selector (Gly.SandboxSelector.BWRAP);
                 var image = yield loader.load_async (stop);
+                if ((uint64) image.get_width () * image.get_height () > 16777216) return;
                 var frame = yield image.next_frame_async (stop);
                 if (!is_current (request) || stop.is_cancelled () || frame.get_delay () <= 0 || frame.get_delay () == int64.MAX) return;
                 freeze_notify ();
@@ -381,16 +408,17 @@ namespace MajorisImage {
             playback_requested = true;
             if (playing || !get_mapped ()) return;
             playing = true;
-#if HAVE_GLYCIN
-            if (animation == null || playback_finished ()) {
-                restart_animation.begin ();
-                return;
-            }
-#endif
-            schedule_frame ();
+            if (playback_finished ()) {
+                seek_frame.begin (0, null, (object, reply) => {
+                    try { seek_frame.end (reply); }
+                    catch (Error error) { if (!(error is IOError.CANCELLED)) warning = error.message; }
+                });
+            } else schedule_frame ();
         }
+
         private void suspend_playback () {
             if (animation_timer != 0) { Source.remove (animation_timer); animation_timer = 0; }
+            advance_due = manual_advance = false;
             playing = false;
         }
 
@@ -401,65 +429,124 @@ namespace MajorisImage {
 
         public void step_frame () {
             pause ();
-            if (animated) next_frame.begin ();
-        }
-#if HAVE_GLYCIN
-        private bool playback_finished () {
-            return document != null && document.frame_count > 1 && document.loop_count > 0 &&
-                (int64) frames_presented >= (int64) document.frame_count * document.loop_count;
+            if (!animated) return;
+            manual_advance = advance_due = true;
+            advance_when_ready ();
         }
 
-        private async void restart_animation () {
-            if (document == null) { pause (); return; }
-            uint request = generation;
-            yield prepare_animation (document.source.file, request, playback);
-            if (is_current (request) && playing) {
-                if (animation == null) pause ();
-                else schedule_frame ();
-            }
-        }
-#endif
-
-        private void schedule_frame () {
-#if HAVE_GLYCIN
-            if (disposed || !playing || !get_mapped () || frame_pending || animation_timer != 0) return;
-            animation_timer = Timeout.add ((uint) (frame_delay / 1000).clamp (10, uint.MAX), () => {
-                animation_timer = 0;
-                if (playback_finished ()) pause ();
-                else next_frame.begin ();
-                return Source.REMOVE;
-            });
-#endif
-        }
-        private async void next_frame () {
-#if HAVE_GLYCIN
-            if (animation == null || frame_pending) return;
-            frame_pending = true;
-            var image = animation;
-            uint request = generation, playback_request = playback_generation;
+        /** Seek within the active timed sequence. Older frame requests are cancelled. */
+        public async void seek_frame (int frame, Cancellable? cancel = null) throws Error {
+            var source = document;
+            if (disposed || source == null || !source.animated || frame < 0 || frame >= source.frame_count)
+                throw new IOError.INVALID_ARGUMENT ("Frame is outside the active sequence");
+            if (animation_timer != 0) { Source.remove (animation_timer); animation_timer = 0; }
+            playback_generation++;
+            playback.cancel ();
+            playback = new Cancellable ();
             var stop = playback;
+            ulong handler = cancel != null ? cancel.connect (() => stop.cancel ()) : 0;
+            prefetched = null;
+            advance_due = manual_advance = false;
+            frame_pending = true;
+#if HAVE_GLYCIN
+            animation = null;
+#endif
+            uint request = generation, seek = playback_generation;
             try {
-                var frame = yield image.next_frame_async (stop);
-                if (is_current (request) && playback_request == playback_generation) {
-                    freeze_notify ();
-                    frames_presented++;
-                    texture = GlyGtk4.frame_get_texture (frame);
-                    frame_delay = frame.get_delay ();
-                    frame_duration_ms = (int) (frame_delay / 1000).clamp (0, int.MAX);
-                    int count = document != null ? document.frame_count : 1;
-                    current_frame = count > 1 ? (frames_presented - 1) % count : frames_presented - 1;
-                    queue_draw ();
-                    thaw_notify ();
-                }
-            } catch (Error e) {
-                if (!stop.is_cancelled () && is_current (request)) { pause (); warning = e.message; }
+                var loaded = yield load_frame (source, frame, stop);
+                stop.set_error_if_cancelled ();
+                if (is_current (request) && seek == playback_generation)
+                    show_frame (loaded, frame, frame + 1);
             } finally {
-                if (is_current (request) && playback_request == playback_generation) {
+                if (handler != 0) cancel.disconnect (handler);
+                if (is_current (request) && seek == playback_generation) {
                     frame_pending = false;
                     schedule_frame ();
                 }
             }
+        }
+
+        private bool playback_finished () {
+            return document != null && document.frame_count > 1 && document.loop_count > 0 &&
+                frames_presented >= (int64) document.frame_count * document.loop_count;
+        }
+
+        private void schedule_frame () {
+            if (disposed || !playing || !get_mapped () || animation_timer != 0 || advance_due) return;
+            animation_timer = Timeout.add ((uint) (frame_delay / 1000).clamp (10, uint.MAX), () => {
+                animation_timer = 0;
+                if (playback_finished ()) pause ();
+                else {
+                    advance_due = true;
+                    advance_when_ready ();
+                }
+                return Source.REMOVE;
+            });
+            if (!playback_finished () && document != null && document.preview.bytes.get_size () <= 64 * 1024 * 1024)
+                prefetch.begin ();
+        }
+
+        private int next_frame_index () {
+            return document != null && document.frame_count > 1 ?
+                (current_frame + 1) % document.frame_count : (int) ((frames_presented + 1) % int.MAX);
+        }
+
+        private void advance_when_ready () {
+            if (!advance_due || (!manual_advance && (!playing || !get_mapped ()))) return;
+            if (prefetched == null) { prefetch.begin (); return; }
+            var loaded = prefetched;
+            prefetched = null;
+            advance_due = manual_advance = false;
+            show_frame (loaded, next_frame_index (), frames_presented + 1);
+            schedule_frame ();
+        }
+
+        private void show_frame (AnimationFrame loaded, int index, int64 presented) {
+            freeze_notify ();
+            frames_presented = presented;
+            current_frame = index;
+            frame_delay = loaded.interval;
+            frame_duration_ms = (int) (frame_delay / 1000).clamp (0, int.MAX);
+            texture = loaded.texture;
+            queue_draw ();
+            thaw_notify ();
+        }
+
+        private async AnimationFrame load_frame (ImageDocument source, int index, Cancellable stop) throws Error {
+#if HAVE_GLYCIN
+            var stream = animation;
+            if (stream != null) {
+                var loaded = yield stream.next_frame_async (stop);
+                return new AnimationFrame (GlyGtk4.frame_get_texture (loaded), loaded.get_delay ());
+            }
 #endif
+            var frame = yield source.open_frame (index, stop);
+            var decision = Presentation.inspect (this, presentation_policy, frame.hdr);
+            var pixels = yield Presentation.pixels (frame, decision, stop);
+            return new AnimationFrame (texture_for_pixels (pixels), frame.frame_duration_us);
+        }
+
+        private async void prefetch () {
+            var source = document;
+            if (source == null || prefetched != null || frame_pending) return;
+            frame_pending = true;
+            int index = next_frame_index ();
+            uint request = generation, seek = playback_generation;
+            var stop = playback;
+            try {
+                var loaded = yield load_frame (source, index, stop);
+                if (is_current (request) && seek == playback_generation) prefetched = loaded;
+            } catch (Error error) {
+                if (!stop.is_cancelled () && is_current (request) && seek == playback_generation) {
+                    pause ();
+                    warning = error.message;
+                }
+            } finally {
+                if (is_current (request) && seek == playback_generation) {
+                    frame_pending = false;
+                    advance_when_ready ();
+                }
+            }
         }
 
         private double device_scale () {
@@ -605,6 +692,7 @@ namespace MajorisImage {
         protected override void dispose () {
             if (!disposed) {
                 disposed = true;
+                watch_output (false);
                 invalidate ();
                 current_document = null;
                 texture = null;

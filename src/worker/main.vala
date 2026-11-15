@@ -24,8 +24,8 @@ namespace MajorisImage {
     }
 
     private void update_metadata (string source, DecodeOptions options, WorkerRequest request,
-                                  ImageProbe probe) throws Error {
-        var metadata = MetadataReader.read (source, options.page, request.hdr_hint, probe);
+                                  ImageProbe probe, Vips.Image? prepared) throws Error {
+        var metadata = MetadataReader.read (source, options.page, request.hdr_hint, probe, prepared);
         metadata.set_int_member ("source-bit-depth", probe.source_bit_depth);
         metadata.set_int_member ("effective-bit-depth", probe.depth);
         metadata.set_int_member ("pixel-buffer-bit-depth", 32);
@@ -58,9 +58,19 @@ namespace MajorisImage {
             var options = request.options;
             int edge = int.parse (args[5]);
             if (edge < 0 || edge > 4096) throw new IOError.INVALID_ARGUMENT ("Invalid output edge");
-            var probe = ImageInspector.inspect (source, request.hdr_hint, options.page);
+            if (operation == "render-buffer") {
+                var image = ImageProcessor.render_image (ImageNative.read_pixels (source), request.transform, edge);
+                ImageNative.write_pixels (image, output);
+                return 0;
+            }
+            if (operation == "colour-probe") {
+                FileUtils.set_contents (output, MetadataReader.colour_probe (source));
+                return 0;
+            }
+            Vips.Image? prepared;
+            var probe = ImageInspector.inspect_with_pixels (source, request.hdr_hint, options.page, out prepared, request.sequence_frames);
             if (operation == "probe") {
-                update_metadata (source, options, request, probe);
+                update_metadata (source, options, request, probe, prepared);
                 FileUtils.set_contents (output, probe.serialize ());
                 return 0;
             }
@@ -70,7 +80,7 @@ namespace MajorisImage {
                 options.raw_preview_only = options.raw_preview_first;
             }
             Vips.Image input;
-            try { input = open_pixels (source, probe, options); }
+            try { input = prepared ?? open_pixels (source, probe, options); }
             catch (Error e) {
                 if (operation != "thumbnail" || !options.raw_preview_only) throw e;
                 options.raw_preview_only = false;
@@ -87,7 +97,7 @@ namespace MajorisImage {
                 probe.region = false;
                 probe.loader = "LibRaw embedded preview";
             }
-            if (operation == "decode") update_metadata (source, options, request, probe);
+            if (operation == "decode") update_metadata (source, options, request, probe, prepared);
             if (probe.vector && edge > 0) {
                 var crop = request.transform;
                 input = ImageNative.svg_region (source, crop.crop_x, crop.crop_y, crop.crop_width,

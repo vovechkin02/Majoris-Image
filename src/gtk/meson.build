@@ -8,7 +8,7 @@ if glycin.found() and glycin_gtk.found()
 endif
 
 gtk_library = shared_library('majoris-image-gtk4',
-  'image-view.vala', 'tile-cache.vala', 'image-texture.c',
+  'image-view.vala', 'tile-cache.vala', 'presentation.vala', 'image-texture.c',
   dependencies: gtk_deps, vala_args: gtk_flags, include_directories: include_directories('.'),
   version: meson.project_version(), soversion: '1', install: true,
   vala_header: 'majoris-image-gtk4.h', vala_vapi: 'majoris-image-gtk4-1.vapi', vala_gir: 'MajorisImageGtk-1.0.gir',

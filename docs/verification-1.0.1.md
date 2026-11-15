@@ -1,5 +1,7 @@
 # Majoris Image 1.0.1 implementation and verification
 
+For the current implementation and results, see [1.1.0 verification](verification-1.1.0.md).
+
 | Finding | Change | Main files |
 | --- | --- | --- |
 | GTK lifecycle | Loads can complete while hidden. Remapping restores the viewport and resumes requested playback. Replacement and disposal invalidate generations, including selections made from a property notification. | `src/gtk/image-view.vala`, `src/gtk/tile-cache.vala`, `tests/viewer.vala` |

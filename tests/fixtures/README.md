@@ -13,5 +13,14 @@ HDR reference images and compare numerical colour and luminance values.
 `avif-sequence.avif` is a generated CC0 fixture with solid red and green
 8 × 8 frames. It was generated with Debian 13's `avifenc`:
 `avifenc --speed 10 --timescale 1000 --duration 70 red.png --duration 160 green.png avif-sequence.avif`.
-The regression checks accurate reporting when a timed sequence only has a
-still-image decode path.
+The regression checks the two decoded frames, microsecond timing and
+infinite playback and accepts a diagnostic still preview when the optional
+backend is disabled.
+
+`avif-hdr-sequence.avif` uses the same source frames, generated with
+`avifenc --depth 10 --yuv 444 --cicp 9/16/9 --timescale 1000 --duration 70 red.png --duration 160 green.png -o avif-hdr-sequence.avif`.
+It covers 10-bit BT.2020 PQ frames and the SDR tone-mapping path.
+
+`heic-sequence.heic` is a generated CC0 fixture from
+`tests/make-heif-sequence.c` and the libheif x265 encoder. It contains two
+solid-colour HEVC images at 70 ms and 160 ms with two presentations.

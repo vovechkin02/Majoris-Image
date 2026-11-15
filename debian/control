@@ -8,6 +8,7 @@ Build-Depends: debhelper-compat (= 13), meson (>= 1.4), ninja-build, valac, pkgc
  libvips-dev, libraw-dev, liblcms2-dev, libheif-dev, libjxl-dev, libopenexr-dev,
  librsvg2-dev, libgexiv2-dev, bubblewrap, xvfb, xauth, girepository-tools,
  libheif-plugin-libde265, libheif-plugin-dav1d,
+ libavif-dev <!pkg.majoris-image.nosequence>,
  libuhdr-dev (>= 2.0.2) <pkg.majoris-image.gainmap>
 Standards-Version: 4.7.0
 Rules-Requires-Root: no

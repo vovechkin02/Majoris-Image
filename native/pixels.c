@@ -2,6 +2,7 @@
 #include <glib/gstdio.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 gboolean majoris_codec_write_pixels(VipsImage *image, const char *path, GError **error)
 {
@@ -44,4 +45,32 @@ done:
         vips_error_clear();
     }
     return ok;
+}
+
+
+VipsImage *majoris_codec_read_pixels(const char *path, GError **error)
+{
+    GMappedFile *mapping = g_mapped_file_new(path, FALSE, error);
+    if (!mapping) return NULL;
+    gsize length = g_mapped_file_get_length(mapping);
+    const char *data = g_mapped_file_get_contents(mapping);
+    guint32 dimensions[2] = {0};
+    if (length >= 12 && memcmp(data, "MIF1", 4) == 0) memcpy(dimensions, data + 4, 8);
+    guint32 width = GUINT32_FROM_BE(dimensions[0]), height = GUINT32_FROM_BE(dimensions[1]);
+    if (!width || !height || width > 4096 || height > 4096 ||
+        length != 12 + (guint64)width * height * 16) {
+        g_mapped_file_unref(mapping);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid linear RGBA input buffer");
+        return NULL;
+    }
+    VipsImage *image = vips_image_new_from_memory(data + 12, length - 12, width, height, 4, VIPS_FORMAT_FLOAT);
+    if (!image) {
+        g_mapped_file_unref(mapping);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, vips_error_buffer());
+        return NULL;
+    }
+    g_object_set_data_full(G_OBJECT(image), "frame-mapping", mapping, (GDestroyNotify)g_mapped_file_unref);
+    image->Type = VIPS_INTERPRETATION_scRGB;
+    vips_image_set_int(image, "majoris-image-working-linear", 1);
+    return image;
 }

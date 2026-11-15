@@ -16,8 +16,8 @@ namespace MajorisImage {
             else if (error is ImageError.UNSUPPORTED) kind="unsupported";
             else if (error is ImageError.CODEC_MISSING) kind="missing-codec";
             else if (error is ImageError.RAW_UNSUPPORTED) kind="raw-unsupported";
-            else if (lower.contains ("profile")) kind="colour-profile";
-            else if (lower.contains ("memory") || lower.contains ("allocation")) kind="memory";
+            else if (error is ImageError.COLOR_PROFILE || lower.contains ("profile")) kind="colour-profile";
+            else if (error is ImageError.MEMORY || lower.contains ("memory") || lower.contains ("allocation")) kind="memory";
             else if (lower.contains ("codec") || lower.contains ("compression not supported") || lower.contains ("unsupported file-type")) kind="missing-codec";
             else if (lower.contains ("not a known file format") || lower.contains ("unsupported format")) kind="unsupported";
             else if (lower.contains ("corrupt") || lower.contains ("truncated") || lower.contains ("premature") || lower.contains ("invalid")) kind="corrupt";

@@ -6,8 +6,14 @@ else
 gainmap = disabled
 endif
 
+ifneq ($(filter pkg.majoris-image.nosequence,$(DEB_BUILD_PROFILES)),)
+sequence = disabled
+else
+sequence = enabled
+endif
+
 %:
 	dh $@ --buildsystem=meson
 
 override_dh_auto_configure:
-	dh_auto_configure -- -Dglycin=enabled -Dintrospection=enabled -Dultrahdr=$(gainmap)
+	dh_auto_configure -- -Dglycin=enabled -Dintrospection=enabled -Dultrahdr=$(gainmap) -Dsequence=$(sequence)

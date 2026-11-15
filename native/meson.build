@@ -7,7 +7,7 @@ native_deps = [
 ]
 uhdr = dependency('libuhdr', version: '>=2.0.2', required: get_option('ultrahdr'))
 native_sources = files('bridge.c', 'raw.c', 'colour.c', 'profiles.c', 'codec-catalogue.c',
-  'exr.cpp', 'exr-source.cpp', 'jxl.c', 'svg.c', 'metadata.c', 'pixels.c')
+  'exr.cpp', 'exr-source.cpp', 'jxl.c', 'svg.c', 'metadata.c', 'pixels.c', 'sequences.c')
 if uhdr.found()
   ultra_containers = meson.get_compiler('c').compiles('''
     #include <ultrahdr_api.h>
@@ -19,6 +19,26 @@ else
   native_sources += files('ultra-unavailable.c')
 endif
 native_c_args = []
+avif_sequence = dependency('libavif', version: '>=1.1', required: get_option('sequence'))
+heif_sequence = false
+if not get_option('sequence').disabled()
+  heif_sequence = meson.get_compiler('c').links('''
+    #include <libheif/heif.h>
+    #include <libheif/heif_sequences.h>
+    int main(void) {
+      heif_decoding_options *options = heif_decoding_options_alloc();
+      options->ignore_sequence_editlist = 1;
+      return heif_track_get_number_of_repetitions(0);
+    }
+  ''', dependencies: dependency('libheif'), name: 'HEIF visual-track decoding and loop control')
+endif
+if avif_sequence.found()
+  native_deps += avif_sequence
+  native_c_args += '-DMAJORIS_AVIF_SEQUENCE=1'
+endif
+if heif_sequence
+  native_c_args += '-DMAJORIS_HEIF_SEQUENCE=1'
+endif
 if uhdr.found()
   native_c_args += ['-DMAJORIS_UHDR_AVAILABLE=1']
 endif

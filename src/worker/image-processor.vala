@@ -29,7 +29,8 @@ namespace MajorisImage {
                 double factor = double.min ((double)preview/image.width (),(double)preview/image.height ());
                 bool alpha = image.has_alpha ();
                 if (alpha) { check (Vips.premultiply (image,out next,"max_alpha",1.0,null)); image=next; }
-                check (Vips.resize (image,out next,factor,null)); image=next;
+                if (recipe.nearest_neighbour) check (Vips.resize (image, out next, factor, "kernel", 0, null));
+                else check (Vips.resize (image, out next, factor, null)); image=next;
                 if (alpha) { check (Vips.unpremultiply (image,out next,"max_alpha",1.0,null)); image=next; }
             }
             image = ToneOperations.apply (image, recipe);

@@ -1,3 +1,11 @@
+majoris-image (1.1.0) unstable; urgency=medium
+
+  * Add sandboxed timed image tracks and indexed frame timing.
+  * Improve Glycin fallback discovery, colour checks and preview resampling.
+  * Share the codec catalogue and isolate HDR presentation policy.
+
+ -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 13:00:00 +1100
+
 majoris-image (1.0.1) unstable; urgency=medium
 
   * Preserve viewer requests and playback intent across remapping.

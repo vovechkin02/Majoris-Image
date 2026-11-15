@@ -15,7 +15,8 @@ meson test -C build --print-errorlogs
 ```
 
 Build without GTK using `-Dgtk=false`. Use `-Dultrahdr=enabled` to require
-libuhdr, `-Dglycin=disabled` to omit Glycin fallback and GTK animation, and
+libuhdr, `-Dglycin=disabled` to omit Glycin fallback and APNG compositing,
+`-Dsequence=disabled` to omit optional AVIF/HEIF track decoding, and
 `-Dintrospection=enabled` to require typelib compilation.
 
 The libraries use a Bubblewrap worker. Running an uninstalled consumer requires
@@ -32,7 +33,9 @@ library requires the worker, Bubblewrap, and `prlimit`. Debian supplies
 `prlimit` through its Essential util-linux package.
 
 Build the five stock Debian 13 packages with `dpkg-buildpackage -us -uc -b`.
-That package configuration uses Debian's runtime codecs. For Majoris gain-map
+That package configuration uses Debian's runtime codecs, including libavif.
+Add `-Ppkg.majoris-image.nosequence` for a still-codec build without that dependency.
+Libheif track playback also requires its detected visual-track and loop-control APIs. For Majoris gain-map
 decoding and encoding, provide the Majoris libuhdr development and runtime
 packages and build with `dpkg-buildpackage -Ppkg.majoris-image.gainmap -us -uc -b`.
 Both builds use the same package names and SONAMEs. Choose the set appropriate
@@ -45,8 +48,8 @@ Vala, a C compiler, Xvfb and Python GObject bindings to verify independent
 consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
 
-See the [version 1 API and capability matrix](docs/api-1.md) for formats,
-sandbox requirements, integration examples, and validation coverage.
+See the [integration examples and ABI 1 capability matrix](docs/api-1.md) for formats,
+sandbox requirements and integration examples. The [1.1.0 verification report](docs/verification-1.1.0.md) records the build, package and test results.
 
 ## Licence
 

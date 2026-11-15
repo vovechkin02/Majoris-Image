@@ -13,3 +13,17 @@ GdkTexture *majoris_image_texture_new(GBytes *bytes, int width, int height, gsiz
     g_object_unref(builder);
     return texture;
 }
+
+
+int majoris_image_hdr_output(GtkWidget *widget)
+{
+    GtkNative *native = gtk_widget_get_native(widget);
+    if (!native) return 0;
+    GdkSurface *surface = gtk_native_get_surface(native);
+    GskRenderer *renderer = gtk_native_get_renderer(native);
+    if (!surface || !gdk_surface_get_mapped(surface) || !renderer ||
+        !gsk_renderer_is_realized(renderer)) return 0;
+    // GTK publicly exposes a realized renderer and colour-managed float
+    // textures. Those capabilities alone do not prove HDR output or scanout.
+    return 1;
+}

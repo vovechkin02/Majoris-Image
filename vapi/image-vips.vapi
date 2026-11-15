@@ -24,6 +24,7 @@ namespace Vips {
         [CCode (cname = "vips_image_get_format")] public int format ();
         [CCode (cname = "vips_image_set_string")] public void set_string (string name, string value);
         [CCode (cname = "vips_image_set_int")] public void set_int (string name, int value);
+        [CCode (cname = "vips_image_get_double")] public int get_double (string name, out double value);
         [CCode (cname = "vips_image_get_int")] public int get_int (string name, out int value);
         [CCode (cname = "vips_image_get_string")] public int get_string (string name, out unowned string value);
         [CCode (cname = "vips_image_new_matrix_from_array")] public static Image matrix (int width, int height, double[] values);

@@ -70,6 +70,7 @@ namespace MajorisImage {
                 request.transform = transform ?? new RenderOptions ();
                 request.options = options ?? new DecodeOptions ();
                 request.hdr_hint = request.options.source_hdr;
+                request.sequence_frames = request.options.sequence_frames;
                 if (operation == "thumbnail" && source != null) {
                     request.thumbnail_uri = source.get_uri ();
                     request.thumbnail_mtime = mtime;

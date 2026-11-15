@@ -7,7 +7,6 @@ namespace ImageNative {
     [CCode (cname = "majoris_codec_tag_linear")] public void tag_linear (Vips.Image image);
     [CCode (cname = "majoris_codec_exr_encode")] public bool exr_encode (Vips.Image image, string path, int depth) throws GLib.Error;
     [CCode (cname = "majoris_codec_codec_json")] public string codec_json ();
-    [CCode (cname = "majoris_codec_image_mime_types", array_length = false, array_null_terminated = true)] public string[] image_mime_types ();
     [CCode (cname = "majoris_codec_ultra_probe")] public bool ultra_probe (string path);
     [CCode (cname = "majoris_codec_ultra_decode")] public Vips.Image ultra_decode (string path, bool sdr) throws GLib.Error;
     [CCode (cname = "majoris_codec_ultra_encode")] public bool ultra_encode (Vips.Image image, string path, int format, int quality) throws GLib.Error;
@@ -25,4 +24,6 @@ namespace ImageNative {
     [CCode (cname = "majoris_codec_hlg_to_linear")] public double hlg_to_linear (double value);
     [CCode (cname = "majoris_codec_write_pixels")] public bool write_pixels (Vips.Image image, string path) throws GLib.Error;
     [CCode (cname = "majoris_codec_frame_duration")] public int frame_duration (Vips.Image image, int page);
+    [CCode (cname = "majoris_codec_sequence")] public Vips.Image? sequence (string path, int page, bool avif, int known_count) throws GLib.Error;
+    [CCode (cname = "majoris_codec_read_pixels")] public Vips.Image read_pixels (string path) throws GLib.Error;
 }

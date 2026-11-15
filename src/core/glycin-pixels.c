@@ -10,8 +10,10 @@ static double linear_sample(const guint8 *data, int depth)
     return value / 65535.0;
 }
 
-static GBytes *convert_pixels(GlyFrame *frame, int edge, int *width, int *height,
-                                    int *depth, GCancellable *stop, GError **error)
+static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top,
+                              double region_width, double region_height, gboolean nearest,
+                              gboolean gray_icc, int *width, int *height, int *depth,
+                              GCancellable *stop, GError **error)
 {
     guint w = gly_frame_get_width(frame), h = gly_frame_get_height(frame);
     guint stride = gly_frame_get_stride(frame);
@@ -51,9 +53,13 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, int *width, int *height
         return NULL;
     }
 
-    double scale = MIN(1.0, (double)edge / MAX(w, h));
-    *width = MAX(1, (int)floor(w * scale));
-    *height = MAX(1, (int)floor(h * scale));
+    int x0 = MIN((int)w - 1, (int)floor(left * w + 1e-7));
+    int y0 = MIN((int)h - 1, (int)floor(top * h + 1e-7));
+    int crop_w = MAX(1, MIN((int)w - x0, (int)floor(region_width * w + 1e-7)));
+    int crop_h = MAX(1, MIN((int)h - y0, (int)floor(region_height * h + 1e-7)));
+    double scale = MIN(1.0, (double)edge / MAX(crop_w, crop_h));
+    *width = MAX(1, (int)round(crop_w * scale));
+    *height = MAX(1, (int)round(crop_h * scale));
     gsize count = (gsize)*width * *height * 4;
     float *out = g_try_new(float, count);
     if (!out) {
@@ -62,20 +68,40 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, int *width, int *height
     }
     gboolean premultiplied = gly_memory_format_is_premultiplied(format);
     int channels[] = {r, g, b};
+    double dx = (double)crop_w / *width, dy = (double)crop_h / *height;
+    // Integrate the source-pixel area of each destination sample. This keeps
+    // memory bounded for large fallback images and avoids dark alpha fringes.
     for (int y = 0; y < *height; y++) {
-        if (g_cancellable_set_error_if_cancelled(stop, error)) { g_free(out); return NULL; }
+        double sy0 = y0 + y * dy;
+        double sy1 = MIN(y0 + crop_h, sy0 + dy);
+        if (nearest) { sy0 = floor(sy0); sy1 = sy0 + 1; }
         for (int x = 0; x < *width; x++) {
-            guint sx = (guint)((guint64)x * w / *width);
-            guint sy = (guint)((guint64)y * h / *height);
-            const guint8 *src = input + (gsize)sy * stride + (gsize)sx * pixel;
-            float *dst = out + 4 * ((gsize)y * *width + x);
-            double alpha = a < 0 ? 1 : linear_sample(src + a * component, *depth);
-            for (int c = 0; c < 3; c++) {
-                double v = linear_sample(src + channels[c] * component, *depth);
-                if (premultiplied) v = alpha > 0 ? MIN(v / alpha, 1.0) : 0;
-                dst[c] = v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
+            double sx0 = x0 + x * dx;
+            double sx1 = MIN(x0 + crop_w, sx0 + dx);
+            if (nearest) { sx0 = floor(sx0); sx1 = sx0 + 1; }
+            double sum[4] = {0};
+            for (int sy = (int)sy0; sy < (int)ceil(sy1); sy++) {
+                if (g_cancellable_set_error_if_cancelled(stop, error)) { g_free(out); return NULL; }
+                double row_weight = MIN(sy + 1, sy1) - MAX(sy, sy0);
+                for (int sx = (int)sx0; sx < (int)ceil(sx1); sx++) {
+                    double area = row_weight * (MIN(sx + 1, sx1) - MAX(sx, sx0));
+                    const guint8 *src = input + (gsize)sy * stride + (gsize)sx * pixel;
+                    double alpha = a < 0 ? 1 : linear_sample(src + a * component, *depth);
+                    if (!alpha) continue;
+                    double weight = area * alpha;
+                    for (int c = 0; c < 3; c++) {
+                        double v = linear_sample(src + channels[c] * component, *depth);
+                        if (premultiplied) v = MIN(v / alpha, 1.0);
+                        double linear = gray_icc && r == g ?
+                            pow(v, 2.2) : v <= .04045 ? v / 12.92 : pow((v + .055) / 1.055, 2.4);
+                        sum[c] += weight * linear;
+                    }
+                    sum[3] += weight;
+                }
             }
-            dst[3] = alpha;
+            float *dst = out + 4 * ((gsize)y * *width + x);
+            for (int c = 0; c < 3; c++) dst[c] = sum[3] > 0 ? sum[c] / sum[3] : 0;
+            dst[3] = CLAMP(sum[3] / ((sx1 - sx0) * (sy1 - sy0)), 0, 1);
         }
     }
     return g_bytes_new_take(out, count * sizeof(float));
@@ -84,6 +110,8 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, int *width, int *height
 typedef struct {
     GlyFrame *frame;
     int edge, width, height, depth;
+    double left, top, region_width, region_height;
+    gboolean nearest, gray_icc;
 } PixelJob;
 
 static void pixel_job_free(PixelJob *job)
@@ -96,17 +124,27 @@ static void convert_thread(GTask *task, gpointer source, gpointer data, GCancell
 {
     PixelJob *job = data;
     GError *error = NULL;
-    GBytes *pixels = convert_pixels(job->frame, job->edge, &job->width, &job->height, &job->depth, stop, &error);
+    GBytes *pixels = convert_pixels(job->frame, job->edge, job->left, job->top,
+        job->region_width, job->region_height, job->nearest, job->gray_icc,
+        &job->width, &job->height, &job->depth, stop, &error);
     if (pixels) g_task_return_pointer(task, pixels, (GDestroyNotify)g_bytes_unref);
     else g_task_return_error(task, error);
 }
 
-void majoris_image_glycin_pixels_async(GlyFrame *frame, int edge, GCancellable *stop,
+void majoris_image_glycin_pixels_async(GlyFrame *frame, int edge, double left, double top,
+                                       double region_width, double region_height, gboolean nearest,
+                                       gboolean gray_icc, GCancellable *stop,
                                        GAsyncReadyCallback callback, gpointer data)
 {
     PixelJob *job = g_new0(PixelJob, 1);
     job->frame = g_object_ref(frame);
     job->edge = edge;
+    job->left = left;
+    job->top = top;
+    job->region_width = region_width;
+    job->region_height = region_height;
+    job->nearest = nearest;
+    job->gray_icc = gray_icc;
     GTask *task = g_task_new(NULL, stop, callback, data);
     g_task_set_task_data(task, job, (GDestroyNotify)pixel_job_free);
     g_task_run_in_thread(task, convert_thread);

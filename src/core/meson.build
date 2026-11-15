@@ -9,10 +9,10 @@ core_dependencies = [gio, gee, json, math, dependency('zlib')]
 core_vala_args = ['--shared-library=libmajoris-image.so.1', '--hide-internal']
 if glycin.found()
   core_dependencies += [glycin]
-  core_sources += files('glycin-pixels.c')
+  core_sources += files('glycin-pixels.c', '../../native/glycin-discovery.c')
   core_vala_args += ['--define=HAVE_GLYCIN']
 endif
-core_library = shared_library('majoris-image', core_sources, dependencies: core_dependencies, include_directories: include_directories('../..'),
+core_library = shared_library('majoris-image', core_sources, dependencies: core_dependencies, include_directories: include_directories('../..', '../../native'),
   version: meson.project_version(), soversion: '1', install: true,
   vala_args: core_vala_args,
   vala_header: 'majoris-image.h', vala_vapi: 'majoris-image-1.vapi', vala_gir: 'MajorisImage-1.0.gir',

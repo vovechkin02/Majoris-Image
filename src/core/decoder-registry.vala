@@ -50,6 +50,10 @@ namespace MajorisImage {
                 var backend = new Json.Object ();
                 backend.set_string_member ("operation", "glycin");
                 backend.set_boolean_member ("encoder", false);
+                backend.set_boolean_member ("thumbnail", true);
+                backend.set_boolean_member ("conditional", true);
+                backend.set_int_member ("capability-flags", ImageCapabilities.STILL |
+                    ImageCapabilities.THUMBNAIL | ImageCapabilities.METADATA | ImageCapabilities.HIGH_DEPTH);
                 backend.set_string_member ("capabilities", "Still, thumbnail, dimensions, alpha and decoded sample depth; no source ICC or HDR guarantees");
                 var supported = new Json.Array ();
                 foreach (var mime in mimes) supported.add_string_element (mime);
@@ -60,6 +64,24 @@ namespace MajorisImage {
                 return generator.to_data (null);
             }
             finally { WorkerClient.cleanup (output); }
+        }
+
+        /** MIME types with a configured thumbnail backend. Inspect individual inputs for guarantees. */
+        public async string[] thumbnail_mime_types (Cancellable? cancel = null) throws Error {
+            var parser = new Json.Parser ();
+            parser.load_from_data (yield installed_codecs (cancel));
+            var entries = parser.get_root ().get_array ();
+            string[] result = {};
+            for (uint i = 0; i < entries.get_length (); i++) {
+                var entry = entries.get_object_element (i);
+                if (!entry.get_boolean_member_with_default ("thumbnail", false)) continue;
+                var mimes = entry.get_array_member ("mime-types");
+                for (uint j = 0; j < mimes.get_length (); j++) {
+                    var mime = mimes.get_string_element (j);
+                    if (!(mime in result)) result += mime;
+                }
+            }
+            return result;
         }
 
         public async ImageProbe inspect (ImageSource source, Cancellable? cancel = null) throws Error {
@@ -132,9 +154,21 @@ namespace MajorisImage {
             var request = (options ?? new DecodeOptions ()).copy ();
             var stop = cancel ?? new Cancellable ();
             var worker = yield select (source, request.required_capabilities, stop);
-            string output = yield worker.run (source.file, "decode", transform, stop, edge, request);
-            try { return yield WorkerClient.read_pixels (output, stop); }
-            finally { WorkerClient.cleanup (output); }
+            transform.validate ();
+            request.preview_size = edge;
+            try {
+                string output = yield worker.run (source.file, "decode", transform, stop, edge, request);
+                try {
+                    var path = Path.build_filename (Path.get_dirname (output), "image.json");
+                    var probe = ImageProbe.deserialize (yield WorkerClient.read_text (path, stop));
+                    if ((probe.capabilities & request.required_capabilities) != request.required_capabilities)
+                        throw new ImageError.UNSUPPORTED ("Image does not meet the requested render capabilities");
+                    return yield WorkerClient.read_pixels (output, stop);
+                } finally { WorkerClient.cleanup (output); }
+            } catch (Error error) {
+                if (!GlycinFallback.eligible (error)) throw error;
+                return yield GlycinFallback.render (source, request, transform, stop, error, timeout_seconds);
+            }
         }
     }
 }

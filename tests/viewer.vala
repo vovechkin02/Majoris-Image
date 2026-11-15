@@ -97,6 +97,11 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
         yield view.load_file (file);
         assert (view.animated && view.frame_duration_ms > 0);
         assert (view.presentation_status == PresentationStatus.SDR);
+        if (view.document.decoder.has_suffix ("-sequence")) {
+            yield view.seek_frame (1);
+            assert (view.current_frame == 1 && view.frame_duration_ms == 160);
+            yield view.seek_frame (0);
+        }
         view.play ();
         assert (view.playing);
         view.visible = false;

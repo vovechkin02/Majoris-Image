@@ -32,7 +32,10 @@ static int linear_generate(VipsRegion *out, void *sequence, void *a, void *b, gb
             for (int c = 0; c < 3; c++) {
                 double value = src[c] / ctx->divisor;
                 rgb[c] = ctx->transfer == 16 ? majoris_codec_pq_to_linear(value) / 203.0 :
-                    ctx->transfer == 18 ? majoris_codec_hlg_to_linear(CLAMP(value, 0, 1)) : value;
+                    ctx->transfer == 18 ? majoris_codec_hlg_to_linear(CLAMP(value, 0, 1)) :
+                    ctx->transfer == 13 ? (value <= .04045 ? value / 12.92 : pow((value + .055) / 1.055, 2.4)) :
+                    ctx->transfer == 1 || ctx->transfer == 6 || ctx->transfer == 14 || ctx->transfer == 15 ?
+                        (value < .081 ? value / 4.5 : pow((value + .099) / 1.099, 1.0 / .45)) : value;
             }
             if (ctx->transfer == 18) {
                 double luminance = MAX(0, .2627*rgb[0] + .6780*rgb[1] + .0593*rgb[2]);

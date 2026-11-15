@@ -16,7 +16,9 @@ def rgba(pixels):
     return zlib.compress(b"\0" + bytes(pixels))
 
 
-qoi, apng, *oriented = map(pathlib.Path, sys.argv[1:])
+qoi, apng, *formats = map(pathlib.Path, sys.argv[1:])
+oriented = formats[:8]
+bmp, ico, tga, dds, pgm, bad_icc = formats[8:]
 # Two independently encoded pixels with different transparency.
 qoi.write_bytes(
     b"qoif" + struct.pack(">IIBB", 2, 1, 4, 0)
@@ -58,3 +60,32 @@ for value, path in enumerate(oriented, 1):
         + b"".join(struct.pack("<HHII", *tag) for tag in tags)
         + struct.pack("<IHHH", 0, 8, 8, 8) + pixels
     )
+
+
+# Independently encoded 2x1 red and green pixels, plus a grayscale PGM.
+bmp_pixels = bytes((0, 0, 255, 0, 255, 0, 0, 0))
+bmp_info = struct.pack("<IiiHHIIiiII", 40, 2, 1, 1, 24, 0, len(bmp_pixels), 0, 0, 0, 0)
+bmp.write_bytes(b"BM" + struct.pack("<IHHI", 62, 0, 0, 54) + bmp_info + bmp_pixels)
+ico_image = (
+    struct.pack("<IiiHHIIiiII", 40, 2, 2, 1, 32, 0, 8, 0, 0, 0, 0)
+    + bytes((0, 0, 255, 255, 0, 255, 0, 255)) + bytes(4)
+)
+ico.write_bytes(struct.pack("<HHHBBBBHHII", 0, 1, 1, 2, 1, 0, 0, 1, 32, len(ico_image), 22) + ico_image)
+tga.write_bytes(
+    struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, 2, 1, 24, 32)
+    + bmp_pixels[:6] + bytes(8) + b"TRUEVISION-XFILE.\0"
+)
+# DDS DXT1 block with a red and a green endpoint, alternating selectors.
+dds_header = [124, 0x81007, 4, 4, 8, 0, 0] + [0] * 11
+dds_pixel_format = [32, 4, int.from_bytes(b"DXT1", "little"), 0, 0, 0, 0, 0]
+dds.write_bytes(b"DDS " + struct.pack("<31I", *(dds_header + dds_pixel_format + [0x1000, 0, 0, 0, 0]))
+                + struct.pack("<HHI", 0xF800, 0x07E0, 0x44444444))
+pgm.write_bytes(b"P5\n2 1\n255\n" + bytes((64, 255)))
+
+bad_icc.write_bytes(
+    b"\x89PNG\r\n\x1a\n"
+    + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 1, 8, 6, 0, 0, 0))
+    + chunk(b"iCCP", b"Invalid\0\0" + zlib.compress(b"this is not an ICC profile"))
+    + chunk(b"IDAT", rgba([255, 0, 0, 255] * 2))
+    + chunk(b"IEND")
+)

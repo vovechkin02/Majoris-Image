@@ -12,7 +12,7 @@ char *majoris_codec_image_details(VipsImage *image) {
             char *description=g_malloc0(MAX(1,length)); cmsGetProfileInfoASCII(icc,cmsInfoDescription,"en","US",description,length);
             json_object_set_string_member(info,"profile",description); g_free(description);
             char *version=g_strdup_printf("%.1f",cmsGetProfileVersion(icc)); json_object_set_string_member(info,"icc-version",version); g_free(version);
-            json_object_set_string_member(info,"colour-space",cmsGetColorSpace(icc)==cmsSigRgbData ? "RGB" : cmsGetColorSpace(icc)==cmsSigCmykData ? "CMYK" : "ICC-defined");
+            json_object_set_string_member(info,"colour-space",cmsGetColorSpace(icc)==cmsSigRgbData ? "RGB" : cmsGetColorSpace(icc)==cmsSigCmykData ? "CMYK" : cmsGetColorSpace(icc)==cmsSigGrayData ? "Gray" : "ICC-defined");
             cmsCloseProfile(icc);
         } else json_object_set_string_member(info,"profile-error","Invalid ICC profile");
     }

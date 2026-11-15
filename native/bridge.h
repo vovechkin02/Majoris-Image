@@ -21,7 +21,6 @@ gboolean majoris_codec_ultra_encode(VipsImage *image, const char *path, int form
 char *majoris_codec_codec_json(void);
 char *majoris_codec_image_details(VipsImage *image);
 gboolean majoris_codec_sync_stream(GOutputStream *stream, GError **error);
-char **majoris_codec_image_mime_types(void);
 gboolean majoris_codec_exr_encode(VipsImage *image, const char *path, int depth, GError **error);
 VipsImage *majoris_codec_exr_image(const char *path, int page, GError **error);
 gboolean majoris_codec_jxl_encode(VipsImage *image, const char *path, int depth, int quality, gboolean lossless, GError **error);
@@ -29,4 +28,6 @@ VipsImage *majoris_codec_svg_region(const char *path, double x, double y, double
 
 gboolean majoris_codec_write_pixels(VipsImage *image, const char *path, GError **error);
 int majoris_codec_frame_duration(VipsImage *image, int page);
+VipsImage *majoris_codec_sequence(const char *path, int frame, gboolean avif, int known_count, GError **error);
+VipsImage *majoris_codec_read_pixels(const char *path, GError **error);
 G_END_DECLS

@@ -42,7 +42,15 @@ namespace MajorisImage {
         }
 
         public static ImageProbe inspect (string path, int hdr_hint = -1, int page = 0) throws Error {
+            Vips.Image? prepared;
+            return inspect_with_pixels (path, hdr_hint, page, out prepared);
+        }
+
+        internal static ImageProbe inspect_with_pixels (string path, int hdr_hint, int page,
+                                                        out Vips.Image? prepared, int sequence_frames = 0) throws Error {
+            prepared = null;
             var probe = new ImageProbe ();
+            probe.colour_managed = true;
             var stream = File.new_for_path (path).read ();
             var bytes = stream.read_bytes (65536); stream.close ();
             bool uncertain; probe.mime = ContentType.get_mime_type (ContentType.guess (null, bytes.get_data (), out uncertain));
@@ -65,8 +73,46 @@ namespace MajorisImage {
             if (probe.mime in new string[] { "image/avif", "image/heif", "image/heic", "image/avif-sequence",
                                               "image/heif-sequence", "image/heic-sequence" }) {
                 probe.timed_sequence = is_timed_sequence (signature);
-                if (probe.timed_sequence && page > 0)
-                    throw new ImageError.UNSUPPORTED ("The installed decoder does not expose timed HEIF/AVIF frames");
+                if (probe.timed_sequence) {
+                    Vips.Image? frame = null;
+                    try { frame = ImageNative.sequence (path, page, probe.mime.has_prefix ("image/avif"), sequence_frames); }
+                    catch (IOError.NOT_SUPPORTED error) {
+                        if (page > 0) throw new ImageError.CODEC_MISSING ("%s", error.message);
+                    }
+                    catch (IOError.NO_SPACE error) { throw new ImageError.MEMORY ("%s", error.message); }
+                    catch (IOError.INVALID_DATA error) { throw new ImageError.CORRUPT ("%s", error.message); }
+                    if (frame != null) {
+                        prepared = frame;
+                        probe.animated = true;
+                        probe.width = frame.width ();
+                        probe.height = frame.height ();
+                        int depth, pages, loops, hdr;
+                        double start, duration;
+                        frame.get_int ("majoris-image-bit-depth", out depth);
+                        frame.get_int ("n-pages", out pages);
+                        frame.get_int ("loop", out loops);
+                        frame.get_int ("majoris-image-hdr", out hdr);
+                        frame.get_double ("majoris-image-frame-pts", out start);
+                        frame.get_double ("majoris-image-frame-seconds", out duration);
+                        if (!start.is_finite () || !duration.is_finite () || start < 0 ||
+                            duration <= 0 || start > 86400000 || duration > 86400)
+                            throw new ImageError.CORRUPT ("Invalid sequence timeline");
+                        unowned string loader;
+                        frame.get_string ("vips-loader", out loader);
+                        probe.loader = loader;
+                        probe.depth = probe.source_bit_depth = depth;
+                        probe.pages = pages;
+                        probe.loop_count = loops;
+                        probe.hdr = hdr != 0;
+                        probe.has_alpha = frame.has_alpha ();
+                        probe.frame_timestamp_us = (int64) Math.round (start * 1000000);
+                        probe.frame_duration_us = (int64) Math.round (duration * 1000000);
+                        probe.frame_duration_ms = int.max (1, (int) Math.round (duration * 1000));
+                        return probe;
+                    }
+                    if (page > 0)
+                        throw new ImageError.CODEC_MISSING ("No decoder exposes this HEIF/AVIF sequence");
+                }
             }
             bool raw_signature = signature.length > 12 && ((signature[0] == 'I' && signature[1] == 'I' && signature[8] == 'C' && signature[9] == 'R') || (signature[0] == 'F' && signature[1] == 'U' && signature[2] == 'J' && signature[3] == 'I'));
             if (raw_signature || probe.mime in new string[] { "image/x-adobe-dng", "image/x-canon-cr2", "image/x-canon-cr3", "image/x-nikon-nef", "image/x-sony-arw", "image/x-fuji-raf", "image/x-panasonic-rw2", "image/x-olympus-orf", "image/x-pentax-pef", "image/x-sony-sr2", "image/x-minolta-mrw" })
@@ -98,6 +144,7 @@ namespace MajorisImage {
             int pages = 1; if (!probe.animated && image.type_of ("n-pages") != Type.INVALID && image.get_int ("n-pages", out pages) == 0) probe.pages = int.max (1, pages);
             unowned string loader = "";
             if (image.type_of ("vips-loader") != Type.INVALID && image.get_string ("vips-loader", out loader) == 0) probe.loader = loader;
+            if (probe.loader.contains ("magick")) probe.colour_managed = false;
             if (!probe.animated) probe.animated = probe.pages > 1 && image.type_of ("delay") != Type.INVALID && (probe.loader.contains ("gif") || probe.loader.contains ("webp") || probe.loader.contains ("png"));
             if (probe.animated) probe.timed_sequence = true;
             if (probe.timed_sequence && !probe.animated) probe.pages = 1;

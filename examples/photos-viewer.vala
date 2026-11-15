@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 private async void exercise (ImageView view, File large, File next, File destination, File? raw, string[] extra) throws Error {
     var registry = new DecoderRegistry ();
@@ -11,7 +11,7 @@ private async void exercise (ImageView view, File large, File next, File destina
     assert (preload.get_size () > 45);
 
     var navigation = new PreloadManager.with_registry (registry);
-    ImageSource[] neighbours = {source, next_source};
+    ImageSource[] neighbors = {source, next_source};
     foreach (var path in extra) {
         if (path.has_suffix (".jpg")) {
             var first = yield navigation.open (new ImageSource (File.new_for_path (path)), options);
@@ -19,13 +19,13 @@ private async void exercise (ImageView view, File large, File next, File destina
         } else if (path.has_suffix (".qoi")) {
             var mimes = yield registry.thumbnail_mime_types ();
             if ("image/qoi" in mimes || "image/x-qoi" in mimes)
-                neighbours += new ImageSource (File.new_for_path (path));
+                neighbors += new ImageSource (File.new_for_path (path));
         }
     }
-    yield navigation.preload (neighbours, options);
-    if (neighbours.length > 2) {
-        var qoi = yield navigation.open (neighbours[2], options);
-        assert (qoi == (yield navigation.open (neighbours[2], options)));
+    yield navigation.preload (neighbors, options);
+    if (neighbors.length > 2) {
+        var qoi = yield navigation.open (neighbors[2], options);
+        assert (qoi == (yield navigation.open (neighbors[2], options)));
         view.set_document (qoi);
     }
 
@@ -63,7 +63,7 @@ private async void exercise (ImageView view, File large, File next, File destina
             view.pause ();
             assert (view.current_frame == 1);
         } else {
-            assert (view.document.colour_managed && view.document.bit_depth >= 16);
+            assert (view.document.color_managed && view.document.bit_depth >= 16);
         }
     }
     if (raw != null) {
@@ -82,7 +82,7 @@ int main (string[] args) {
     if (!Gtk.init_check ()) return 77;
     ImageView.register_type ();
     var builder = new Gtk.Builder.from_string (
-        "<interface><object class='MajorisImageView' id='image'/></interface>", -1);
+        "<interface><object class='ImageKitView' id='image'/></interface>", -1);
     var view = (ImageView) builder.get_object ("image");
     var window = new Gtk.Window ();
     window.child = view;

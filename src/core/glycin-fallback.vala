@@ -1,5 +1,5 @@
-namespace MajorisImage {
-    internal enum GlycinColourProvenance { TAGGED_SRGB, ICC_CONVERSION_UNVERIFIED, ASSUMED_SRGB, UNKNOWN, TAGGED_QOI_SRGB, QOI_LINEAR }
+namespace ImageKit {
+    internal enum GlycinColorProvenance { TAGGED_SRGB, ICC_CONVERSION_UNVERIFIED, ASSUMED_SRGB, UNKNOWN, TAGGED_QOI_SRGB, QOI_LINEAR }
     internal class GlycinFallback : Object {
         // Glycin 1 does not expose ICC, transfer functions, page counts or source depth.
         // Negotiate decoder capabilities using the installed loader and sandboxed metadata.
@@ -11,11 +11,11 @@ namespace MajorisImage {
         }
 
 #if HAVE_GLYCIN
-        [CCode (cname = "majoris_discover_glycin_loaders", cheader_filename = "glycin-discovery.h",
+        [CCode (cname = "image_discover_glycin_loaders", cheader_filename = "glycin-discovery.h",
                 array_length = false, array_null_terminated = true)]
         private extern static string[] discover ();
 
-        [CCode (cname = "majoris_mime_matches", cheader_filename = "glycin-discovery.h")]
+        [CCode (cname = "image_mime_matches", cheader_filename = "glycin-discovery.h")]
         private extern static bool same_mime (string a, string b);
 #endif
 
@@ -28,7 +28,7 @@ namespace MajorisImage {
         }
 
 #if HAVE_GLYCIN
-        [CCode (cname = "majoris_image_glycin_pixels_profile_async", finish_name = "majoris_image_glycin_pixels_finish")]
+        [CCode (cname = "image_glycin_pixels_profile_async", finish_name = "image_glycin_pixels_finish")]
         private extern static async Bytes convert (Gly.Frame frame, int edge, double left, double top,
                                                    double crop_width, double crop_height, bool nearest,
                                                    bool gray_icc, bool linear_rgb, Cancellable stop,
@@ -39,7 +39,7 @@ namespace MajorisImage {
             return false;
         }
 
-        private static async Json.Object colour_metadata (ImageSource source, Cancellable stop, bool preload) throws Error {
+        private static async Json.Object color_metadata (ImageSource source, Cancellable stop, bool preload) throws Error {
             string? path = null;
             try {
                 path = yield new WorkerClient ().run (source.file, "colour-probe", null, stop, 0, null, null, preload);
@@ -49,7 +49,7 @@ namespace MajorisImage {
                 if (root != null && root.get_node_type () == Json.NodeType.OBJECT) return root.get_object ();
             } catch (Error error) {
                 stop.set_error_if_cancelled ();
-                debug ("Fallback source colour could not be verified: %s", error.message);
+                debug ("Fallback source color could not be verified: %s", error.message);
             } finally { if (path != null) WorkerClient.cleanup (path); }
             return new Json.Object ();
         }
@@ -86,7 +86,7 @@ namespace MajorisImage {
         internal static async ImageDocument open (ImageSource source, DecodeOptions request, Cancellable stop,
                                                    Error original, uint seconds = 120, ImageProbe? animation = null, RenderOptions? crop = null, bool preload = false) throws Error {
 #if HAVE_GLYCIN
-            var supported = FEATURES | ImageCapabilities.HIGH_DEPTH | ImageCapabilities.COLOUR_MANAGED;
+            var supported = FEATURES | ImageCapabilities.HIGH_DEPTH | ImageCapabilities.COLOR_MANAGED;
             if (animation != null) supported |= ImageCapabilities.ANIMATION;
             if ((request.page != 0 && animation == null) ||
                 (request.required_capabilities & ~supported) != 0) throw original;
@@ -107,29 +107,29 @@ namespace MajorisImage {
             var scheduler = JobScheduler.shared ();
             bool admitted = false;
             try {
-                var colour = yield colour_metadata (source, job, preload);
-                bool tagged = colour.get_boolean_member_with_default ("icc", false);
-                if (colour.get_boolean_member_with_default ("icc-invalid", false))
+                var color = yield color_metadata (source, job, preload);
+                bool tagged = color.get_boolean_member_with_default ("icc", false);
+                if (color.get_boolean_member_with_default ("icc-invalid", false))
                     throw new ImageError.COLOR_PROFILE ("Invalid embedded ICC profile");
-                if (colour.get_boolean_member_with_default ("unverified-transfer", false))
+                if (color.get_boolean_member_with_default ("unverified-transfer", false))
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot verify the source transfer and primaries");
-                int source_depth = (int) colour.get_int_member_with_default ("source-bit-depth", 0);
-                bool known_header = colour.get_boolean_member_with_default ("header-read", false);
+                int source_depth = (int) color.get_int_member_with_default ("source-bit-depth", 0);
+                bool known_header = color.get_boolean_member_with_default ("header-read", false);
                 // PNG sRGB has no ICC transform to observe. The PNG loader publishes
                 // its encoded samples in the declared sRGB space on this path.
-                var provenance = (mime == "image/png" || mime == "image/apng") && colour.get_boolean_member_with_default ("explicit-srgb", false)
-                    ? GlycinColourProvenance.TAGGED_SRGB
-                    : tagged ? GlycinColourProvenance.ICC_CONVERSION_UNVERIFIED
-                    : known_header ? GlycinColourProvenance.ASSUMED_SRGB : GlycinColourProvenance.UNKNOWN;
-                if (colour.get_boolean_member_with_default ("invalid-qoi-colour", false))
-                    throw new ImageError.COLOR_PROFILE ("Invalid QOI colour declaration");
-                int qoi_transfer = (int) colour.get_int_member_with_default ("qoi-transfer", -1);
-                if (qoi_transfer == 0) provenance = GlycinColourProvenance.TAGGED_QOI_SRGB;
-                if (qoi_transfer == 1) provenance = GlycinColourProvenance.QOI_LINEAR;
-                bool verified = provenance == GlycinColourProvenance.TAGGED_SRGB ||
-                    provenance == GlycinColourProvenance.TAGGED_QOI_SRGB;
-                if (!verified && (request.required_capabilities & ImageCapabilities.COLOUR_MANAGED) != 0)
-                    throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded colour state");
+                var provenance = (mime == "image/png" || mime == "image/apng") && color.get_boolean_member_with_default ("explicit-srgb", false)
+                    ? GlycinColorProvenance.TAGGED_SRGB
+                    : tagged ? GlycinColorProvenance.ICC_CONVERSION_UNVERIFIED
+                    : known_header ? GlycinColorProvenance.ASSUMED_SRGB : GlycinColorProvenance.UNKNOWN;
+                if (color.get_boolean_member_with_default ("invalid-qoi-colour", false))
+                    throw new ImageError.COLOR_PROFILE ("Invalid QOI color declaration");
+                int qoi_transfer = (int) color.get_int_member_with_default ("qoi-transfer", -1);
+                if (qoi_transfer == 0) provenance = GlycinColorProvenance.TAGGED_QOI_SRGB;
+                if (qoi_transfer == 1) provenance = GlycinColorProvenance.QOI_LINEAR;
+                bool verified = provenance == GlycinColorProvenance.TAGGED_SRGB ||
+                    provenance == GlycinColorProvenance.TAGGED_QOI_SRGB;
+                if (!verified && (request.required_capabilities & ImageCapabilities.COLOR_MANAGED) != 0)
+                    throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded color state");
 
                 yield scheduler.acquire (preload ? JobScheduler.PRELOAD_PRIORITY : 0, job);
                 admitted = true;
@@ -153,8 +153,8 @@ namespace MajorisImage {
                 }
                 int width, height, depth;
                 var bytes = yield convert (frame, request.preview_size, view.crop_x, view.crop_y,
-                    view.crop_width, view.crop_height, view.nearest_neighbour,
-                    colour.get_boolean_member_with_default ("gray-icc", false), qoi_transfer == 1, job,
+                    view.crop_width, view.crop_height, view.nearest_neighbor,
+                    color.get_boolean_member_with_default ("gray-icc", false), qoi_transfer == 1, job,
                     out width, out height, out depth);
                 if (source_depth > depth)
                     throw new ImageError.UNSUPPORTED ("Glycin would reduce precision from the source samples");
@@ -167,11 +167,11 @@ namespace MajorisImage {
                 probe.height = (int) frame.get_height ();
                 probe.depth = depth;
                 probe.source_bit_depth = source_depth;
-                probe.colour_managed = verified;
-                probe.colour_diagnostic = verified ? "Validated sRGB declaration and decoder output contract."
+                probe.color_managed = verified;
+                probe.color_diagnostic = verified ? "Validated sRGB declaration and decoder output contract."
                     : qoi_transfer == 1 ? "QOI declares linear samples. sRGB primaries are assumed."
-                    : tagged ? "Glycin 1 applies the embedded ICC profile through Little CMS. Output colour state is unverified."
-                    : known_header ? "Untagged source uses the sRGB default." : "Source colour metadata unavailable. Preview uses the sRGB default.";
+                    : tagged ? "Glycin 1 applies the embedded ICC profile through Little CMS. Output color state is unverified."
+                    : known_header ? "Untagged source uses the sRGB default." : "Source color metadata unavailable. Preview uses the sRGB default.";
                 probe.has_alpha = frame.get_memory_format ().has_alpha ();
                 probe.loader = "Glycin";
                 probe.mime = image.get_mime_type ();
@@ -194,8 +194,8 @@ namespace MajorisImage {
                 }
                 metadata.set_boolean_member ("alpha", frame.get_memory_format ().has_alpha ());
                 metadata.set_int_member ("effective-bit-depth", depth);
-                metadata.set_member ("colour-probe", new Json.Node.alloc ().init_object (colour));
-                metadata.set_string_member ("colour", probe.colour_diagnostic);
+                metadata.set_member ("colour-probe", new Json.Node.alloc ().init_object (color));
+                metadata.set_string_member ("colour", probe.color_diagnostic);
                 metadata.set_string_member ("colour-provenance", provenance.to_string ());
                 metadata.set_string_member ("decoder-output-colour", verified ? "sRGB (declared)" : qoi_transfer == 1 ? "linear RGB (sRGB primaries assumed)" :
                     tagged ? "ICC-converted output unverified" : "sRGB assumed");
@@ -238,7 +238,7 @@ namespace MajorisImage {
             var edits = transform.copy ();
             edits.crop_x = edits.crop_y = 0;
             edits.crop_width = edits.crop_height = 1;
-            edits.nearest_neighbour = false;
+            edits.nearest_neighbor = false;
             if (edits.serialize () == new RenderOptions ().serialize ()) return document.preview;
 
             options.sdr_presentation = false;

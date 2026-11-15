@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     /** Headless PNG generation and a shared, private disk cache. */
     public sealed class ThumbnailService : Object {
         internal const string STAMP_ATTRIBUTES = "standard::type,standard::size,etag::value,id::file,time::modified,time::modified-usec,time::changed,time::changed-usec";
@@ -102,11 +102,11 @@ namespace MajorisImage {
             return null;
         }
 
-        [CCode (cname = "majoris_image_cache_try_lock")]
+        [CCode (cname = "image_cache_try_lock")]
         private extern static int try_lock (string path);
-        [CCode (cname = "majoris_image_cache_unlock")]
+        [CCode (cname = "image_cache_unlock")]
         private extern static void release_lock (int fd);
-        [CCode (cname = "majoris_image_cache_publish_async", finish_name = "majoris_image_cache_publish_finish")]
+        [CCode (cname = "image_cache_publish_async", finish_name = "image_cache_publish_finish")]
         private extern static async void publish (string path, Bytes png, Cancellable stop) throws Error;
 
         internal static string source_stamp (File file, FileInfo info) {
@@ -121,12 +121,12 @@ namespace MajorisImage {
         }
 
 #if HAVE_GLYCIN
-        [CCode (cname = "majoris_image_glycin_png")]
+        [CCode (cname = "image_glycin_png")]
         private extern static Bytes encode_srgb_png (Bytes pixels, int width, int height,
                                                       string uri, string mtime, Cancellable stop) throws Error;
 #endif
 
-        [CCode (cname = "majoris_image_thumbnail_valid")]
+        [CCode (cname = "image_thumbnail_valid")]
         private extern static bool valid_png (Bytes png, int edge);
 
         private static async void evict (File directory) {

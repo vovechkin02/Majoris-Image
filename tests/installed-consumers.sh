@@ -7,8 +7,8 @@ trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/fil
 cd "$scratch"
 unset MAJORIS_IMAGE_WORKER
 
-pkg-config --atleast-version=1.1.4 majoris-image-1
-pkg-config --atleast-version=1.1.4 majoris-image-gtk4-1
+pkg-config --atleast-version=2.0.0 majoris-image-1
+pkg-config --atleast-version=2.0.0 majoris-image-gtk4-1
 valac --pkg majoris-image-1 "$source_root/tests/benchmark.vala" -o headless
 ./headless open "$source_root/tests/fixtures/rgb16.png"
 if ldd ./headless | grep -E 'libgtk|libgdk-'; then
@@ -59,24 +59,26 @@ fi
 xvfb-run -a /usr/bin/python3 - <<'PY'
 import gi
 gi.require_version("Gtk", "4.0")
-gi.require_version("MajorisImage", "1.0")
-gi.require_version("MajorisImageGtk", "1.0")
-from gi.repository import Gtk, MajorisImage, MajorisImageGtk
+gi.require_version("ImageKit", "2.0")
+gi.require_version("ImageKitGtk", "2.0")
+from gi.repository import Gtk, ImageKit, ImageKitGtk
 Gtk.init()
-assert MajorisImage.DecoderRegistry()
-MajorisImageGtk.ImageView.register_type()
+assert ImageKit.DecoderRegistry()
+ImageKitGtk.ImageView.register_type()
 builder = Gtk.Builder.new_from_string(
-    "<interface><object class='MajorisImageView' id='view'>"
+    "<interface><object class='ImageKitView' id='view'>"
     "<property name='scroll-zoom-mode'>control</property>"
+    "<property name='nearest-neighbor'>true</property>"
     "<property name='accessible-description'>Selected image</property>"
     "</object></interface>", -1
 )
 view = builder.get_object("view")
-assert isinstance(view, MajorisImageGtk.ImageView)
-assert view.props.scroll_zoom_mode == MajorisImageGtk.ScrollZoomMode.CONTROL
+assert isinstance(view, ImageKitGtk.ImageView)
+assert view.props.scroll_zoom_mode == ImageKitGtk.ScrollZoomMode.CONTROL
+assert view.props.nearest_neighbor
 assert view.props.accessible_description == "Selected image"
 assert view.get_accessible_role() == Gtk.AccessibleRole.IMG
-assert MajorisImageGtk.PresentationStatus.EXTERNAL_UNVERIFIED
+assert ImageKitGtk.PresentationStatus.EXTERNAL_UNVERIFIED
 PY
 
 /usr/libexec/majoris-image-thumbnailer "file://$source_root/tests/fixtures/rgb16.png" thumbnail.png 128

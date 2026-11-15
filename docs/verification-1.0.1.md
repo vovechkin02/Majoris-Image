@@ -15,7 +15,7 @@ For the current implementation and results, see [1.1.0 verification](verificatio
 
 Build wiring changed in `meson.build`, `meson.options`, `src/core/meson.build`,
 `src/gtk/meson.build` and `tests/meson.build`. Documentation and fixture handling
-changed in `README.md`, `docs/api-1.md`, `tests/fixtures/README.md` and
+changed in `README.md`, `docs/api-2.md`, `tests/fixtures/README.md` and
 `.gitattributes`.
 
 ## Public API
@@ -45,7 +45,7 @@ samples covered Canon PowerShot G1 CRW, Canon EOS 350D CR2, Nikon D2H NEF,
 Sony ILCE-7S ARW, Fujifilm FinePix S5000 RAF, Panasonic DMC-LX1 DNG,
 Olympus E-10 ORF, Pentax K10D PEF and Ricoh GR DNG. The fixtures remain outside
 the repository and were verified against [raw.pixls.us](https://raw.pixls.us/)
-catalogue checksums. Synthetic TIFF fixtures separately checked all eight EXIF
+catalog checksums. Synthetic TIFF fixtures separately checked all eight EXIF
 orientations, including mirrored cases.
 
 Both Debian `amd64` package profiles built with all nine default tests passing.

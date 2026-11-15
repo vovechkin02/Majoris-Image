@@ -1,8 +1,8 @@
 if get_option('tests')
   exr_tests = executable('test-exr', 'test-exr.cpp', dependencies: native_api)
   test('OpenEXR regions', exr_tests)
-  colour_tests = executable('test-imaging', 'test-imaging.c', dependencies: native_api, c_args: native_c_args)
-  test('Imaging references', colour_tests, timeout: 150)
+  color_tests = executable('test-imaging', 'test-imaging.c', dependencies: native_api, c_args: native_c_args)
+  test('Imaging references', color_tests, timeout: 150)
 
   fixture_dir = meson.current_source_dir() / 'fixtures'
   fixture_maker = executable('make-fixtures', 'make-fixtures.c', dependencies: native_api)
@@ -66,7 +66,7 @@ if get_option('tests')
     test('HDR presentation policy', presentation_test)
     texture_test = executable('test-image-texture', 'image-texture.c',
       include_directories: include_directories('../src/gtk'), dependencies: gtk_api)
-    test('GDK floating-point texture colour state', texture_test)
+    test('GDK floating-point texture color state', texture_test)
     xtst = dependency('xtst', required: false)
     x11 = dependency('x11', required: false)
     gtk_x11 = dependency('gtk4-x11', required: false)

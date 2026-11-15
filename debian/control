@@ -28,7 +28,7 @@ Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Recommends: glycin-loaders
 Description: reusable Majoris Image GTK4 widget
- MajorisImageView presents images with zoom, pan, rotation, page navigation
+ ImageKitView presents images with zoom, pan, rotation, page navigation
  and optional Glycin animation. Applications can construct it with GtkBuilder.
 
 Package: majoris-image-worker
@@ -38,7 +38,7 @@ Depends: ${shlibs:Depends}, ${misc:Depends}, bubblewrap
 Recommends: libheif-plugin-libde265, libheif-plugin-dav1d
 Suggests: gvfs-backends
 Description: isolated Majoris Image decoding worker
- Runs native codec, colour-management and image-processing operations inside
+ Runs native codec, color-management and image-processing operations inside
  the sandbox created by the Majoris Image core library.
 
 Package: majoris-image-thumbnailer
@@ -47,7 +47,7 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Suggests: glycin-loaders, libheif-plugin-libde265, libheif-plugin-dav1d
 Description: desktop thumbnail generator using Majoris Image
- Generates colour-managed PNG thumbnails for supported image formats using
+ Generates color-managed PNG thumbnails for supported image formats using
  the Majoris Image worker.
 
 Package: libmajoris-image-dev

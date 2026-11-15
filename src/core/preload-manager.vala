@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     /** Bounded cache for adjacent document previews. Use one instance per navigation session. */
     public sealed class PreloadManager : Object {
         private class Entry : Object {
@@ -47,15 +47,15 @@ namespace MajorisImage {
             return yield registry.open (source, request, stop);
         }
 
-        public async void preload (ImageSource[] neighbours, DecodeOptions? options = null) {
+        public async void preload (ImageSource[] neighbors, DecodeOptions? options = null) {
             clear ();
             var stop = pending;
             uint request_id = generation;
             var request = (options ?? new DecodeOptions ()).copy ();
             // Capture the generation before IO. A subsequent preload discards this batch.
-            for (int i = 0; i < int.min (neighbours.length, 4); i++) {
+            for (int i = 0; i < int.min (neighbors.length, 4); i++) {
                 try {
-                    var source = neighbours[i];
+                    var source = neighbors[i];
                     var key = yield key_for (source, request, stop);
                     if (key == null) continue;
                     if (entries.any_match (entry => entry.key == key)) continue;

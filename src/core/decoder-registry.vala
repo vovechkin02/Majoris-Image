@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public sealed class DecoderRegistry : Object {
         public uint timeout_seconds { get; set; default = 120; }
         private Gee.ArrayList<DecoderBackend> custom_workers = new Gee.ArrayList<DecoderBackend> ();
@@ -34,20 +34,20 @@ namespace MajorisImage {
             return new WorkerClient (null, timeout_seconds);
         }
 
-        /** Runtime catalogue produced using the same codec stack as decoding. */
+        /** Runtime catalog produced using the same codec stack as decoding. */
         public async string installed_codecs (Cancellable? cancel = null) throws Error {
             var stop = cancel ?? new Cancellable ();
             string output = yield new WorkerClient ().run (null, "codecs", null, stop);
             try {
-                string catalogue = yield WorkerClient.read_text (output, stop);
+                string catalog = yield WorkerClient.read_text (output, stop);
                 var parser = new Json.Parser ();
-                parser.load_from_data (catalogue);
+                parser.load_from_data (catalog);
                 var root = parser.get_root ();
                 if (root == null || root.get_node_type () != Json.NodeType.ARRAY)
-                    throw new ImageError.INVALID_RESPONSE ("Invalid codec catalogue");
+                    throw new ImageError.INVALID_RESPONSE ("Invalid codec catalog");
                 var entries = root.get_array ();
                 var mimes = GlycinFallback.installed ();
-                if (mimes.length == 0) return catalogue;
+                if (mimes.length == 0) return catalog;
                 var backend = new Json.Object ();
                 backend.set_string_member ("operation", "glycin");
                 backend.set_boolean_member ("encoder", false);

@@ -18,12 +18,12 @@ int main(int argc, char **argv)
     g_autoptr(GString) mimes = g_string_new(NULL);
     g_autoptr(GHashTable) seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     if (g_str_equal(argv[4], "baseline")) {
-        g_auto(GStrv) formats = majoris_codec_desktop_baseline();
+        g_auto(GStrv) formats = image_codec_desktop_baseline();
         for (char **mime = formats; *mime; mime++) add_mime(mimes, seen, *mime);
     } else {
         g_autoptr(JsonParser) parser = json_parser_new();
-        g_autofree char *catalogue = majoris_codec_codec_json();
-        if (!json_parser_load_from_data(parser, catalogue, -1, NULL)) return 1;
+        g_autofree char *catalog = image_codec_catalog_json();
+        if (!json_parser_load_from_data(parser, catalog, -1, NULL)) return 1;
         JsonArray *entries = json_node_get_array(json_parser_get_root(parser));
         for (guint i = 0; i < json_array_get_length(entries); i++) {
             JsonObject *entry = json_array_get_object_element(entries, i);
@@ -33,15 +33,15 @@ int main(int argc, char **argv)
                 add_mime(mimes, seen, json_array_get_string_element(formats, j));
         }
         gboolean discover_glycin = g_str_equal(argv[4], "glycin");
-#ifdef MAJORIS_GLYCIN_SYSTEM
+#ifdef IMAGE_CODEC_GLYCIN_SYSTEM
         discover_glycin = discover_glycin || g_str_equal(argv[4], "system");
 #endif
         if (discover_glycin) {
-            g_auto(GStrv) formats = majoris_discover_glycin_loaders();
+            g_auto(GStrv) formats = image_discover_glycin_loaders();
             for (char **mime = formats; *mime; mime++) {
-                if (majoris_mime_matches(*mime, "image/avif") &&
+                if (image_mime_matches(*mime, "image/avif") &&
                     !heif_have_decoder_for_format(heif_compression_AV1)) continue;
-                if ((majoris_mime_matches(*mime, "image/heif") || majoris_mime_matches(*mime, "image/heic")) &&
+                if ((image_mime_matches(*mime, "image/heif") || image_mime_matches(*mime, "image/heic")) &&
                     !heif_have_decoder_for_format(heif_compression_HEVC)) continue;
                 add_mime(mimes, seen, *mime);
             }

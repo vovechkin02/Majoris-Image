@@ -1,8 +1,14 @@
-namespace MajorisImage {
+namespace ImageKit {
+    internal static void rename_json_member (Json.Object object, string from, string to) {
+        if (!object.has_member (from)) return;
+        object.set_member (to, object.get_member (from).copy ());
+        object.remove_member (from);
+    }
+
     public class RenderOptions : Object {
         public int version { get; set; default = 2; }
         public int turns { get; set; }
-        public bool nearest_neighbour { get; set; }
+        public bool nearest_neighbor { get; set; }
         public bool flip_x { get; set; }
         public bool flip_y { get; set; }
         public double angle { get; set; }
@@ -40,9 +46,31 @@ namespace MajorisImage {
                 exposure < -10 || exposure > 10 || contrast < 0 || contrast > 4 || angle < -45 || angle > 45)
                 throw new ImageError.INVALID_RECIPE ("Invalid edit parameters");
         }
-        public string serialize () { return Json.gobject_to_data (this, null); }
+        // The on-disk recipe and the worker request share this field spelling.
+        private const string RECIPE_NEAREST = "nearest-neighbour";
+        private const string PROPERTY_NEAREST = "nearest-neighbor";
+
+        internal static void translate_recipe (Json.Node? recipe, bool writing) {
+            if (recipe == null || recipe.get_node_type () != Json.NodeType.OBJECT) return;
+            rename_json_member (recipe.get_object (),
+                writing ? PROPERTY_NEAREST : RECIPE_NEAREST,
+                writing ? RECIPE_NEAREST : PROPERTY_NEAREST);
+        }
+
+        public string serialize () {
+            var node = Json.gobject_serialize (this);
+            translate_recipe (node, true);
+            return Json.to_string (node, false);
+        }
         public static RenderOptions deserialize (string data) throws Error {
-            var recipe = Json.gobject_from_data (typeof (RenderOptions), data) as RenderOptions;
+            var parser = new Json.Parser ();
+            parser.load_from_data (data);
+            var node = parser.get_root ();
+            // Keep JSON-GLib's original error for an invalid root.
+            if (node == null || node.get_node_type () != Json.NodeType.OBJECT)
+                return (RenderOptions) Json.gobject_from_data (typeof (RenderOptions), data);
+            translate_recipe (node, false);
+            var recipe = Json.gobject_deserialize (typeof (RenderOptions), node) as RenderOptions;
             if (recipe == null) throw new ImageError.INVALID_RECIPE ("Invalid edit recipe");
             recipe.validate (); return recipe;
         }

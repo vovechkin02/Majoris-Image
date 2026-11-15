@@ -2,14 +2,14 @@
 
 | Area | Changes | Main files |
 | --- | --- | --- |
-| Tiled viewport | The planner covers the full clipped rectangle, orders visible work by distance from its centre, and admits two jobs per view. It accounts for alignment and tile overlap before allocating. Large viewports receive up to 704 MiB of tile-cache reservations. The planner coarsens the sampling level when necessary to retain complete coverage. Unused textures are evicted before visible work, and cancelled requests occupy their slots until completion. | `src/gtk/{tile-cache,image-view}.vala`, `tests/tile-coverage.vala` |
+| Tiled viewport | The planner covers the full clipped rectangle, orders visible work by distance from its center, and admits two jobs per view. It accounts for alignment and tile overlap before allocating. Large viewports receive up to 704 MiB of tile-cache reservations. The planner coarsens the sampling level when necessary to retain complete coverage. Unused textures are evicted before visible work, and canceled requests occupy their slots until completion. | `src/gtk/{tile-cache,image-view}.vala`, `tests/tile-coverage.vala` |
 | Preloading | Ordinary and background opening use one decoder-selection implementation. A manager can share a custom registry with its foreground consumer. Native decoding, metadata probes and Glycin fallback all use background admission for preloads. Entries retain the source stamp, decode options and preview-memory bounds. | `src/core/{preload-manager,decoder-registry,glycin-fallback,worker-client,job-scheduler}.vala`, `tests/{headless,decoders,raw-samples,scheduler}.vala` |
 | Integration | Photos-style navigation opens JPEG, preloads TIFF and installed QOI, reuses cached documents, and tests a different preview size. Existing HDR, RAW, tile, image-switching and Files-style consumer tests continue running. | `examples/photos-viewer.vala`, `tests/{meson.build,make-fixtures.c,installed-consumers.sh}` |
 | Source distribution | The repository index records mode 100755 for Debian rules and the installed-consumer script. The release checker verifies both entries in the tarball and extracts them to check the resulting mode on Linux. | `debian/rules`, `tests/{installed-consumers.sh,check-release-modes.py}`, `README.md` |
 
 The additive API is `PreloadManager.with_registry(DecoderRegistry)`. The
 default constructor, existing APIs and SONAMEs remain available. See the
-[ABI 1 guide](api-1.md) for the tile and preload budgets, and
+[ABI 1 guide](api-2.md) for the tile and preload budgets, and
 [1.1.3 verification](verification-1.1.3.md) for the previous release.
 
 The coverage test enumerates 1080p, 4K, 5K, 8K, shifted 8K and ultrawide
@@ -25,7 +25,7 @@ working set with actual memory textures. Physical scanout and GPU driver
 allocations were outside the measurement.
 
 Preload tests verified native PNG, OpenEXR and RAW embedded previews,
-forced Glycin QOI and strict-colour requests, cache identity, source
+forced Glycin QOI and strict-color requests, cache identity, source
 replacement, superseded batches, independent managers, the four-source
 limit and the 64 MiB preview budget. The scheduler test asserted queued
 foreground work runs ahead of tiles, with preloads admitted afterward.

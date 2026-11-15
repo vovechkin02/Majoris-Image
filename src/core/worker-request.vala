@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public sealed class DecodeOptions : Object {
         public int page { get; set; }
         public ImageCapabilities required_capabilities { get; set; default = ImageCapabilities.STILL; }
@@ -43,10 +43,21 @@ namespace MajorisImage {
 
         public int sequence_frames { get; set; }
 
-        public string serialize () { return Json.gobject_to_data (this, null); }
+        public string serialize () {
+            var node = Json.gobject_serialize (this);
+            RenderOptions.translate_recipe (node.get_object ().get_member ("transform"), true);
+            return Json.to_string (node, false);
+        }
 
         public static WorkerRequest deserialize (string text) throws Error {
-            var request = Json.gobject_from_data (typeof (WorkerRequest), text) as WorkerRequest;
+            var parser = new Json.Parser ();
+            parser.load_from_data (text);
+            var node = parser.get_root ();
+            // Keep JSON-GLib's original error for an invalid root.
+            if (node == null || node.get_node_type () != Json.NodeType.OBJECT)
+                return (WorkerRequest) Json.gobject_from_data (typeof (WorkerRequest), text);
+            RenderOptions.translate_recipe (node.get_object ().get_member ("transform"), false);
+            var request = Json.gobject_deserialize (typeof (WorkerRequest), node) as WorkerRequest;
             if (request == null || request.version != 1 || request.transform == null ||
                 request.options == null || request.options.page < 0 || request.options.page > 100000 ||
                 request.options.raw_quality < 0 || request.options.raw_quality > 1 ||

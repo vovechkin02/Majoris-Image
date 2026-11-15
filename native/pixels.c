@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-gboolean majoris_codec_write_pixels(VipsImage *image, const char *path, GError **error)
+gboolean image_codec_write_pixels(VipsImage *image, const char *path, GError **error)
 {
     int width = vips_image_get_width(image), height = vips_image_get_height(image);
     int bands = vips_image_get_bands(image);
@@ -48,7 +48,7 @@ done:
 }
 
 
-VipsImage *majoris_codec_read_pixels(const char *path, GError **error)
+VipsImage *image_codec_read_pixels(const char *path, GError **error)
 {
     GMappedFile *mapping = g_mapped_file_new(path, FALSE, error);
     if (!mapping) return NULL;

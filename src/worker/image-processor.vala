@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public class ImageProcessor : Object {
         public static void check (int result) throws Error {
             if (result != 0) throw new ImageError.EXPORT ("%s", Vips.error_buffer ());
@@ -29,7 +29,7 @@ namespace MajorisImage {
                 double factor = double.min ((double)preview/image.width (),(double)preview/image.height ());
                 bool alpha = image.has_alpha ();
                 if (alpha) { check (Vips.premultiply (image,out next,"max_alpha",1.0,null)); image=next; }
-                if (recipe.nearest_neighbour) check (Vips.resize (image, out next, factor, "kernel", 0, null));
+                if (recipe.nearest_neighbor) check (Vips.resize (image, out next, factor, "kernel", 0, null));
                 else check (Vips.resize (image, out next, factor, null)); image=next;
                 if (alpha) { check (Vips.unpremultiply (image,out next,"max_alpha",1.0,null)); image=next; }
             }

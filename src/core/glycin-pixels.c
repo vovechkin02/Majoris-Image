@@ -41,7 +41,7 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
     case GLY_MEMORY_G8A8_PREMULTIPLIED: g = b = 0; a = 1; bands = 2; break;
     default:
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                            "Glycin colour transfer or pixel layout is unavailable");
+                            "Glycin color transfer or pixel layout is unavailable");
         return NULL;
     }
     int component = *depth / 8, pixel = bands * component;
@@ -131,7 +131,7 @@ static void convert_thread(GTask *task, gpointer source, gpointer data, GCancell
     else g_task_return_error(task, error);
 }
 
-void majoris_image_glycin_pixels_profile_async(GlyFrame *frame, int edge, double left, double top,
+void image_glycin_pixels_profile_async(GlyFrame *frame, int edge, double left, double top,
                                        double region_width, double region_height, gboolean nearest,
                                        gboolean gray_icc, gboolean linear_rgb, GCancellable *stop,
                                        GAsyncReadyCallback callback, gpointer data)
@@ -152,16 +152,16 @@ void majoris_image_glycin_pixels_profile_async(GlyFrame *frame, int edge, double
     g_object_unref(task);
 }
 
-void majoris_image_glycin_pixels_async(GlyFrame *frame, int edge, double left, double top,
+void image_glycin_pixels_async(GlyFrame *frame, int edge, double left, double top,
                                       double region_width, double region_height, gboolean nearest,
                                       gboolean gray_icc, GCancellable *stop,
                                       GAsyncReadyCallback callback, gpointer data)
 {
-    majoris_image_glycin_pixels_profile_async(frame, edge, left, top, region_width,
+    image_glycin_pixels_profile_async(frame, edge, left, top, region_width,
         region_height, nearest, gray_icc, FALSE, stop, callback, data);
 }
 
-GBytes *majoris_image_glycin_pixels_finish(GAsyncResult *result, int *width, int *height,
+GBytes *image_glycin_pixels_finish(GAsyncResult *result, int *width, int *height,
                                            int *depth, GError **error)
 {
     PixelJob *job = g_task_get_task_data(G_TASK(result));

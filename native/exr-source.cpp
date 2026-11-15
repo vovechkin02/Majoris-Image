@@ -138,7 +138,7 @@ void profile(VipsImage *image,const Imf::Header &header) {
     }
 }
 }
-VipsImage *majoris_codec_exr_image(const char *path,int page,GError **error) {
+VipsImage *image_codec_exr_image(const char *path,int page,GError **error) {
     VipsImage *image=nullptr;
     try {
         auto source=std::make_unique<Source>(path,page); const auto &header=source->file.header(source->view.part);

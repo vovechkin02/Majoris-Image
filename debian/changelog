@@ -1,6 +1,13 @@
+majoris-image (2.0.0) unstable; urgency=medium
+
+  * Move the public API to ImageKit and bump both library SONAMEs to 2.
+  * Standardize source identifiers and developer-facing text to American English.
+
+ -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 19:00:00 +1100
+
 majoris-image (1.1.4) unstable; urgency=medium
 
-  * Cover the complete visible image and prioritise tiles near its centre.
+  * Cover the complete visible image and prioritize tiles near its center.
   * Reuse decoder selection and Glycin fallback in background previews.
   * Verify source-release executable modes.
 
@@ -8,14 +15,14 @@ majoris-image (1.1.4) unstable; urgency=medium
 
 majoris-image (1.1.3) unstable; urgency=medium
 
-  * Finalise GTK viewport input, accessibility and colour-aware presentation.
+  * Finalize GTK viewport input, accessibility and color-aware presentation.
 
  -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 17:00:00 +1100
 
 majoris-image (1.1.2) unstable; urgency=medium
 
   * Register installed thumbnail codecs through Debian package triggers.
-  * Extend playback timeline and fallback colour verification.
+  * Extend playback timeline and fallback color verification.
   * Retain executable release packaging rules.
 
  -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 16:00:00 +1100
@@ -31,8 +38,8 @@ majoris-image (1.1.1) unstable; urgency=medium
 majoris-image (1.1.0) unstable; urgency=medium
 
   * Add sandboxed timed image tracks and indexed frame timing.
-  * Improve Glycin fallback discovery, colour checks and preview resampling.
-  * Share the codec catalogue and isolate HDR presentation policy.
+  * Improve Glycin fallback discovery, color checks and preview resampling.
+  * Share the codec catalog and isolate HDR presentation policy.
 
  -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 13:00:00 +1100
 

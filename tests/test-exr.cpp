@@ -39,17 +39,17 @@ static double sample(VipsImage *image,int x,int y,int channel) {
 }
 static void exercise() {
     GError *error=nullptr; char *dir=g_dir_make_tmp("majoris-image-exr-parts-XXXXXX",&error); g_assert_no_error(error); char *path=g_build_filename(dir,"multipart.exr",nullptr); fixture(path);
-    VipsImage *first=majoris_codec_exr_image(path,0,&error); g_assert_no_error(error); g_assert_nonnull(first); int pages=0;
+    VipsImage *first=image_codec_exr_image(path,0,&error); g_assert_no_error(error); g_assert_nonnull(first); int pages=0;
     g_assert_cmpint(vips_image_get_int(first,"n-pages",&pages),==,0); g_assert_cmpint(pages,==,2);
     g_assert_cmpfloat_with_epsilon(sample(first,16,8,0),2.21f,1e-6); g_assert_cmpfloat(sample(first,31,15,3),==,0);
-    VipsImage *linear=majoris_codec_to_linear(first,&error); g_assert_no_error(error);
+    VipsImage *linear=image_codec_to_linear(first,&error); g_assert_no_error(error);
     double expected=1.660491*2.21-.587641*.02-.07285*.01;
     g_assert_cmpfloat_with_epsilon(sample(linear,16,8,0),expected,.005); g_assert_cmpfloat(sample(linear,16,8,1),<,0);
     g_object_unref(linear); g_object_unref(first);
-    VipsImage *second=majoris_codec_exr_image(path,1,&error); g_assert_no_error(error); g_assert_nonnull(second);
+    VipsImage *second=image_codec_exr_image(path,1,&error); g_assert_no_error(error); g_assert_nonnull(second);
     g_assert_cmpfloat_with_epsilon(sample(second,20,10,0),4.3334567f,1e-6); g_assert_cmpfloat_with_epsilon(sample(second,20,10,3),.75,1e-6);
     g_object_unref(second);
-    fixture(path,100); first=majoris_codec_exr_image(path,0,&error); g_assert_no_error(error); linear=majoris_codec_to_linear(first,&error); g_assert_no_error(error);
+    fixture(path,100); first=image_codec_exr_image(path,0,&error); g_assert_no_error(error); linear=image_codec_to_linear(first,&error); g_assert_no_error(error);
     g_assert_cmpfloat_with_epsilon(sample(linear,16,8,0),expected*100/203,.005); g_object_unref(linear); g_object_unref(first);
     g_unlink(path); g_rmdir(dir); g_free(path); g_free(dir);
 }

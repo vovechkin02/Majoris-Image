@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 int main () {
     PresentationPolicy[] policies = {

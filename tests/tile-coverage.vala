@@ -1,8 +1,8 @@
-using MajorisImage;
+using ImageKit;
 
 // Link the test copy of the cache to the same texture constructor as the widget.
-namespace MajorisImage {
-    [CCode (cname = "majoris_image_texture_new", cheader_filename = "image-texture.h")]
+namespace ImageKit {
+    [CCode (cname = "image_texture_new", cheader_filename = "image-texture.h")]
     private extern static Gdk.Texture test_texture (Bytes bytes, int width, int height, size_t stride);
 
     internal static Gdk.Texture texture_for_pixels (PixelBuffer pixels) {
@@ -72,8 +72,8 @@ private async void test_cache (string path, string exr_path, bool complete) thro
     cache.reset (document);
     var first = cache.visible ({0, 0, 1536, 1536}, 1);
     assert (first.size == 9 && first[0].x == 512 && first[0].y == 512);
-    var cancelled = first[0].request;
-    assert (cancelled != null && first[1].request != null && first[2].request == null);
+    var canceled = first[0].request;
+    assert (canceled != null && first[1].request != null && first[2].request == null);
 
     // Reset and immediately submit new geometry. Old worker callbacks still
     // hold their slots. They must neither publish a texture nor lose work.
@@ -81,7 +81,7 @@ private async void test_cache (string path, string exr_path, bool complete) thro
     cache.reset (document, true);
     TileBounds revised = { 8192, 512, 9216, 1536 };
     var visible = cache.visible (revised, 1);
-    assert (cancelled.is_cancelled () && visible[0].request == null);
+    assert (canceled.is_cancelled () && visible[0].request == null);
     for (int attempt = 0; attempt < 500 && !visible.all_match (tile => tile.texture != null); attempt++)
         yield delay ();
     assert (visible.all_match (tile => tile.texture != null));
@@ -125,7 +125,7 @@ private async void test_cache (string path, string exr_path, bool complete) thro
         stdout.printf ("All 160 shifted 8K tiles rendered and retained\n");
         cache.reset (null);
     }
-    // Drain the two cancelled jobs before leaving the test main loop.
+    // Drain the two canceled jobs before leaving the test main loop.
     for (int i = 0; i < 30; i++) yield delay ();
 }
 

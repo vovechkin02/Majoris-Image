@@ -124,49 +124,49 @@ static void finalized(gpointer data, GObject *object)
 
 static void test_external(void)
 {
-    g_autoptr(MajorisImageView) view = g_object_ref_sink(majoris_image_image_view_new());
+    g_autoptr(ImageKitView) view = g_object_ref_sink(image_kit_image_view_new());
     GtkAccessible *accessible = GTK_ACCESSIBLE(view);
     gtk_test_accessible_assert_role(accessible, GTK_ACCESSIBLE_ROLE_IMG);
     gtk_accessible_update_property(accessible, GTK_ACCESSIBLE_PROPERTY_LABEL, "Product browser", -1);
-    majoris_image_image_view_set_accessible_description(view, "First product");
+    image_kit_image_view_set_accessible_description(view, "First product");
     gtk_test_accessible_assert_property(accessible, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, "First product");
 
     gboolean released = FALSE;
     GdkTexture *pq = make_texture(gdk_color_state_get_rec2100_pq());
     g_object_weak_ref(G_OBJECT(pq), finalized, &released);
-    majoris_image_image_view_set_texture(view, pq);
+    image_kit_image_view_set_texture(view, pq);
     g_object_unref(pq);
     g_assert_false(released);
     gtk_test_accessible_assert_property(accessible, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, "First product");
-    g_assert_cmpint(majoris_image_image_view_get_image_width(view), ==, 160);
-    g_assert_cmpint(majoris_image_image_view_get_image_height(view), ==, 160);
-    g_assert_true(majoris_image_image_view_get_hdr_source(view));
-    g_assert_null(majoris_image_image_view_get_document(view));
-    g_assert_null(majoris_image_image_view_get_metadata(view));
-    g_assert_cmpint(majoris_image_image_view_get_presentation_status(view), ==,
-                    MAJORIS_IMAGE_PRESENTATION_STATUS_EXTERNAL_UNVERIFIED);
-    g_assert_nonnull(g_strstr_len(majoris_image_image_view_get_presentation_diagnostic(view), -1, "PQ"));
-    majoris_image_image_view_set_presentation_policy(view, MAJORIS_IMAGE_PRESENTATION_POLICY_SDR);
-    g_assert_cmpint(majoris_image_image_view_get_presentation_status(view), ==,
-                    MAJORIS_IMAGE_PRESENTATION_STATUS_EXTERNAL_UNVERIFIED);
+    g_assert_cmpint(image_kit_image_view_get_image_width(view), ==, 160);
+    g_assert_cmpint(image_kit_image_view_get_image_height(view), ==, 160);
+    g_assert_true(image_kit_image_view_get_hdr_source(view));
+    g_assert_null(image_kit_image_view_get_document(view));
+    g_assert_null(image_kit_image_view_get_metadata(view));
+    g_assert_cmpint(image_kit_image_view_get_presentation_status(view), ==,
+                    IMAGE_KIT_PRESENTATION_STATUS_EXTERNAL_UNVERIFIED);
+    g_assert_nonnull(g_strstr_len(image_kit_image_view_get_presentation_diagnostic(view), -1, "PQ"));
+    image_kit_image_view_set_presentation_policy(view, IMAGE_KIT_PRESENTATION_POLICY_SDR);
+    g_assert_cmpint(image_kit_image_view_get_presentation_status(view), ==,
+                    IMAGE_KIT_PRESENTATION_STATUS_EXTERNAL_UNVERIFIED);
 
     /* The view owns the only reference at this point. */
-    majoris_image_image_view_set_texture(view, pq);
+    image_kit_image_view_set_texture(view, pq);
     g_assert_false(released);
 
     g_autoptr(GdkTexture) linear = make_texture(gdk_color_state_get_srgb_linear());
-    majoris_image_image_view_set_texture(view, linear);
+    image_kit_image_view_set_texture(view, linear);
     g_assert_true(released);
     gtk_test_accessible_assert_property(accessible, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, "Image preview");
     gtk_test_accessible_assert_property(accessible, GTK_ACCESSIBLE_PROPERTY_LABEL, "Product browser");
-    g_assert_cmpint(majoris_image_image_view_get_presentation_status(view), ==,
-                    MAJORIS_IMAGE_PRESENTATION_STATUS_EXTERNAL_UNVERIFIED);
-    g_assert_false(majoris_image_image_view_get_hdr_source(view));
-    majoris_image_image_view_clear(view);
-    g_assert_cmpstr(majoris_image_image_view_get_accessible_description(view), ==, "");
+    g_assert_cmpint(image_kit_image_view_get_presentation_status(view), ==,
+                    IMAGE_KIT_PRESENTATION_STATUS_EXTERNAL_UNVERIFIED);
+    g_assert_false(image_kit_image_view_get_hdr_source(view));
+    image_kit_image_view_clear(view);
+    g_assert_cmpstr(image_kit_image_view_get_accessible_description(view), ==, "");
     g_assert_false(gtk_test_accessible_has_property(accessible, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION));
-    g_assert_cmpint(majoris_image_image_view_get_presentation_status(view), ==,
-                    MAJORIS_IMAGE_PRESENTATION_STATUS_NONE);
+    g_assert_cmpint(image_kit_image_view_get_presentation_status(view), ==,
+                    IMAGE_KIT_PRESENTATION_STATUS_NONE);
     gtk_test_accessible_assert_property(accessible, GTK_ACCESSIBLE_PROPERTY_LABEL, "Product browser");
 }
 
@@ -177,19 +177,19 @@ int main(void)
     int event, error, major, minor;
     if (!XTestQueryExtension(display, &event, &error, &major, &minor)) return 77;
     g_object_set(gtk_settings_get_default(), "gtk-enable-animations", FALSE, NULL);
-    majoris_image_image_view_register_type();
+    image_kit_image_view_register_type();
     test_external();
 
     g_autoptr(GtkBuilder) builder = gtk_builder_new_from_string(
-        "<interface><object class='MajorisImageView' id='files'>"
+        "<interface><object class='ImageKitView' id='files'>"
         "<property name='scroll-zoom-mode'>control</property>"
         "<property name='accessible-description'>Landscape photograph</property>"
         "</object></interface>", -1);
-    MajorisImageView *files = MAJORIS_IMAGE_IMAGE_VIEW(gtk_builder_get_object(builder, "files"));
-    MajorisImageView *photos = majoris_image_image_view_new();
-    MajorisImageView *disabled = majoris_image_image_view_new();
-    majoris_image_image_view_set_scroll_zoom_mode(disabled, MAJORIS_IMAGE_SCROLL_ZOOM_MODE_DISABLED);
-    g_assert_cmpint(majoris_image_image_view_get_scroll_zoom_mode(photos), ==, MAJORIS_IMAGE_SCROLL_ZOOM_MODE_ALWAYS);
+    ImageKitView *files = IMAGE_KIT_IMAGE_VIEW(gtk_builder_get_object(builder, "files"));
+    ImageKitView *photos = image_kit_image_view_new();
+    ImageKitView *disabled = image_kit_image_view_new();
+    image_kit_image_view_set_scroll_zoom_mode(disabled, IMAGE_KIT_SCROLL_ZOOM_MODE_DISABLED);
+    g_assert_cmpint(image_kit_image_view_get_scroll_zoom_mode(photos), ==, IMAGE_KIT_SCROLL_ZOOM_MODE_ALWAYS);
 
     GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(GTK_WIDGET(files), 220, 240);
@@ -219,40 +219,40 @@ int main(void)
     flush_events(&input);
 
     g_autoptr(GdkTexture) srgb = make_texture(gdk_color_state_get_srgb());
-    majoris_image_image_view_set_texture(files, srgb);
-    majoris_image_image_view_set_texture(photos, srgb);
-    majoris_image_image_view_set_texture(disabled, srgb);
+    image_kit_image_view_set_texture(files, srgb);
+    image_kit_image_view_set_texture(photos, srgb);
+    image_kit_image_view_set_texture(disabled, srgb);
     gtk_test_accessible_assert_property(GTK_ACCESSIBLE(files), GTK_ACCESSIBLE_PROPERTY_DESCRIPTION,
                                         "Landscape photograph");
-    g_assert_cmpint(majoris_image_image_view_get_presentation_status(files), ==,
-                    MAJORIS_IMAGE_PRESENTATION_STATUS_SDR);
-    majoris_image_image_view_zoom_to(files, 2.5, -1, -1);
+    g_assert_cmpint(image_kit_image_view_get_presentation_status(files), ==,
+                    IMAGE_KIT_PRESENTATION_STATUS_SDR);
+    image_kit_image_view_zoom_to(files, 2.5, -1, -1);
     wheel(&input, 5, FALSE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(files), ==, 2.5);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(files), ==, 2.5);
     g_assert_cmpfloat(gtk_adjustment_get_value(vertical), >, 0);
     gtk_adjustment_set_value(vertical, 0);
     flush_events(&input);
     wheel(&input, 4, TRUE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(files), >, 2.5);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(files), >, 2.5);
     g_assert_cmpfloat(gtk_adjustment_get_value(vertical), ==, 0);
     guint propagated_scroll = 0;
     GtkEventController *parent_wheel = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
     g_signal_connect(parent_wheel, "scroll", G_CALLBACK(parent_scroll), &propagated_scroll);
     gtk_widget_add_controller(content, parent_wheel);
-    majoris_image_image_view_set_minimum_zoom(files, 2.5);
-    majoris_image_image_view_zoom_to(files, 2.5, -1, -1);
+    image_kit_image_view_set_minimum_zoom(files, 2.5);
+    image_kit_image_view_zoom_to(files, 2.5, -1, -1);
     wheel(&input, 5, TRUE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(files), ==, 2.5);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(files), ==, 2.5);
     g_assert_cmpuint(propagated_scroll, ==, 1);
     wheel(&input, 7, TRUE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(files), ==, 2.5);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(files), ==, 2.5);
     g_assert_cmpuint(propagated_scroll, ==, 2);
     gtk_adjustment_set_value(vertical, 0);
     flush_events(&input);
 
-    majoris_image_image_view_set_allow_zoom(files, FALSE);
+    image_kit_image_view_set_allow_zoom(files, FALSE);
     wheel(&input, 5, FALSE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(files), ==, 2.5);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(files), ==, 2.5);
     g_assert_cmpfloat(gtk_adjustment_get_value(vertical), >, 0);
     gtk_adjustment_set_value(vertical, 0);
     flush_events(&input);
@@ -266,27 +266,27 @@ int main(void)
     flush_events(&input);
     g_assert_true(gtk_widget_has_focus(GTK_WIDGET(files)));
     press_key(&input, XK_equal, FALSE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(files), ==, 2.5);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(files), ==, 2.5);
     g_assert_cmpuint(propagated, ==, 1);
-    majoris_image_image_view_set_allow_zoom(files, TRUE);
+    image_kit_image_view_set_allow_zoom(files, TRUE);
     press_key(&input, XK_equal, FALSE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(files), >, 2.5);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(files), >, 2.5);
     g_assert_cmpuint(propagated, ==, 1);
     press_key(&input, XK_equal, TRUE);
     press_key(&input, XK_F6, FALSE);
     g_assert_cmpuint(propagated, ==, 3);
-    majoris_image_image_view_set_allow_pan(files, FALSE);
+    image_kit_image_view_set_allow_pan(files, FALSE);
     press_key(&input, XK_Left, FALSE);
     g_assert_cmpuint(propagated, ==, 4);
-    majoris_image_image_view_set_allow_pan(files, TRUE);
+    image_kit_image_view_set_allow_pan(files, TRUE);
     press_key(&input, XK_Left, FALSE);
     g_assert_cmpuint(propagated, ==, 4);
 
-    majoris_image_image_view_set_nearest_neighbour(files, TRUE);
-    majoris_image_image_view_rotate_clockwise(files);
-    majoris_image_image_view_flip_horizontal(files);
-    majoris_image_image_view_flip_vertical(files);
-    majoris_image_image_view_pan_by(files, -24, 16);
+    image_kit_image_view_set_nearest_neighbor(files, TRUE);
+    image_kit_image_view_rotate_clockwise(files);
+    image_kit_image_view_flip_horizontal(files);
+    image_kit_image_view_flip_vertical(files);
+    image_kit_image_view_pan_by(files, -24, 16);
     move_pointer(&input, GTK_WIDGET(files));
     guint8 before[4], after[4];
     sample_view(GTK_WIDGET(files), 80, 70, before);
@@ -294,15 +294,15 @@ int main(void)
     sample_view(GTK_WIDGET(files), 80, 70, after);
     for (unsigned i = 0; i < 4; i++) g_assert_cmpint(ABS(before[i] - after[i]), <=, 2);
 
-    double photo_zoom = majoris_image_image_view_get_zoom(photos);
+    double photo_zoom = image_kit_image_view_get_zoom(photos);
     move_pointer(&input, GTK_WIDGET(photos));
     wheel(&input, 4, FALSE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(photos), >, photo_zoom);
-    double disabled_zoom = majoris_image_image_view_get_zoom(disabled);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(photos), >, photo_zoom);
+    double disabled_zoom = image_kit_image_view_get_zoom(disabled);
     move_pointer(&input, GTK_WIDGET(disabled));
     wheel(&input, 4, TRUE);
-    g_assert_cmpfloat(majoris_image_image_view_get_zoom(disabled), ==, disabled_zoom);
-    g_assert_cmpint(majoris_image_image_view_get_scroll_zoom_mode(files), ==, MAJORIS_IMAGE_SCROLL_ZOOM_MODE_CONTROL);
+    g_assert_cmpfloat(image_kit_image_view_get_zoom(disabled), ==, disabled_zoom);
+    g_assert_cmpint(image_kit_image_view_get_scroll_zoom_mode(files), ==, IMAGE_KIT_SCROLL_ZOOM_MODE_CONTROL);
     gtk_window_destroy(window);
     return 0;
 }

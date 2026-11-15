@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 private async void wait_tick () {
     Idle.add (() => { wait_tick.callback (); return Source.REMOVE; });
@@ -8,13 +8,13 @@ private async void wait_tick () {
 private async void verify () throws Error {
     var scheduler = JobScheduler.shared ();
     var open = new Cancellable ();
-    var cancelled = new Cancellable ();
+    var canceled = new Cancellable ();
     for (int i = 0; i < 3; i++) yield scheduler.acquire (JobScheduler.PRELOAD_PRIORITY, open);
     yield scheduler.acquire (0, open);
 
     var order = new Gee.ArrayList<int> ();
     bool cancellation_seen = false;
-    scheduler.acquire.begin (JobScheduler.PRELOAD_PRIORITY, cancelled, (source, result) => {
+    scheduler.acquire.begin (JobScheduler.PRELOAD_PRIORITY, canceled, (source, result) => {
         try { scheduler.acquire.end (result); assert_not_reached (); }
         catch (IOError.CANCELLED error) { cancellation_seen = true; }
         catch (Error error) { assert_not_reached (); }
@@ -28,7 +28,7 @@ private async void verify () throws Error {
             scheduler.release ();
         });
     }
-    cancelled.cancel ();
+    canceled.cancel ();
     scheduler.release ();
     for (int i = 0; i < 100 && (order.size < 2 || !cancellation_seen); i++) yield wait_tick ();
     assert (cancellation_seen && order.size == 2);

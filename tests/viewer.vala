@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 [CCode (cname = "g_object_run_dispose", cheader_filename = "glib-object.h")]
 private extern void force_dispose (Object object);
@@ -6,10 +6,10 @@ private extern void force_dispose (Object object);
 async void exercise_view (ImageView view, ImageView other, string fixture_dir, string webp_path, string[] animations) throws Error {
     var png = File.new_for_path (Path.build_filename (fixture_dir, "rgb16.png"));
     var tiff = File.new_for_path (Path.build_filename (fixture_dir, "multipage.tiff"));
-    var cancelled = new Cancellable ();
-    cancelled.cancel ();
-    try { yield view.load_file (png, null, cancelled); assert_not_reached (); }
-    catch (IOError.CANCELLED e) { assert (view.state == ViewState.CANCELLED); }
+    var canceled = new Cancellable ();
+    canceled.cancel ();
+    try { yield view.load_file (png, null, canceled); assert_not_reached (); }
+    catch (IOError.CANCELLED e) { assert (view.state == ViewState.CANCELED); }
 
     view.visible = false;
     yield view.load_file (png);
@@ -113,7 +113,7 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
             PresentationStatus.SDR_TONE_MAPPED : PresentationStatus.SDR));
         if (animation.has_suffix (".apng")) {
             assert (view.document.decoder == "Glycin");
-            if (animation.has_suffix ("wide.apng")) assert (view.document.colour_diagnostic.contains ("ICC"));
+            if (animation.has_suffix ("wide.apng")) assert (view.document.color_diagnostic.contains ("ICC"));
             yield view.seek_frame (1);
             assert (view.frame_duration_ms == 170);
             yield view.seek_frame (0);
@@ -163,7 +163,7 @@ int main (string[] args) {
     if (!Gtk.init_check ()) return 77;
     ImageView.register_type ();
     var builder = new Gtk.Builder.from_string (
-        "<interface><object class='MajorisImageView' id='test'/></interface>", -1);
+        "<interface><object class='ImageKitView' id='test'/></interface>", -1);
     var view = (ImageView) builder.get_object ("test");
     var other = new ImageView ();
     var box = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0);

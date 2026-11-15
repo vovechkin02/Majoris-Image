@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public class ColorOperations : Object {
         public static Vips.Image apply (Vips.Image image, RenderOptions input_recipe) throws Error {
             if (!input_recipe.monochrome && !input_recipe.sharpen && input_recipe.saturation == 1 && input_recipe.vibrance == 0 && input_recipe.temperature == 0 && input_recipe.tint == 0 && input_recipe.clarity == 0 && input_recipe.sharpness == 0 && input_recipe.vignette == 0 && (input_recipe.filter == "original" || input_recipe.filter_intensity == 0)) return image;

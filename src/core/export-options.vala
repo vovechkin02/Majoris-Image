@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public class ExportOptions : Object {
         public string format { get; set; default = "png"; }
         public int quality { get; set; default = 90; }

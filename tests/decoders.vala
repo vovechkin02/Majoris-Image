@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 private float sample (PixelBuffer data, int x, int channel) {
     unowned uint8[] bytes = data.bytes.get_data ();
@@ -12,7 +12,7 @@ private class MissingFixtureCodec : Object, DecoderBackend {
     public MissingFixtureCodec (string path) { this.path = path; }
     public string id { get { return "test-missing-fixture"; } }
     public string executable { get { return path; } }
-    public ImageCapabilities capabilities { get { return ImageCapabilities.STILL | ImageCapabilities.METADATA | ImageCapabilities.COLOUR_MANAGED; } }
+    public ImageCapabilities capabilities { get { return ImageCapabilities.STILL | ImageCapabilities.METADATA | ImageCapabilities.COLOR_MANAGED; } }
     public string[] mime_types { owned get { return { "image/qoi", "image/bmp", "image/vnd.microsoft.icon", "image/x-tga",
                    "image/vnd-ms.dds", "image/x-portable-graymap" }; } }
     public bool accepts (string mime, Bytes signature) {
@@ -67,7 +67,7 @@ async void exercise (string[] args) throws Error {
     if (args[6] == "avif") {
         var options = new DecodeOptions ();
         options.required_capabilities |= ImageCapabilities.HDR | ImageCapabilities.HIGH_DEPTH |
-            ImageCapabilities.COLOUR_MANAGED | ImageCapabilities.ANIMATION;
+            ImageCapabilities.COLOR_MANAGED | ImageCapabilities.ANIMATION;
         var hdr = yield registry.open (new ImageSource (File.new_for_path (args[8])), options);
         assert (hdr.hdr && hdr.bit_depth == 10 && hdr.frame_count == 2);
         assert (sample (hdr.preview, 0, 0) > 1.0f);
@@ -123,30 +123,30 @@ async void exercise (string[] args) throws Error {
     assert (sample (animation.preview, 0, 0) > 0.99f);
 
     var qoi = new ImageSource (File.new_for_path (args[1]));
-    string catalogue = yield registry.installed_codecs ();
-    if (!catalogue.contains ("\"operation\":\"glycin\"")) {
+    string catalog = yield registry.installed_codecs ();
+    if (!catalog.contains ("\"operation\":\"glycin\"")) {
         assert (args[3] != "enabled");
         stdout.printf ("Glycin loader unavailable; native APNG metadata passed\n");
         return;
     }
     var directory = Path.get_dirname (args[1]);
-    var colour_options = new DecodeOptions ();
-    colour_options.required_capabilities |= ImageCapabilities.COLOUR_MANAGED | ImageCapabilities.HIGH_DEPTH;
+    var color_options = new DecodeOptions ();
+    color_options.required_capabilities |= ImageCapabilities.COLOR_MANAGED | ImageCapabilities.HIGH_DEPTH;
     var png_p3 = new ImageSource (File.new_for_path (Path.build_filename (directory, "profiled.png")));
     var tiff_p3 = new ImageSource (File.new_for_path (Path.build_filename (directory, "profiled.tiff")));
-    var native_p3 = yield registry.open (png_p3, colour_options);
-    var native_tiff = yield registry.open (tiff_p3, colour_options);
-    assert (native_p3.colour_managed && native_p3.source_bit_depth == 16);
+    var native_p3 = yield registry.open (png_p3, color_options);
+    var native_tiff = yield registry.open (tiff_p3, color_options);
+    assert (native_p3.color_managed && native_p3.source_bit_depth == 16);
     float[] reference = { 0.18f, 0.32f, 0.12f };
     for (int channel = 0; channel < 3; channel++) {
         assert (Math.fabs (sample (native_p3.preview, 0, channel) - reference[channel]) < 0.005);
         assert (Math.fabs (sample (native_tiff.preview, 0, channel) - reference[channel]) < 0.005);
     }
     registry.register_backend (new MissingFixtureCodec (args[4]));
-    if (catalogue.contains ("image/png")) {
+    if (catalog.contains ("image/png")) {
         var fallback_p3 = yield registry.open (png_p3);
         assert (fallback_p3.decoder == "Glycin" && fallback_p3.bit_depth == 16);
-        assert (!fallback_p3.colour_managed && fallback_p3.colour_diagnostic.contains ("ICC"));
+        assert (!fallback_p3.color_managed && fallback_p3.color_diagnostic.contains ("ICC"));
         for (int channel = 0; channel < 3; channel++)
             assert (Math.fabs (sample (fallback_p3.preview, 0, channel) - reference[channel]) < 0.01);
         var adobe = new ImageSource (File.new_for_path (Path.build_filename (directory, "adobe.png")));
@@ -162,10 +162,10 @@ async void exercise (string[] args) throws Error {
         assert (Math.fabs (sample (fallback_gray.preview, 0, 3) - 0.5) < 0.002);
         assert (sample (fallback_gray.preview, 1, 3) == 0 && sample (fallback_gray.preview, 1, 0) == 0);
         var srgb = new ImageSource (File.new_for_path (Path.build_filename (directory, "srgb.png")));
-        var require_colour = new DecodeOptions ();
-        require_colour.required_capabilities |= ImageCapabilities.COLOUR_MANAGED;
-        var verified = yield registry.open (srgb, require_colour);
-        assert (verified.decoder == "Glycin" && verified.colour_managed);
+        var require_color = new DecodeOptions ();
+        require_color.required_capabilities |= ImageCapabilities.COLOR_MANAGED;
+        var verified = yield registry.open (srgb, require_color);
+        assert (verified.decoder == "Glycin" && verified.color_managed);
         assert (Math.fabs (sample (verified.preview, 0, 0) - 0.21586) < 0.002);
         assert (Math.fabs (sample (verified.preview, 0, 3) - 128.0 / 255) < 0.002);
         var cicp = new ImageSource (File.new_for_path (Path.build_filename (directory, "cicp.png")));
@@ -179,7 +179,7 @@ async void exercise (string[] args) throws Error {
     string[] mimes = { "image/bmp", "image/vnd.microsoft.icon", "image/x-tga",
                        "image/vnd-ms.dds", "image/x-portable-graymap" };
     for (int i = 0; i < names.length; i++) {
-        if (!catalogue.contains (mimes[i])) continue;
+        if (!catalog.contains (mimes[i])) continue;
         var path = Path.build_filename (Path.get_dirname (args[1]), "fallback." + names[i]);
         var fixture = new ImageSource (File.new_for_path (path));
         var bounded = new DecodeOptions ();
@@ -207,7 +207,7 @@ async void exercise (string[] args) throws Error {
     var crop = yield first.render_region (1, 0, 1, 1, 4);
     assert (crop.width == 1 && sample (crop, 0, 1) > 0.99f);
     var recipe = new RenderOptions ();
-    recipe.nearest_neighbour = true;
+    recipe.nearest_neighbor = true;
     var nearest = yield registry.render (qoi, recipe, 1);
     assert (sample (nearest, 0, 0) < 0.01f || sample (nearest, 0, 1) < 0.01f);
     recipe.turns = 1;
@@ -221,8 +221,8 @@ async void exercise (string[] args) throws Error {
     assert (preloaded_qoi.decoder == "Glycin");
     assert (preloaded_qoi == (yield preloader.open (qoi)));
     var strict = new DecodeOptions ();
-    strict.required_capabilities |= ImageCapabilities.COLOUR_MANAGED;
-    assert ((yield registry.open (qoi, strict)).colour_managed);
+    strict.required_capabilities |= ImageCapabilities.COLOR_MANAGED;
+    assert ((yield registry.open (qoi, strict)).color_managed);
     var linear_qoi = new ImageSource (File.new_for_path (Path.build_filename (directory, "linear.qoi")));
     var linear = yield registry.open (linear_qoi);
     assert (Math.fabs (sample (linear.preview, 0, 0) - 128.0 / 255) < 0.002);
@@ -236,7 +236,7 @@ async void exercise (string[] args) throws Error {
     try { yield preloader.open (linear_qoi, strict); assert_not_reached (); }
     catch (ImageError.COLOR_PROFILE error) { }
     var verified_qoi = yield preloader.open (qoi, strict);
-    assert (verified_qoi.colour_managed && verified_qoi == (yield preloader.open (qoi, strict)));
+    assert (verified_qoi.color_managed && verified_qoi == (yield preloader.open (qoi, strict)));
     var options = new DecodeOptions ();
     options.required_capabilities = ImageCapabilities.HDR;
     try { yield registry.open (qoi, options); assert_not_reached (); }

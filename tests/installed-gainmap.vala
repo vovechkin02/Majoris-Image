@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 private async void round_trip (ImageSource source, File output) throws Error {
     var options = new ExportOptions ();

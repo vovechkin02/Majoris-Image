@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <math.h>
 
-gboolean majoris_codec_jxl_encode(VipsImage *image, const char *path, int depth, int quality, gboolean lossless, GError **error) {
-    VipsImage *linear=majoris_codec_to_linear(image,error); if (!linear) return FALSE;
+gboolean image_codec_jxl_encode(VipsImage *image, const char *path, int depth, int quality, gboolean lossless, GError **error) {
+    VipsImage *linear=image_codec_to_linear(image,error); if (!linear) return FALSE;
     JxlEncoder *encoder=JxlEncoderCreate(NULL); void *pixels=NULL; FILE *file=NULL; gboolean ok=FALSE;
     if (!encoder) goto fail;
     JxlBasicInfo info; JxlEncoderInitBasicInfo(&info);

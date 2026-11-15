@@ -21,7 +21,7 @@ static double sample(VipsImage *image, int band) {
 }
 static void linear_reference(void) {
     GError *error = NULL; VipsImage *input=constant_image(.5,TRUE);
-    VipsImage *linear=majoris_codec_to_linear(input,&error); g_assert_no_error(error);
+    VipsImage *linear=image_codec_to_linear(input,&error); g_assert_no_error(error);
     g_assert_cmpfloat_with_epsilon(sample(linear,0),.5,1e-6);
     g_assert_cmpfloat_with_epsilon(sample(linear,3),.375,1e-6);
     VipsImage *encoded=NULL; g_assert_cmpint(vips_colourspace(linear,&encoded,VIPS_INTERPRETATION_sRGB,NULL),==,0);
@@ -32,7 +32,7 @@ static void linear_reference(void) {
 static void pq_reference(void) {
     GError *error=NULL; VipsImage *input=constant_image(.5080784215,FALSE);
     vips_image_set_int(input,"majoris-image-transfer",16); vips_image_set_int(input,"majoris-image-primaries",9);
-    VipsImage *linear=majoris_codec_to_linear(input,&error); g_assert_no_error(error);
+    VipsImage *linear=image_codec_to_linear(input,&error); g_assert_no_error(error);
     g_assert_cmpfloat_with_epsilon(sample(linear,0),100.0/203.0,.0001);
     g_object_unref(linear); g_object_unref(input);
 }
@@ -40,8 +40,8 @@ static void profile_reference(void) {
     GError *error=NULL; VipsImage *input=constant_image(.18,FALSE);
     const char *profiles[]={"srgb","display-p3","adobe-rgb","prophoto"};
     for (int p=0;p<4;p++) {
-        VipsImage *encoded=majoris_codec_convert_profile(input,profiles[p],16,&error); g_assert_no_error(error); g_assert_nonnull(encoded);
-        VipsImage *restored=majoris_codec_to_linear(encoded,&error); g_assert_no_error(error);
+        VipsImage *encoded=image_codec_convert_profile(input,profiles[p],16,&error); g_assert_no_error(error); g_assert_nonnull(encoded);
+        VipsImage *restored=image_codec_to_linear(encoded,&error); g_assert_no_error(error);
         g_assert_cmpfloat_with_epsilon(sample(restored,0),.18,.002);
         g_object_unref(restored); g_object_unref(encoded);
     }
@@ -49,12 +49,12 @@ static void profile_reference(void) {
 }
 static void p3_primary_reference(void) {
     GError *error=NULL; VipsImage *gray=constant_image(.18,FALSE);
-    VipsImage *profiled=majoris_codec_convert_profile(gray,"display-p3",16,&error); g_assert_no_error(error);
+    VipsImage *profiled=image_codec_convert_profile(gray,"display-p3",16,&error); g_assert_no_error(error);
     guint8 red[64*32*3]; for (int p=0;p<64*32;p++) { red[p*3]=255; red[p*3+1]=red[p*3+2]=0; }
     VipsImage *input=vips_image_new_from_memory_copy(red,sizeof(red),64,32,3,VIPS_FORMAT_UCHAR); input->Type=VIPS_INTERPRETATION_sRGB;
     const void *profile; size_t size; g_assert_cmpint(vips_image_get_blob(profiled,VIPS_META_ICC_NAME,&profile,&size),==,0);
     vips_image_set_blob_copy(input,VIPS_META_ICC_NAME,profile,size);
-    VipsImage *linear=majoris_codec_to_linear(input,&error); g_assert_no_error(error);
+    VipsImage *linear=image_codec_to_linear(input,&error); g_assert_no_error(error);
     g_test_message("P3 red → linear sRGB: %.6f %.6f %.6f",sample(linear,0),sample(linear,1),sample(linear,2));
     g_assert_cmpfloat_with_epsilon(sample(linear,0),1.224745,.005);
     g_assert_cmpfloat_with_epsilon(sample(linear,1),-.042058,.005);
@@ -66,8 +66,8 @@ static void exr_roundtrip(void) {
     char *path=g_build_filename(dir,"hdr.exr",NULL);
     VipsImage *input=constant_image(4.1234567f,TRUE);
     for (int depth=16;depth<=32;depth+=16) {
-        gboolean written = majoris_codec_exr_encode(input,path,depth,&error); g_assert_no_error(error); g_assert_true(written);
-        VipsImage *loaded=majoris_codec_exr_image(path,0,&error); g_assert_no_error(error); g_assert_nonnull(loaded);
+        gboolean written = image_codec_exr_encode(input,path,depth,&error); g_assert_no_error(error); g_assert_true(written);
+        VipsImage *loaded=image_codec_exr_image(path,0,&error); g_assert_no_error(error); g_assert_nonnull(loaded);
         g_assert_cmpfloat_with_epsilon(sample(loaded,0),4.1234567f,depth == 16 ? .003 : .000001);
         g_assert_cmpfloat_with_epsilon(sample(loaded,3),.375,.001);
         g_object_unref(loaded); g_unlink(path);
@@ -77,9 +77,9 @@ static void exr_roundtrip(void) {
 static void hdr_tiff_roundtrip(void) {
     GError *error=NULL; char *dir=g_dir_make_tmp("majoris-image-tiff-XXXXXX",&error); g_assert_no_error(error);
     char *path=g_build_filename(dir,"hdr.tiff",NULL); VipsImage *input=constant_image(4,TRUE);
-    majoris_codec_tag_linear(input); g_assert_cmpint(vips_image_write_to_file(input,path,"compression",VIPS_FOREIGN_TIFF_COMPRESSION_DEFLATE,NULL),==,0);
+    image_codec_tag_linear(input); g_assert_cmpint(vips_image_write_to_file(input,path,"compression",VIPS_FOREIGN_TIFF_COMPRESSION_DEFLATE,NULL),==,0);
     VipsImage *loaded=vips_image_new_from_file(path,NULL); g_assert_nonnull(loaded);
-    VipsImage *linear=majoris_codec_to_linear(loaded,&error); g_assert_no_error(error);
+    VipsImage *linear=image_codec_to_linear(loaded,&error); g_assert_no_error(error);
     g_assert_cmpfloat_with_epsilon(sample(linear,0),4,.01); g_assert_cmpfloat_with_epsilon(sample(linear,3),.375,.001);
     g_object_unref(linear); g_object_unref(loaded); g_object_unref(input);
     g_unlink(path); g_rmdir(dir); g_free(path); g_free(dir);
@@ -87,7 +87,7 @@ static void hdr_tiff_roundtrip(void) {
 static void hdr_jxl_roundtrip(void) {
     GError *error=NULL; char *dir=g_dir_make_tmp("majoris-image-jxl-XXXXXX",&error); g_assert_no_error(error);
     char *path=g_build_filename(dir,"hdr.jxl",NULL); VipsImage *input=constant_image(4,TRUE);
-    gboolean written=majoris_codec_jxl_encode(input,path,32,100,TRUE,&error); g_assert_no_error(error); g_assert_true(written);
+    gboolean written=image_codec_jxl_encode(input,path,32,100,TRUE,&error); g_assert_no_error(error); g_assert_true(written);
     VipsImage *loaded=vips_image_new_from_file(path,NULL); g_assert_nonnull(loaded);
     g_assert_cmpint(loaded->BandFmt,==,VIPS_FORMAT_FLOAT);
     g_assert_cmpfloat_with_epsilon(sample(loaded,0),4,.001);
@@ -99,7 +99,7 @@ static void svg_region_scaling(void) {
     GError *error=NULL; char *dir=g_dir_make_tmp("majoris-image-svg-XXXXXX",&error); g_assert_no_error(error);
     char *path=g_build_filename(dir,"fine.svg",NULL);
     g_assert_true(g_file_set_contents(path,"<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect x='40' width='.1' height='100' fill='red'/></svg>",-1,&error)); g_assert_no_error(error);
-    VipsImage *tile=majoris_codec_svg_region(path,.4,0,.001,.002,100,100,1024,&error); g_assert_no_error(error); g_assert_nonnull(tile);
+    VipsImage *tile=image_codec_svg_region(path,.4,0,.001,.002,100,100,1024,&error); g_assert_no_error(error); g_assert_nonnull(tile);
     g_assert_cmpint(tile->Xsize,==,512); g_assert_cmpint(tile->Ysize,==,1024);
     g_assert_cmpfloat_with_epsilon(sample(tile,0),255,1); g_assert_cmpfloat_with_epsilon(sample(tile,1),0,1); g_assert_cmpfloat(sample(tile,3),==,255);
     g_object_unref(tile); g_unlink(path); g_rmdir(dir); g_free(path); g_free(dir);
@@ -126,9 +126,9 @@ static void heif_transfer_reference(gconstpointer parameter) {
     struct heif_image_handle *handle=NULL; g_assert_cmpint(heif_context_encode_image(context,image,encoder,options,&handle).code,==,heif_error_Ok);
     g_assert_cmpint(heif_context_write_to_file(context,path).code,==,heif_error_Ok);
     heif_image_handle_release(handle); heif_encoding_options_free(options); heif_nclx_color_profile_free(profile); heif_image_release(image); heif_encoder_release(encoder); heif_context_free(context);
-    VipsImage *loaded=vips_image_new_from_file(path,NULL); g_assert_nonnull(loaded); majoris_codec_annotate_heif(loaded,path);
-    VipsImage *linear=majoris_codec_to_linear(loaded,&error); g_assert_no_error(error);
-    double expected=transfer==16 ? majoris_codec_pq_to_linear(code/1023.0)/203.0 : 1000.0/203.0;
+    VipsImage *loaded=vips_image_new_from_file(path,NULL); g_assert_nonnull(loaded); image_codec_annotate_heif(loaded,path);
+    VipsImage *linear=image_codec_to_linear(loaded,&error); g_assert_no_error(error);
+    double expected=transfer==16 ? image_codec_pq_to_linear(code/1023.0)/203.0 : 1000.0/203.0;
     g_test_message("transfer %d: encoded %.3f → linear %.6f (expected %.6f)",transfer,sample(loaded,0),sample(linear,0),expected);
     g_assert_cmpfloat_with_epsilon(sample(linear,0),expected,.02);
     g_object_unref(linear); g_object_unref(loaded); g_unlink(path); g_rmdir(dir); g_free(path); g_free(dir);
@@ -137,10 +137,10 @@ static void gainmap_roundtrip(gconstpointer data) {
     int format=GPOINTER_TO_INT(data); GError *error=NULL;
     char *dir=g_dir_make_tmp("majoris-image-gainmap-XXXXXX",&error); g_assert_no_error(error);
     char *path=g_build_filename(dir,"gainmap",NULL); VipsImage *input=constant_image(4,FALSE);
-    gboolean written = majoris_codec_ultra_encode(input,path,format,95,&error); g_assert_no_error(error); g_assert_true(written);
-    g_assert_true(majoris_codec_ultra_probe(path));
-    VipsImage *hdr=majoris_codec_ultra_decode(path,FALSE,&error); g_assert_no_error(error); g_assert_nonnull(hdr);
-    VipsImage *sdr=majoris_codec_ultra_decode(path,TRUE,&error); g_assert_no_error(error); g_assert_nonnull(sdr);
+    gboolean written = image_codec_ultra_encode(input,path,format,95,&error); g_assert_no_error(error); g_assert_true(written);
+    g_assert_true(image_codec_ultra_probe(path));
+    VipsImage *hdr=image_codec_ultra_decode(path,FALSE,&error); g_assert_no_error(error); g_assert_nonnull(hdr);
+    VipsImage *sdr=image_codec_ultra_decode(path,TRUE,&error); g_assert_no_error(error); g_assert_nonnull(sdr);
     g_test_message("gain-map format %d: HDR %.5f SDR %.5f",format,sample(hdr,0),sample(sdr,0));
     g_assert_cmpfloat_with_epsilon(sample(hdr,0),4,.4);
     g_assert_cmpfloat(sample(sdr,0),<=,1.001);
@@ -159,9 +159,9 @@ int main(int argc,char **argv) {
     g_test_add_func("/imaging/svg-source-region-scaling",svg_region_scaling);
     g_test_add_data_func("/imaging/pq-avif-10bit",GINT_TO_POINTER(16),heif_transfer_reference);
     g_test_add_data_func("/imaging/hlg-avif-10bit",GINT_TO_POINTER(18),heif_transfer_reference);
-#ifdef MAJORIS_UHDR_AVAILABLE
+#ifdef IMAGE_CODEC_UHDR_AVAILABLE
     g_test_add_data_func("/imaging/gainmap-jpeg",GINT_TO_POINTER(0),gainmap_roundtrip);
-#ifdef MAJORIS_UHDR_CONTAINERS
+#ifdef IMAGE_CODEC_UHDR_CONTAINERS
     g_test_add_data_func("/imaging/gainmap-heif",GINT_TO_POINTER(1),gainmap_roundtrip);
     g_test_add_data_func("/imaging/gainmap-avif",GINT_TO_POINTER(2),gainmap_roundtrip);
 #endif

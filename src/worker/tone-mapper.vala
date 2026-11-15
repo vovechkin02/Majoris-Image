@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public class ToneMapper : Object {
         // Luminance-preserving Reinhard compression, with three documented
         // exposure placements. No operation touches the source file or alpha.

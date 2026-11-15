@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     private Vips.Image open_pixels (string source, ImageProbe probe, DecodeOptions options) throws Error {
         if (probe.raw) {
             if (options.raw_preview_only) {
@@ -49,7 +49,7 @@ namespace MajorisImage {
         try {
             string operation = args[1], source = args[2], output = args[3];
             if (operation == "codecs") {
-                FileUtils.set_contents (output, ImageNative.codec_json ());
+                FileUtils.set_contents (output, ImageNative.codec_catalog_json ());
                 return 0;
             }
             string json;
@@ -65,7 +65,7 @@ namespace MajorisImage {
                 return 0;
             }
             if (operation == "colour-probe") {
-                FileUtils.set_contents (output, MetadataReader.colour_probe (source));
+                FileUtils.set_contents (output, MetadataReader.color_probe (source));
                 return 0;
             }
             Vips.Image? prepared;
@@ -114,7 +114,7 @@ namespace MajorisImage {
             } else if (operation == "thumbnail") {
                 if (probe.hdr) image = ToneMapper.map (image, options.tone_mode);
                 Vips.Image srgb;
-                ImageProcessor.check (Vips.colourspace (image, out srgb, 22, null));
+                ImageProcessor.check (Vips.colorspace (image, out srgb, 22, null));
                 ImageNative.tag_srgb (srgb);
                 foreach (string field in srgb.fields ())
                     if (field.has_prefix ("exif-") || field.has_prefix ("png-comment-") ||

@@ -19,26 +19,26 @@ int main(void)
 {
     const float hdr[] = {2.5f, 0.125f, 0.25f, 0.5f};
     g_autoptr(GBytes) bytes = g_bytes_new_static(hdr, sizeof hdr);
-    g_autoptr(GdkTexture) texture = majoris_image_texture_new(bytes, 1, 1, sizeof hdr);
+    g_autoptr(GdkTexture) texture = image_texture_new(bytes, 1, 1, sizeof hdr);
     assert_pixels(texture, gdk_color_state_get_srgb_linear(), hdr);
 
     /* PQ samples are prepared independently, not retagged linear values. */
     const float pq_samples[] = {0.508078f, 0.392871f, 0.299699f, 0.5f};
     g_autoptr(GBytes) pq_bytes = g_bytes_new_static(pq_samples, sizeof pq_samples);
     GdkColorState *pq_state = gdk_color_state_get_rec2100_pq();
-    g_autoptr(GdkTexture) pq = majoris_image_texture_new_float_rgba(pq_bytes, 1, 1, sizeof pq_samples, pq_state);
+    g_autoptr(GdkTexture) pq = image_texture_new_float_rgba(pq_bytes, 1, 1, sizeof pq_samples, pq_state);
     assert_pixels(pq, pq_state, pq_samples);
     gboolean hdr_texture, sdr_texture;
-    g_assert_nonnull(g_strstr_len(majoris_image_texture_external_description(pq, &sdr_texture, &hdr_texture), -1, "PQ"));
+    g_assert_nonnull(g_strstr_len(image_texture_external_description(pq, &sdr_texture, &hdr_texture), -1, "PQ"));
     g_assert_true(hdr_texture);
     g_assert_false(sdr_texture);
 
     const float linear_2020[] = {1.5f, 0.75f, 0.35f, 1.0f};
     g_autoptr(GBytes) linear_bytes = g_bytes_new_static(linear_2020, sizeof linear_2020);
     GdkColorState *linear_state = gdk_color_state_get_rec2100_linear();
-    g_autoptr(GdkTexture) linear = majoris_image_texture_new_float_rgba(linear_bytes, 1, 1, sizeof linear_2020, linear_state);
+    g_autoptr(GdkTexture) linear = image_texture_new_float_rgba(linear_bytes, 1, 1, sizeof linear_2020, linear_state);
     assert_pixels(linear, linear_state, linear_2020);
-    g_assert_nonnull(g_strstr_len(majoris_image_texture_external_description(linear, &sdr_texture, &hdr_texture), -1, "linear Rec."));
+    g_assert_nonnull(g_strstr_len(image_texture_external_description(linear, &sdr_texture, &hdr_texture), -1, "linear Rec."));
     g_assert_true(hdr_texture);
     g_assert_false(sdr_texture);
 
@@ -52,15 +52,15 @@ int main(void)
     g_assert_no_error(error);
     const float p3_samples[] = {0.25f, 0.5f, 0.75f, 1.0f};
     g_autoptr(GBytes) p3_bytes = g_bytes_new_static(p3_samples, sizeof p3_samples);
-    g_autoptr(GdkTexture) p3 = majoris_image_texture_new_float_rgba(p3_bytes, 1, 1, sizeof p3_samples, p3_state);
+    g_autoptr(GdkTexture) p3 = image_texture_new_float_rgba(p3_bytes, 1, 1, sizeof p3_samples, p3_state);
     assert_pixels(p3, p3_state, p3_samples);
-    g_assert_nonnull(g_strstr_len(majoris_image_texture_external_description(p3, &sdr_texture, &hdr_texture), -1, "another"));
+    g_assert_nonnull(g_strstr_len(image_texture_external_description(p3, &sdr_texture, &hdr_texture), -1, "another"));
     g_assert_false(hdr_texture);
     g_assert_false(sdr_texture);
     gdk_color_state_unref(p3_state);
 
-    g_assert_null(majoris_image_texture_new_float_rgba(bytes, 2, 1, sizeof hdr, pq_state));
-    g_assert_null(majoris_image_texture_new_float_rgba(bytes, 1, 2, sizeof hdr, pq_state));
-    g_assert_null(majoris_image_texture_new_float_rgba(bytes, 1, 1, sizeof hdr, NULL));
+    g_assert_null(image_texture_new_float_rgba(bytes, 2, 1, sizeof hdr, pq_state));
+    g_assert_null(image_texture_new_float_rgba(bytes, 1, 2, sizeof hdr, pq_state));
+    g_assert_null(image_texture_new_float_rgba(bytes, 1, 1, sizeof hdr, NULL));
     return 0;
 }

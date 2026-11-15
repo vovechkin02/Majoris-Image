@@ -6,4 +6,4 @@ usr/lib/*/pkgconfig/majoris-image-1.pc
 usr/lib/*/pkgconfig/majoris-image-gtk4-1.pc
 usr/share/vala/vapi/majoris-image*.vapi
 usr/share/vala/vapi/majoris-image*.deps
-usr/share/gir-1.0/MajorisImage*.gir
+usr/share/gir-1.0/ImageKit*.gir

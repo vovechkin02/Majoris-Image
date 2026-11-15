@@ -1,18 +1,18 @@
-namespace MajorisImage {
+namespace ImageKit {
     public class MetadataReader : Object {
-        internal static string colour_probe (string path) throws Error {
+        internal static string color_probe (string path) throws Error {
             var output = new Json.Object ();
             var input = File.new_for_path (path).read ();
             var signature = input.read_bytes (8);
             unowned uint8[] bytes = signature.get_data ();
-            bool colour_known = false;
+            bool color_known = false;
             bool reached_pixels = false;
             bool explicit_transfer = false;
             bool have_cicp = false;
             bool have_icc = false;
             if (bytes.length == 8 && bytes[0] == 137 && bytes[1] == 'P' &&
                 bytes[2] == 'N' && bytes[3] == 'G') {
-                // Examine PNG colour declaration chunks without decoding pixel data.
+                // Examine PNG color declaration chunks without decoding pixel data.
                 var chunks = new DataInputStream (input);
                 chunks.set_byte_order (DataStreamByteOrder.BIG_ENDIAN);
                 int metadata_count = 0;
@@ -30,12 +30,12 @@ namespace MajorisImage {
                         uint32[] checksums = { 0xaece1ce9u, 0xd9c92c7fu, 0x40c07dc5u, 0x37c74d53u };
                         if (intent >= checksums.length || chunks.read_uint32 () != checksums[intent])
                             throw new IOError.INVALID_DATA ("Invalid PNG sRGB declaration");
-                        if (colour_known) throw new IOError.INVALID_DATA ("Duplicate PNG sRGB declaration");
-                        colour_known = true;
+                        if (color_known) throw new IOError.INVALID_DATA ("Duplicate PNG sRGB declaration");
+                        color_known = true;
                         continue;
                     }
                     if (!chunks.seek ((int64)length + 4, SeekType.CUR))
-                        throw new IOError.INVALID_DATA ("Invalid PNG colour chunks");
+                        throw new IOError.INVALID_DATA ("Invalid PNG color chunks");
                 }
             }
             if (bytes.length == 8 && bytes[0] == 'q' && bytes[1] == 'o' &&
@@ -60,18 +60,18 @@ namespace MajorisImage {
                 var details = new Json.Parser ();
                 details.load_from_data (ImageNative.image_details (image));
                 output.set_object_member ("source-colour", details.get_root ().get_object ());
-                var colour = details.get_root ().get_object ();
-                output.set_boolean_member ("icc", colour.has_member ("profile"));
-                output.set_boolean_member ("icc-invalid", colour.has_member ("profile-error") ||
-                    (have_icc && !colour.has_member ("profile")));
-                output.set_boolean_member ("gray-icc", colour.has_member ("colour-space") &&
-                    colour.get_string_member ("colour-space") == "Gray");
+                var color = details.get_root ().get_object ();
+                output.set_boolean_member ("icc", color.has_member ("profile"));
+                output.set_boolean_member ("icc-invalid", color.has_member ("profile-error") ||
+                    (have_icc && !color.has_member ("profile")));
+                output.set_boolean_member ("gray-icc", color.has_member ("colour-space") &&
+                    color.get_string_member ("colour-space") == "Gray");
             }
             if (have_icc && !output.get_boolean_member_with_default ("icc", false))
                 output.set_boolean_member ("icc-invalid", true);
-            output.set_boolean_member ("explicit-srgb", colour_known && reached_pixels && image != null &&
+            output.set_boolean_member ("explicit-srgb", color_known && reached_pixels && image != null &&
                 !have_cicp && !output.get_boolean_member_with_default ("icc", false));
-            output.set_boolean_member ("unverified-transfer", have_cicp || (explicit_transfer && !colour_known &&
+            output.set_boolean_member ("unverified-transfer", have_cicp || (explicit_transfer && !color_known &&
                 !output.get_boolean_member_with_default ("icc", false)));
             var node = new Json.Node (Json.NodeType.OBJECT);
             node.set_object (output);

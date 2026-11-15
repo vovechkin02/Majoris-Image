@@ -15,7 +15,7 @@ static guint32 read_be32(const guint8 *data)
     return GUINT32_FROM_BE(result);
 }
 
-gboolean majoris_image_thumbnail_valid(GBytes *bytes, int edge)
+gboolean image_thumbnail_valid(GBytes *bytes, int edge)
 {
     static const guint8 signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
     gsize length;
@@ -41,7 +41,7 @@ gboolean majoris_image_thumbnail_valid(GBytes *bytes, int edge)
 }
 
 /* Lock paths are never replaced or removed, so all callers lock the same inode. */
-int majoris_image_cache_try_lock(const char *path)
+int image_cache_try_lock(const char *path)
 {
     int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return -1;
@@ -51,7 +51,7 @@ int majoris_image_cache_try_lock(const char *path)
     return result;
 }
 
-void majoris_image_cache_unlock(int fd) { close(fd); }
+void image_cache_unlock(int fd) { close(fd); }
 
 static void publish_thread(GTask *task, gpointer source, gpointer data, GCancellable *stop)
 {
@@ -95,7 +95,7 @@ done:
     else g_task_return_boolean(task, TRUE);
 }
 
-void majoris_image_cache_publish_async(const char *path, GBytes *bytes,
+void image_cache_publish_async(const char *path, GBytes *bytes,
                                       GCancellable *stop, GAsyncReadyCallback callback, gpointer data)
 {
     GTask *task = g_task_new(NULL, stop, callback, data);
@@ -105,7 +105,7 @@ void majoris_image_cache_publish_async(const char *path, GBytes *bytes,
     g_object_unref(task);
 }
 
-void majoris_image_cache_publish_finish(GAsyncResult *result, GError **error)
+void image_cache_publish_finish(GAsyncResult *result, GError **error)
 {
     g_task_propagate_boolean(G_TASK(result), error);
 }
@@ -131,7 +131,7 @@ static void png_text(GByteArray *png, const char *key, const char *value)
     png_chunk(png, "tEXt", text, length);
 }
 
-GBytes *majoris_image_glycin_png(GBytes *pixels, int w, int h, const char *uri,
+GBytes *image_glycin_png(GBytes *pixels, int w, int h, const char *uri,
                                  const char *mtime, GCancellable *stop, GError **error)
 {
     if (w < 1 || h < 1 || w > 1024 || h > 1024 || g_bytes_get_size(pixels) != (gsize)w * h * 16) {

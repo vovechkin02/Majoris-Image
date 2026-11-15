@@ -4,15 +4,15 @@ See [1.1.1 verification](verification-1.1.1.md) for the current release.
 
 | Area | Change | Main files |
 | --- | --- | --- |
-| Decoder selection and colour | Discover compatible Glycin 1 loaders in XDG data roots. Negotiate by content, installed MIME and requested capabilities. Probe ICC, CICP and source precision in the native sandbox. Use linear-light area filtering, alpha-weighted accumulation and re-decode for larger crops. General rendering uses the same fallback. | `native/glycin-discovery.{c,h}`, `src/core/{decoder-registry,glycin-fallback,image-document,render-options}.vala`, `src/core/glycin-pixels.c`, `src/worker/{metadata-reader,image-processor,main}.vala`, `native/{metadata,pixels}.c` |
-| Timed images | Read AVIF tracks with libavif and compatible visual tracks with libheif. Preserve effective sample depth, ICC or supported CICP, alpha, frame timings and loop count. The same widget scheduler handles native and Glycin frames. | `native/sequences.c`, `native/colour.c`, `src/worker/image-inspector.vala`, `src/core/{image-document,worker-request,worker-client,worker-failure}.vala`, `src/gtk/image-view.vala` |
-| Thumbnail registration | Share decoder discovery between the registry and the desktop generator. Test actual sample PNG output, runtime catalogue agreement, disabled Glycin and simulated loader and plugin availability. | `native/codec-catalogue.c`, `src/core/decoder-registry.vala`, `src/thumbnail/{meson.build,mime-registration.c}`, `tests/thumbnail-registration.py` |
-| HDR presentation | Select the presentation policy through a dedicated backend using realized renderer and mapped surface state. Preserve the HDR document. Use colour-managed SDR for GTK 4.18 previews, animation and tiles. Test policy decisions with simulated output states and the visible widget in Xvfb. | `src/gtk/{presentation.vala,image-view.vala,image-texture.c,image-texture.h}`, `tests/{presentation,viewer}.vala` |
+| Decoder selection and color | Discover compatible Glycin 1 loaders in XDG data roots. Negotiate by content, installed MIME and requested capabilities. Probe ICC, CICP and source precision in the native sandbox. Use linear-light area filtering, alpha-weighted accumulation and re-decode for larger crops. General rendering uses the same fallback. | `native/glycin-discovery.{c,h}`, `src/core/{decoder-registry,glycin-fallback,image-document,render-options}.vala`, `src/core/glycin-pixels.c`, `src/worker/{metadata-reader,image-processor,main}.vala`, `native/{metadata,pixels}.c` |
+| Timed images | Read AVIF tracks with libavif and compatible visual tracks with libheif. Preserve effective sample depth, ICC or supported CICP, alpha, frame timings and loop count. The same widget scheduler handles native and Glycin frames. | `native/sequences.c`, `native/color.c`, `src/worker/image-inspector.vala`, `src/core/{image-document,worker-request,worker-client,worker-failure}.vala`, `src/gtk/image-view.vala` |
+| Thumbnail registration | Share decoder discovery between the registry and the desktop generator. Test actual sample PNG output, runtime catalog agreement, disabled Glycin and simulated loader and plugin availability. | `native/codec-catalog.c`, `src/core/decoder-registry.vala`, `src/thumbnail/{meson.build,mime-registration.c}`, `tests/thumbnail-registration.py` |
+| HDR presentation | Select the presentation policy through a dedicated backend using realized renderer and mapped surface state. Preserve the HDR document. Use color-managed SDR for GTK 4.18 previews, animation and tiles. Test policy decisions with simulated output states and the visible widget in Xvfb. | `src/gtk/{presentation.vala,image-view.vala,image-texture.c,image-texture.h}`, `tests/{presentation,viewer}.vala` |
 | Independent consumers | Exercise bounded Files selections from streams, concurrent thumbnails, metadata, cancel/remap and error handling. Exercise Photos regions from a 200 MP TIFF, zoom, pan, HDR page navigation and export. The C example opens asynchronously through GtkBuilder and requests metadata, a full-quality region and a thumbnail. | `examples/{files-preview.vala,photos-viewer.vala,builder.c,meson.build}`, `tests/installed-consumers.sh`, `debian/libmajoris-image-dev.examples` |
 
-Public additions include `COLOUR_MANAGED`, probe and document colour diagnostics,
+Public additions include `COLOR_MANAGED`, probe and document color diagnostics,
 microsecond frame timestamps and durations, `DecodeOptions.allow_regions`,
-`RenderOptions.nearest_neighbour`, `DecoderRegistry.thumbnail_mime_types()`,
+`RenderOptions.nearest_neighbor`, `DecoderRegistry.thumbnail_mime_types()`,
 `ImageView.load_source()` and `ImageView.seek_frame()`. Both libraries retain
 ABI 1. The development package still provides headers, VAPI, GIR and typelibs.
 A dynamic symbol comparison used the 1.0.1 Debian packages as the baseline.
@@ -22,7 +22,7 @@ Build and bridge changes are in `meson.build`, `meson.options`,
 `src/{core,gtk}/meson.build`, and `debian/{control,rules,changelog}`.
 Test and fixture changes are in `tests/{decoders.vala,make-fixtures.c,
 make-formats.py,make-heif-sequence.c,meson.build,worker-fault.c}` and
-`tests/fixtures/`. The [ABI 1 guide](api-1.md) describes format availability,
+`tests/fixtures/`. The [ABI 1 guide](api-2.md) describes format availability,
 processing limits, integration examples and the physical HDR procedure.
 [Verification for 1.0.1](verification-1.0.1.md) records the prior release.
 
@@ -51,7 +51,7 @@ decoded dimensions and values, alpha-weighted QOI reduction, nearest sampling,
 crop re-decode and the transformed fallback path. Native and fallback 16-bit
 Display P3 PNG results were compared with linear reference values. A 16-bit
 TIFF exercised the native ICC path. The malformed ICC fixture and strict
-colour requests exercised explicit errors. JPEG 2000 used the native
+color requests exercised explicit errors. JPEG 2000 used the native
 thumbnail path. The Files workflow repeated selection and thumbnail requests
 24 times and the cross-process thumbnail tests exercised shared publication.
 
@@ -88,7 +88,7 @@ names, GIR naming and dependencies, and the typelib package sections.
   codecs, edit-list patterns, and hardware-specific configurations need
   independent media and output validation.
 - Glycin 1 can apply source ICC internally. Its C API does not expose the
-  resulting colour state. The fallback explicitly rejects strict colour
+  resulting color state. The fallback explicitly rejects strict color
   requests and detected unsupported transfers. Some installed loaders have
   only representative fixtures, so family registration remains conditional
   on the individual input and loader.

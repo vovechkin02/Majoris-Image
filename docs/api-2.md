@@ -1,4 +1,19 @@
-# Majoris Image API 1
+# Majoris Image API 2
+
+The Vala namespace is `ImageKit`, the public C prefix is `image_kit_`,
+and the GtkBuilder class is `ImageKitView`. Import `ImageKit-2.0` or
+`ImageKitGtk-2.0` when using GObject Introspection.
+
+The core and GTK4 libraries have SONAMEs `libmajoris-image.so.2` and
+`libmajoris-image-gtk4.so.2`. Update and recompile API 1 consumers against
+the API 2 development package before upgrading the runtime. The Debian
+package names, pkg-config modules, Vala package IDs, and include paths
+retain their distribution names.
+
+Existing edit recipes and version 1 worker requests, manifests, errors, and
+metadata retain their existing JSON field names and operation names. For
+example, the API uses `nearest_neighbor` and `color_managed`, while saved
+recipes and worker manifests use `nearest-neighbour` and `colour-managed`.
 
 ## Components
 
@@ -7,7 +22,7 @@
   run in the worker. The core receives bounded manifests and straight-alpha
   float32 RGBA buffers in linear sRGB. RGB values can exceed one or be negative.
   The GTK library gives that buffer to a GDK memory texture with a linear sRGB
-  colour state.
+  color state.
 - `majoris-image-gtk4-1` links the GtkBuilder-compatible image view. It uses a
   scaled base preview and requests overlapped tiles at power-of-two resolutions
   for region-capable sources. The tile cache is scoped to the current document,
@@ -23,7 +38,7 @@
 ## Core usage
 
 ```vala
-using MajorisImage;
+using ImageKit;
 
 async ImageDocument open_file (File file, Cancellable cancel) throws Error {
     var registry = new DecoderRegistry ();
@@ -50,13 +65,13 @@ an estimate; the raw metadata includes that estimate, sensor dimensions,
 LibRaw flip and EXIF orientation. `pixel_buffer_bit_depth` is 32 for float
 RGBA. Screen precision depends on the presentation environment.
 `RenderOptions` describes non-destructive rotation,
-crop, exposure and colour adjustments. `EncoderRegistry.encode()` writes a
+crop, exposure and color adjustments. `EncoderRegistry.encode()` writes a
 completed export to a separate destination using the chosen container,
-quality, bit depth, colour profile and metadata policy.
+quality, bit depth, color profile and metadata policy.
 
 Use `DecoderRegistry.inspect()` for the actual source format and
 capabilities. `installed_codecs()` returns the runtime libvips operation
-catalogue. Its suffixes are discovery information. Decoder availability for
+catalog. Its suffixes are discovery information. Decoder availability for
 an individual input still depends on signatures and installed plugins. To
 extend the worker stack, install an appropriate libvips plugin, or register
 an implementation of `DecoderBackend` with an absolute worker executable and
@@ -68,11 +83,11 @@ headless Glycin adapter negotiates the source signature and MIME aliases against
 executable loader configurations across the XDG data directories. Glycin
 starts its own Bubblewrap sandbox. The worker probes source metadata separately
 and the fallback validates geometry, stride, precision and alpha. Tagged RGB
-can use Glycin 1's Little CMS conversion, whose output colour state is
+can use Glycin 1's Little CMS conversion, whose output color state is
 unavailable through its public C API. An explicit source transfer the adapter
 cannot interpret or an invalid ICC profile yields `COLOR_PROFILE`. Untagged
 integer previews use an sRGB default. Applications can request
-`ImageCapabilities.COLOUR_MANAGED` to require a verified interpretation.
+`ImageCapabilities.COLOR_MANAGED` to require a verified interpretation.
 Glycin 1 can satisfy it for PNG carrying a validated sRGB declaration and
 no competing ICC or CICP declaration, and for QOI that declares sRGB.
 Linear QOI preserves the stored transfer and assumes sRGB primaries. Its
@@ -81,12 +96,12 @@ primaries. The PNG samples follow the loader's
 sRGB contract. Tagged ICC previews rely on Glycin's internal Little CMS
 conversion and carry an unverified provenance. The framework never
 re-applies the source profile to those pixels. Assumed and unknown source
-states remain separate in the metadata. Glycin 2.2 publishes frame colour
+states remain separate in the metadata. Glycin 2.2 publishes frame color
 metadata under a separate, unstable API, while this build targets Glycin 1.
-Inspect `colour_managed` and `colour_diagnostic` on probes or documents.
+Inspect `color_managed` and `color_diagnostic` on probes or documents.
 
 Fallback previews use linear-light area filtering with premultiplied alpha.
-`RenderOptions.nearest_neighbour` selects pixel sampling explicitly.
+`RenderOptions.nearest_neighbor` selects pixel sampling explicitly.
 `render_region()` can re-decode a fallback input and crop at the requested
 edge. The `REGION` flag identifies decoders that can read spatial regions
 directly. `DecoderRegistry.render()` uses the same decoder negotiation.
@@ -102,7 +117,7 @@ thumbnails.
 Use one manager per navigation session on the consumer's main context.
 Starting a new batch or calling `clear()` cancels superseded work and
 releases cached documents. Cache identity includes the source stamp and
-serialised decode options, including page, preview size, HDR and required
+serialized decode options, including page, preview size, HDR and required
 capabilities. Foreground `open()` checks the current identity and uses
 ordinary decoding on a miss. A failed preload is never cached.
 
@@ -112,14 +127,14 @@ Register the type before loading a builder file or preparing a composite
 template:
 
 ```xml
-<object class="MajorisImageView" id="viewer">
+<object class="ImageKitView" id="viewer">
   <property name="fit-mode">contain</property>
   <property name="allow-zoom">true</property>
   <property name="allow-pan">true</property>
 </object>
 ```
 
-In Vala, call `MajorisImage.ImageView.register_type()` and use
+In Vala, call `ImageKit.ImageView.register_type()` and use
 `yield view.load_file(file, options, cancellable)`. `load_file()` reports
 observable loading, preview, ready and failure states. Stage a stream or
 bytes with `ImageSource.from_stream()` or `from_bytes()` and pass it to
@@ -130,9 +145,9 @@ already has suitable content. The viewer owns references to its current
 document and texture until cleared or destroyed.
 
 In C, include `majoris-image-gtk4.h`, call
-`g_type_ensure (MAJORIS_IMAGE_TYPE_IMAGE_VIEW)`, and use
-`majoris_image_image_view_load_file()` with
-`majoris_image_image_view_load_file_finish()`. Build the standalone C example:
+`g_type_ensure (IMAGE_KIT_TYPE_IMAGE_VIEW)`, and use
+`image_kit_image_view_load_file()` with
+`image_kit_image_view_load_file_finish()`. Build the standalone C example:
 
 ```sh
 cc builder.c $(pkg-config --cflags --libs majoris-image-gtk4-1) -o builder
@@ -163,7 +178,7 @@ in all three modes. `allow_zoom` controls interactive wheel, pinch, and
 keyboard zoom.
 
 ```xml
-<object class="MajorisImageView" id="preview">
+<object class="ImageKitView" id="preview">
   <property name="scroll-zoom-mode">control</property>
   <accessibility>
     <property name="label" translatable="yes">Image preview</property>
@@ -181,7 +196,7 @@ The generic description is “Image preview” when content is displayed.
 The view does not derive descriptions from file paths or EXIF fields.
 
 ```vala
-view.scroll_zoom_mode = MajorisImage.ScrollZoomMode.CONTROL;
+view.scroll_zoom_mode = ImageKit.ScrollZoomMode.CONTROL;
 yield view.load_file (selected_file);
 view.accessible_description = description_for_selected_image;
 ```
@@ -198,7 +213,7 @@ gestures with the target desktop session.
 The view draws its base preview while tiles arrive. It enumerates the
 complete visible source rectangle, including rotated and flipped views
 at fractional zoom or device scale. It queues visible tiles nearest the
-centre first, followed by up to two neighbouring tiles. Each view runs
+center first, followed by up to two neighboring tiles. Each view runs
 at most two tile jobs, including jobs that are still winding down after
 cancellation. Replaced sources and presentation generations cannot
 publish stale tiles.
@@ -228,31 +243,31 @@ texture factory, and generation checks as still images. Indexed APNG
 requests may replay earlier source frames inside Glycin. The viewer keeps
 one prefetched frame and cancels obsolete requests.
 
-`set_texture()` retains the original GDK texture and its declared colour
+`set_texture()` retains the original GDK texture and its declared color
 state. An sRGB texture reports SDR. Linear sRGB, Rec. 2100 PQ, linear Rec. 2100,
-and other colour states are reported as `EXTERNAL_UNVERIFIED`. Rec. 2100 tags
+and other color states are reported as `EXTERNAL_UNVERIFIED`. Rec. 2100 tags
 set `hdr_source` and describe the input encoding. The actual HDR range and
 monitor output remain unverified. GTK draws the original texture using its
-colour state. The view needs an `ImageDocument` for its own tone mapping and
+color state. The view needs an `ImageDocument` for its own tone mapping and
 source-resolution tiles.
 
 The internal explicit-state constructor accepts prepared straight-alpha
-float32 RGBA and a GDK colour state that describes those samples. Document
+float32 RGBA and a GDK color state that describes those samples. Document
 previews, tiles and animation frames currently provide linear sRGB.
-The constructor validates the layout. It does not perform a colour conversion.
+The constructor validates the layout. It does not perform a color conversion.
 A future verified HDR backend must supply pixels converted to its chosen
 encoding and separately establish compositor output support.
 
 ## HDR and format coverage
 
-The worker converts source ICC or known CICP colour descriptions into linear
+The worker converts source ICC or known CICP color descriptions into linear
 sRGB. It uses 203 nits as reference white for PQ and the reference 1,000 nit
 HLG OOTF. Reinhard luminance compression and gamut mapping produce SDR
 presentation. For native HDR, a host must establish a verified end-to-end
 presentation path. Debian 13's GTK 4.18 does not expose a public GDK signal
 that proves HDR scanout for a surface. `AUTOMATIC` therefore selects
 tone-mapped SDR for HDR sources. `SDR` explicitly selects that same
-colour-managed path. `HDR_PREFERRED` reports `HDR_UNAVAILABLE` and displays
+color-managed path. `HDR_PREFERRED` reports `HDR_UNAVAILABLE` and displays
 the same SDR fallback. `NATIVE_HDR` is reserved for a verified path; a
 floating-point texture alone is insufficient evidence. The view retains
 the extended-range document. `ImageDocument.render_preview()` can tone-map
@@ -284,7 +299,7 @@ supply a still preview with a diagnostic.
 | Format | Decode backend | Still | Animation / pages | Precision and HDR | ICC | Region | Thumbnail | Encode |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | JPEG | libvips JPEG | Yes | — | SDR; optional libuhdr gain map | Yes | — | Yes | JPEG, optional gain map |
-| PNG / APNG | libvips PNG, optional Glycin | Yes | APNG with Glycin | 8/16-bit; decoder-specific colour tags | Native ICC | — | Yes | PNG |
+| PNG / APNG | libvips PNG, optional Glycin | Yes | APNG with Glycin | 8/16-bit; decoder-specific color tags | Native ICC | — | Yes | PNG |
 | GIF / WebP | libvips and optional Glycin | Yes | GIF and WebP | SDR | WebP where present | — | Yes | Installed GIF/WebP savers |
 | TIFF | libvips TIFF | Yes | Pages | 16-bit and float HDR | Yes | Tiled | Yes | TIFF |
 | JPEG 2000 | libvips JPEG 2000 loader | Conditional | — | High depth | Loader-dependent | — | Conditional | Installed saver |
@@ -294,7 +309,7 @@ supply a still preview with a diagnostic.
 | SVG / SVGZ | librsvg | Yes | — | Rasterized SDR | — | Yes | Yes | — |
 | RAW families | LibRaw | Camera-dependent | — | Embedded preview or 16-bit development | Camera profile and native workflow | — | Camera-dependent | Developed image to installed savers |
 | Radiance HDR | libvips Radiance loader | Conditional | — | Float HDR | — | — | Conditional | Installed saver |
-| BMP, ICO, QOI, TGA, DDS, PNM and other loader families | Installed libvips/Glycin | Conditional | Per-file, unverified | Integer fallback; higher depth negotiated | Fallback colour diagnostic | Crop via re-decode | Conditional | Installed savers only |
+| BMP, ICO, QOI, TGA, DDS, PNM and other loader families | Installed libvips/Glycin | Conditional | Per-file, unverified | Integer fallback; higher depth negotiated | Fallback color diagnostic | Crop via re-decode | Conditional | Installed savers only |
 
 Conditional entries require the named installed backend and a compatible input.
 `installed_codecs()` reports backend potential and `thumbnail_mime_types()`
@@ -307,7 +322,7 @@ and OpenEXR fixtures. Compare automatic, SDR and HDR-preferred policies, zoom
 into tiles, move the window to an SDR monitor and back, and remap the window.
 Check the diagnostics and compare measured output against known luminance
 patches. For native HDR qualification, confirm the compositor's active HDR
-surface colour description, transfer function, monitor mode and measured
+surface color description, transfer function, monitor mode and measured
 extended-range values. On GTK 4.18 the expected software result is
 tone-mapped SDR in every mode for these sources, with `HDR_UNAVAILABLE` under
 HDR-preferred. The hardware portion requires an HDR-capable Wayland session.
@@ -352,13 +367,13 @@ The desktop entry invokes the same service with `%u %o %s`. For sources that
 provide modification timestamps, generated PNGs include the URI and mtime.
 The desktop thumbnail manager owns placement and validation in its shared
 thumbnail directories. The Debian package generates one system descriptor from the native
-catalogue plus the installed system Glycin loaders. File triggers on loader
+catalog plus the installed system Glycin loaders. File triggers on loader
 configurations, decoder plugin directories and shared MIME definitions
 refresh it during package transactions. Removal cleans up the generated
 file. Standalone Meson installs ship a reproducible JPEG, PNG, TIFF and
 OpenEXR baseline. The direct API also considers the current user's
 Glycin configurations. A MIME entry describes a decoder family. The
-thumbnailer validates the actual input, camera and colour profile before
+thumbnailer validates the actual input, camera and color profile before
 publication.
 See the [Freedesktop Thumbnail Managing Standard](https://specifications.freedesktop.org/thumbnail/latest/).
 
@@ -386,14 +401,14 @@ source-protection coverage.
 ## Consumer migrations
 
 Photos can use `RenderOptions` and `EncoderRegistry` for view and export
-processing, and keep its edit history, thumbnail display, and catalogue in the
+processing, and keep its edit history, thumbnail display, and catalog in the
 application. Files can embed the view for its preview pane, pass a cancellable
 per selection, and use the headless thumbnail and probe APIs from list views.
 Headless consumers can link just the core and install the worker.
 
 ## Regression tests and measurements
 
-`meson test -C build --print-errorlogs` runs native numerical colour and EXR
+`meson test -C build --print-errorlogs` runs native numerical color and EXR
 checks, public headless and GTK consumers, and worker fault injection.
 The 200 MP TIFF is generated at build time from an equivalent Photos
 regression and exercises preview memory limits and a corner-region read.
@@ -402,7 +417,7 @@ asymmetric images with all eight EXIF orientations. For RAW coverage,
 configure `-Draw_fixtures=/absolute/path/to/raw-only-directory` with licensed
 camera inputs. The optional test checks preview and developed precision,
 process options, thumbnails and the original file checksum. The
-[raw.pixls.us catalogue](https://raw.pixls.us/) supplies CC0 samples.
+[raw.pixls.us catalog](https://raw.pixls.us/) supplies CC0 samples.
 Physical HDR output and additional HEIF track codecs require external validation.
 
 For repeatable local measurements, build the benchmark and use a local image:

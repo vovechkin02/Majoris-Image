@@ -5,8 +5,8 @@
 #include <lcms2.h>
 #include <math.h>
 #include <libheif/heif.h>
-const char *majoris_codec_worker_path(void) { return WORKER_PATH; }
-void majoris_codec_tag_srgb(VipsImage *image) {
+const char *image_codec_worker_path(void) { return WORKER_PATH; }
+void image_codec_tag_srgb(VipsImage *image) {
     cmsHPROFILE profile = cmsCreate_sRGBProfile();
     cmsUInt32Number size = 0;
     if (profile && cmsSaveProfileToMem(profile, NULL, &size)) {
@@ -19,7 +19,7 @@ void majoris_codec_tag_srgb(VipsImage *image) {
 
 /* Called only inside the isolated worker. Store CICP with the native vips
  * intermediate so encoded HDR samples retain their interpretation. */
-void majoris_codec_annotate_heif(VipsImage *image, const char *source) {
+void image_codec_annotate_heif(VipsImage *image, const char *source) {
     struct heif_context *context = heif_context_alloc();
     if (!context) return;
     struct heif_image_handle *handle = NULL;
@@ -43,7 +43,7 @@ void majoris_codec_annotate_heif(VipsImage *image, const char *source) {
     if (handle) heif_image_handle_release(handle);
     heif_context_free(context);
 }
-gboolean majoris_codec_develop_raw_options(const char *source, const char *target, int quality, gboolean camera_wb, GError **error) {
+gboolean image_codec_develop_raw_options(const char *source, const char *target, int quality, gboolean camera_wb, GError **error) {
     libraw_data_t *raw = libraw_init(0);
     if (!raw) { g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "RAW allocation failed"); return FALSE; }
     raw->params.output_bps = 16;
@@ -63,14 +63,14 @@ gboolean majoris_codec_develop_raw_options(const char *source, const char *targe
     if (result) g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, libraw_strerror(result));
     return result == 0;
 }
-gboolean majoris_codec_develop_raw(const char *source, const char *target, GError **error) {
-    return majoris_codec_develop_raw_options(source, target, 1, TRUE, error);
+gboolean image_codec_develop_raw(const char *source, const char *target, GError **error) {
+    return image_codec_develop_raw_options(source, target, 1, TRUE, error);
 }
-double majoris_codec_pq_to_linear(double v) {
+double image_codec_pq_to_linear(double v) {
     const double m1 = 2610.0/16384, m2 = 2523.0/32, c1 = 3424.0/4096, c2 = 2413.0/128, c3 = 2392.0/128;
     double p = pow(CLAMP(v, 0, 1), 1/m2);
     return pow(MAX(p-c1,0)/(c2-c3*p),1/m1)*10000;
 }
-double majoris_codec_hlg_to_linear(double v) {
+double image_codec_hlg_to_linear(double v) {
     return v <= 0.5 ? v*v/3 : (exp((v-0.55991073)/0.17883277)+0.28466892)/12;
 }

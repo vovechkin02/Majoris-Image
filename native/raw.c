@@ -9,7 +9,7 @@ static void int_member(JsonBuilder *b, const char *name, int value) {
     json_builder_set_member_name(b, name); json_builder_add_int_value(b, value);
 }
 /* Header inspection and thumbnail extraction run only inside the decoder sandbox. */
-char *majoris_codec_raw_info(const char *source) {
+char *image_codec_raw_info(const char *source) {
     libraw_data_t *raw = libraw_init(0);
     JsonBuilder *b = json_builder_new(); json_builder_begin_object(b);
     gboolean recognized = raw && libraw_open_file(raw, source) == LIBRAW_SUCCESS && raw->idata.raw_count > 0;
@@ -42,7 +42,7 @@ char *majoris_codec_raw_info(const char *source) {
     if (raw) libraw_close(raw);
     return text;
 }
-gboolean majoris_codec_raw_preview(const char *source, const char *target, GError **error) {
+gboolean image_codec_raw_preview(const char *source, const char *target, GError **error) {
     libraw_data_t *raw = libraw_init(0);
     if (!raw) { g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "Cannot allocate RAW preview"); return FALSE; }
     int result = libraw_open_file(raw, source);

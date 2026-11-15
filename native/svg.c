@@ -2,7 +2,7 @@
 #include <librsvg/rsvg.h>
 #include <math.h>
 
-VipsImage *majoris_codec_svg_region(const char *path, double x, double y, double width, double height, int source_width, int source_height, int size, GError **error) {
+VipsImage *image_codec_svg_region(const char *path, double x, double y, double width, double height, int source_width, int source_height, int size, GError **error) {
     if (width<=0 || height<=0 || source_width<=0 || source_height<=0 || size<1 || size>4096) {
         g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid SVG region"); return NULL;
     }

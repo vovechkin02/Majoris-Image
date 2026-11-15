@@ -21,7 +21,7 @@ static uhdr_codec_private_t *open_ultra(const char *path, GMappedFile **mapping,
     }
     return decoder;
 }
-gboolean majoris_codec_ultra_probe(const char *path) {
+gboolean image_codec_ultra_probe(const char *path) {
     // Do not map and copy huge native/TIFF/EXR intermediates into a JPEG/HEIF
     // parser. Only the actual container signature can select this backend.
     guint8 signature[16]; FILE *file=fopen(path,"rb"); if (!file) return FALSE;
@@ -33,7 +33,7 @@ gboolean majoris_codec_ultra_probe(const char *path) {
     if (decoder) uhdr_release_decoder(decoder); if (mapping) g_mapped_file_unref(mapping); g_clear_error(&error);
     return result;
 }
-VipsImage *majoris_codec_ultra_decode(const char *path, gboolean sdr, GError **error) {
+VipsImage *image_codec_ultra_decode(const char *path, gboolean sdr, GError **error) {
     GMappedFile *mapping = NULL; VipsImage *image = NULL, *linear = NULL;
     uhdr_codec_private_t *decoder = open_ultra(path, &mapping, error); if (!decoder) goto done;
     if (ultra_error(uhdr_dec_set_out_img_format(decoder, sdr ? UHDR_IMG_FMT_32bppRGBA8888 : UHDR_IMG_FMT_64bppRGBAHalfFloat), error) ||
@@ -67,7 +67,7 @@ VipsImage *majoris_codec_ultra_decode(const char *path, gboolean sdr, GError **e
         vips_image_set_int(image,"majoris-image-transfer",8);
         vips_image_set_int(image,"majoris-image-primaries",decoded->cg == UHDR_CG_BT_2100 ? 9 : decoded->cg == UHDR_CG_DISPLAY_P3 ? 12 : 1);
     }
-    linear = majoris_codec_to_linear(image,error);
+    linear = image_codec_to_linear(image,error);
     if (linear) {
         vips_image_set_int(linear,"majoris-image-gain-map",1); vips_image_set_int(linear,"majoris-image-hdr",sdr ? 0 : 1);
         uhdr_gainmap_metadata_t *metadata = uhdr_dec_get_gainmap_metadata(decoder);
@@ -81,8 +81,8 @@ done:
     g_clear_object(&image); if (decoder) uhdr_release_decoder(decoder); if (mapping) g_mapped_file_unref(mapping);
     return linear;
 }
-gboolean majoris_codec_ultra_encode(VipsImage *image, const char *path, int format, int quality, GError **error) {
-    VipsImage *linear = majoris_codec_to_linear(image,error); if (!linear) return FALSE;
+gboolean image_codec_ultra_encode(VipsImage *image, const char *path, int format, int quality, GError **error) {
+    VipsImage *linear = image_codec_to_linear(image,error); if (!linear) return FALSE;
     uhdr_codec_private_t *encoder = uhdr_create_encoder(); VipsRegion *region = NULL; guint16 *buffer = NULL; gboolean ok = FALSE;
     if (!encoder) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Cannot allocate Ultra HDR encoder"); goto done; }
     size_t count = (size_t)linear->Xsize*linear->Ysize*4;
@@ -106,14 +106,14 @@ gboolean majoris_codec_ultra_encode(VipsImage *image, const char *path, int form
     }
     uhdr_raw_image_t raw = {0}; raw.fmt=UHDR_IMG_FMT_64bppRGBAHalfFloat; raw.cg=UHDR_CG_BT_2100; raw.ct=UHDR_CT_LINEAR; raw.range=UHDR_CR_FULL_RANGE;
     raw.w=linear->Xsize; raw.h=linear->Ysize; raw.planes[0]=buffer; raw.stride[0]=raw.w;
-#ifndef MAJORIS_UHDR_CONTAINERS
+#ifndef IMAGE_CODEC_UHDR_CONTAINERS
     if (format != 0) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, "Installed gain-map codec only supports JPEG output");
         goto done;
     }
 #endif
     uhdr_codec_t container = UHDR_CODEC_JPG;
-#ifdef MAJORIS_UHDR_CONTAINERS
+#ifdef IMAGE_CODEC_UHDR_CONTAINERS
     if (format == 1) container = UHDR_CODEC_HEIF;
     if (format == 2) container = UHDR_CODEC_AVIF;
 #endif

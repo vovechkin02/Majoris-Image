@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 async string checksum (File file) throws Error {
     var stream = yield file.read_async (Priority.DEFAULT, null);

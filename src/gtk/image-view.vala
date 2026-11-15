@@ -1,19 +1,19 @@
-[CCode (gir_namespace = "MajorisImageGtk", gir_version = "1.0")]
-namespace MajorisImage {
-    public enum ViewState { EMPTY, LOADING, PREVIEW_READY, READY, UNSUPPORTED, DECODER_UNAVAILABLE, CORRUPT, CANCELLED, ERROR }
+[CCode (gir_namespace = "ImageKitGtk", gir_version = "2.0")]
+namespace ImageKit {
+    public enum ViewState { EMPTY, LOADING, PREVIEW_READY, READY, UNSUPPORTED, DECODER_UNAVAILABLE, CORRUPT, CANCELED, ERROR }
     public enum FitMode { CONTAIN, WIDTH, HEIGHT, ACTUAL, COVER, CUSTOM }
     public enum ScrollZoomMode { ALWAYS, CONTROL, DISABLED }
     public enum PresentationPolicy { AUTOMATIC, SDR, HDR_PREFERRED }
     public enum PresentationStatus { NONE, SDR, SDR_TONE_MAPPED, NATIVE_HDR, HDR_UNAVAILABLE, EXTERNAL_UNVERIFIED }
 
-    [CCode (cname = "majoris_image_texture_new", cheader_filename = "image-texture.h")]
+    [CCode (cname = "image_texture_new", cheader_filename = "image-texture.h")]
     private extern static Gdk.Texture create_texture (Bytes bytes, int width, int height, size_t stride);
 
     internal static Gdk.Texture texture_for_pixels (PixelBuffer buffer) {
         return create_texture (buffer.bytes, buffer.width, buffer.height, buffer.stride);
     }
 
-    [CCode (cname = "MajorisImageView")]
+    [CCode (cname = "ImageKitView")]
     public sealed class ImageView : Gtk.Widget {
         public ViewState state { get; private set; default = ViewState.EMPTY; }
         public ImageDocument? document { get { return current_document; } }
@@ -42,7 +42,7 @@ namespace MajorisImage {
         public string accessible_description { get; set; default = ""; }
         public bool allow_zoom { get; set; default = true; }
         public bool allow_pan { get; set; default = true; }
-        public bool nearest_neighbour { get; set; }
+        public bool nearest_neighbor { get; set; }
         public double minimum_zoom { get; set; default = 0.01; }
         public double maximum_zoom { get; set; default = 64; }
         public double zoom { get { return effective_zoom (); } }
@@ -103,7 +103,7 @@ namespace MajorisImage {
                 update_state (Gtk.AccessibleState.BUSY, state == ViewState.LOADING, -1);
             });
             notify["fit-mode"].connect (() => update_transform ());
-            notify["nearest-neighbour"].connect (() => queue_draw ());
+            notify["nearest-neighbor"].connect (() => queue_draw ());
             tiles.changed.connect (() => queue_draw ());
             notify["presentation-policy"].connect (update_presentation);
             notify["scale-factor"].connect (update_presentation);
@@ -473,7 +473,7 @@ namespace MajorisImage {
         private void show_error (Error error) {
             freeze_notify ();
             error_message = (error is IOError.CANCELLED) ? "" : error.message;
-            if (error is IOError.CANCELLED) state = ViewState.CANCELLED;
+            if (error is IOError.CANCELLED) state = ViewState.CANCELED;
             else if (error is ImageError.UNSUPPORTED || error is ImageError.RAW_UNSUPPORTED) state = ViewState.UNSUPPORTED;
             else if (error is ImageError.CODEC_MISSING) state = ViewState.DECODER_UNAVAILABLE;
             else if (error is ImageError.CORRUPT) state = ViewState.CORRUPT;
@@ -534,7 +534,7 @@ namespace MajorisImage {
             advance_when_ready ();
         }
 
-        /** Seek within the active timed sequence. Older frame requests are cancelled. */
+        /** Seek within the active timed sequence. Older frame requests are canceled. */
         public async void seek_frame (int frame, Cancellable? cancel = null) throws Error {
             var source = document;
             if (disposed || source == null || !animated || frame < 0 || frame >= source.frame_count)
@@ -758,7 +758,7 @@ namespace MajorisImage {
             double center_x = get_width () / 2.0 + pan_x, center_y = get_height () / 2.0 + pan_y;
             double offset_x = -image_width * scale / 2.0, offset_y = -image_height * scale / 2.0;
             double pixel_zoom = scale * device_scale ();
-            var filter = nearest_neighbour ? Gsk.ScalingFilter.NEAREST : Gsk.ScalingFilter.LINEAR;
+            var filter = nearest_neighbor ? Gsk.ScalingFilter.NEAREST : Gsk.ScalingFilter.LINEAR;
             Graphene.Point center = {};
             center.init ((float) center_x, (float) center_y);
             snapshot.save ();

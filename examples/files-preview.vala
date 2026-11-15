@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 private async void exercise (ImageView view, File image, File hdr, File? raw, string[] extra) throws Error {
     var registry = new DecoderRegistry ();
@@ -86,7 +86,7 @@ int main (string[] args) {
     var builder = new Gtk.Builder.from_string (
         "<interface><object class='GtkScrolledWindow' id='layout'>" +
         "<property name='hscrollbar-policy'>never</property><property name='child'>" +
-        "<object class='MajorisImageView' id='preview'>" +
+        "<object class='ImageKitView' id='preview'>" +
         "<property name='scroll-zoom-mode'>control</property><property name='height-request'>420</property>" +
         "<accessibility><property name='label'>Image preview</property></accessibility>" +
         "</object></property></object></interface>", -1);

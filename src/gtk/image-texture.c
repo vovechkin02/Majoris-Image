@@ -1,6 +1,6 @@
 #include "image-texture.h"
 
-GdkTexture *majoris_image_texture_new_float_rgba(GBytes *bytes, int width, int height,
+GdkTexture *image_texture_new_float_rgba(GBytes *bytes, int width, int height,
                                                 gsize stride, GdkColorState *state)
 {
     const gsize pixel = 4 * sizeof(float);
@@ -23,13 +23,13 @@ GdkTexture *majoris_image_texture_new_float_rgba(GBytes *bytes, int width, int h
     return texture;
 }
 
-GdkTexture *majoris_image_texture_new(GBytes *bytes, int width, int height, gsize stride)
+GdkTexture *image_texture_new(GBytes *bytes, int width, int height, gsize stride)
 {
-    return majoris_image_texture_new_float_rgba(bytes, width, height, stride,
+    return image_texture_new_float_rgba(bytes, width, height, stride,
                                                 gdk_color_state_get_srgb_linear());
 }
 
-const char *majoris_image_texture_external_description(GdkTexture *texture,
+const char *image_texture_external_description(GdkTexture *texture,
                                                         gboolean *sdr, gboolean *hdr)
 {
     GdkColorState *state = gdk_texture_get_color_state(texture);
@@ -44,11 +44,11 @@ const char *majoris_image_texture_external_description(GdkTexture *texture,
         return "External Rec. 2100 PQ texture. GTK renders the original texture; HDR output is unverified.";
     if (*hdr)
         return "External linear Rec. 2100 texture. GTK renders the original texture; HDR output is unverified.";
-    return "External texture with another colour state. GTK renders the original texture; output is unverified.";
+    return "External texture with another color state. GTK renders the original texture; output is unverified.";
 }
 
 
-int majoris_image_hdr_output(GtkWidget *widget)
+int image_hdr_output(GtkWidget *widget)
 {
     GtkNative *native = gtk_widget_get_native(widget);
     if (!native) return 0;
@@ -56,7 +56,7 @@ int majoris_image_hdr_output(GtkWidget *widget)
     GskRenderer *renderer = gtk_native_get_renderer(native);
     if (!surface || !gdk_surface_get_mapped(surface) || !renderer ||
         !gsk_renderer_is_realized(renderer)) return 0;
-    // GTK publicly exposes a realized renderer and colour-managed float
+    // GTK publicly exposes a realized renderer and color-managed float
     // textures. Those capabilities alone do not prove HDR output or scanout.
     return 1;
 }

@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     private class JobTicket : Object {
         public int priority;
         public bool granted;

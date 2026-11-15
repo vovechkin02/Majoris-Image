@@ -36,7 +36,7 @@ namespace Vips {
     [CCode (cname = "vips_flip")] public int flip (Image input, out Image output, int direction, ...);
     [CCode (cname = "vips_extract_area")] public int crop (Image input, out Image output, int x, int y, int width, int height, ...);
     [CCode (cname = "vips_linear1")] public int linear (Image input, out Image output, double a, double b, ...);
-    [CCode (cname = "vips_colourspace")] public int colourspace (Image input, out Image output, int space, ...);
+    [CCode (cname = "vips_colourspace")] public int colorspace (Image input, out Image output, int space, ...);
     [CCode (cname = "vips_resize")] public int resize (Image input, out Image output, double scale, ...);
     [CCode (cname = "vips_premultiply")] public int premultiply (Image input, out Image output, ...);
     [CCode (cname = "vips_unpremultiply")] public int unpremultiply (Image input, out Image output, ...);

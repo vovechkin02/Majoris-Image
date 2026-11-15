@@ -2,7 +2,7 @@
 #include <json-glib/json-glib.h>
 #include <lcms2.h>
 
-char *majoris_codec_image_details(VipsImage *image) {
+char *image_codec_image_details(VipsImage *image) {
     JsonObject *info=json_object_new(); const void *profile=NULL; size_t size=0;
     const char *field=vips_image_get_typeof(image,"majoris-image-source-icc") ? "majoris-image-source-icc" : VIPS_META_ICC_NAME;
     if (vips_image_get_typeof(image,field) && !vips_image_get_blob(image,field,&profile,&size)) {
@@ -26,7 +26,7 @@ char *majoris_codec_image_details(VipsImage *image) {
 }
 
 
-int majoris_codec_frame_duration(VipsImage *image, int page)
+int image_codec_frame_duration(VipsImage *image, int page)
 {
     int *delays = NULL, count = 0;
     if (vips_image_get_typeof(image, "delay") &&

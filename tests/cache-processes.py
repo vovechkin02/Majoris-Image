@@ -84,12 +84,12 @@ with tempfile.TemporaryDirectory(prefix="majoris-cache-test-") as tmp:
 
     locked = launch("locked", 88, delay=1)
     wait_for_starts(3)
-    waiting = launch("cancelled-waiter", 88)
+    waiting = launch("canceled-waiter", 88)
     time.sleep(.15)
     waiting.terminate()
     finish(waiting, False)
     finish(locked)
-    assert count() == 3 and not (root / "cancelled-waiter.png").exists()
+    assert count() == 3 and not (root / "canceled-waiter.png").exists()
 
     producer = launch("killed", 65, delay=1)
     wait_for_starts(4)

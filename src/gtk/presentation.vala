@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     internal enum OutputCapability {
         UNREALIZED, SDR, VERIFIED_HDR, UNKNOWN
     }
@@ -19,7 +19,7 @@ namespace MajorisImage {
                 renderer == null || !renderer.is_realized ()) return OutputCapability.UNREALIZED;
             var display = surface.get_display ();
             if (display.get_monitor_at_surface (surface) == null) return OutputCapability.UNKNOWN;
-            // The Cairo renderer presents Cairo image surfaces with SDR colour.
+            // The Cairo renderer presents Cairo image surfaces with SDR color.
             if (renderer is Gsk.CairoRenderer) return OutputCapability.SDR;
             // Public GDK has no surface-level HDR negotiation or scanout query.
             return OutputCapability.UNKNOWN;
@@ -41,7 +41,7 @@ namespace MajorisImage {
                 result.tone_map = true;
                 result.status = policy == PresentationPolicy.HDR_PREFERRED ?
                     PresentationStatus.HDR_UNAVAILABLE : PresentationStatus.SDR_TONE_MAPPED;
-                if (policy == PresentationPolicy.SDR) result.diagnostic = "SDR policy: colour-managed tone mapping.";
+                if (policy == PresentationPolicy.SDR) result.diagnostic = "SDR policy: color-managed tone mapping.";
                 else if (output == OutputCapability.UNREALIZED) result.diagnostic = "No realized output surface. Showing tone-mapped SDR.";
                 else if (output == OutputCapability.SDR) result.diagnostic = "SDR renderer. Showing tone-mapped SDR.";
                 else result.diagnostic = "GDK cannot verify HDR output for this surface. Showing tone-mapped SDR.";
@@ -49,7 +49,7 @@ namespace MajorisImage {
             return result;
         }
 
-        [CCode (cname = "majoris_image_texture_external_description", cheader_filename = "image-texture.h")]
+        [CCode (cname = "image_texture_external_description", cheader_filename = "image-texture.h")]
         private extern static unowned string external_description (Gdk.Texture texture, out bool sdr, out bool hdr);
 
         internal static PresentationDecision external (Gdk.Texture texture, out bool hdr) {

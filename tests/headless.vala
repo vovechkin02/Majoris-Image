@@ -1,6 +1,11 @@
-using MajorisImage;
+using ImageKit;
 
 async void verify (string directory, string large_path) throws Error {
+    var recipe = RenderOptions.deserialize ("{\"version\":2,\"nearest-neighbour\":true}");
+    assert (recipe.nearest_neighbor);
+    string saved = recipe.serialize ();
+    assert (saved.contains ("\"nearest-neighbour\"") && !saved.contains ("\"nearest-neighbor\""));
+    assert (RenderOptions.deserialize (saved).nearest_neighbor);
     var source = new ImageSource (File.new_for_path (Path.build_filename (directory, "rgb16.png")));
     var registry = new DecoderRegistry ();
     var document = yield registry.open (source);

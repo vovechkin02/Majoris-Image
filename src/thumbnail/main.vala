@@ -5,8 +5,8 @@ int main (string[] args) {
     }
     var loop = new MainLoop ();
     int result = 1;
-    var service = new MajorisImage.ThumbnailService ();
-    var source = new MajorisImage.ImageSource (File.new_for_commandline_arg (args[1]));
+    var service = new ImageKit.ThumbnailService ();
+    var source = new ImageKit.ImageSource (File.new_for_commandline_arg (args[1]));
     var stop = new Cancellable ();
     var sigterm = new Unix.SignalSource (Posix.Signal.TERM);
     sigterm.set_callback (() => { stop.cancel (); return Source.REMOVE; });

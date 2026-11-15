@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     // Small algebra helpers keep photo-processing policy in Vala and retain
     // libvips' lazy region evaluation instead of materialising entire buffers.
     public class FloatOps : Object {

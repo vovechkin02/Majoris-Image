@@ -11,8 +11,8 @@
 
 // Scanline output bounds extra memory to one source row. Values remain linear
 // sRGB, including negative wide-gamut samples and highlights above SDR white.
-gboolean majoris_codec_exr_encode(VipsImage *image, const char *path, int depth, GError **error) {
-    VipsImage *linear = majoris_codec_to_linear(image, error);
+gboolean image_codec_exr_encode(VipsImage *image, const char *path, int depth, GError **error) {
+    VipsImage *linear = image_codec_to_linear(image, error);
     if (!linear) return FALSE;
     VipsRegion *region = vips_region_new(linear);
     gboolean result = FALSE;

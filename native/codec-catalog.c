@@ -2,11 +2,11 @@
 #include <json-glib/json-glib.h>
 #include <libraw/libraw.h>
 #include <libheif/heif.h>
-#ifdef MAJORIS_AVIF_SEQUENCE
+#ifdef IMAGE_CODEC_AVIF_SEQUENCE
 #include <avif/avif.h>
 #endif
 
-typedef struct { JsonBuilder *builder; gboolean encoder; } CatalogueContext;
+typedef struct { JsonBuilder *builder; gboolean encoder; } CatalogContext;
 
 static const struct NativeLoader {
     const char *operation;
@@ -27,7 +27,7 @@ static const struct NativeLoader {
 };
 
 // The package descriptor must be reproducible on hosts with different plugins.
-char **majoris_codec_desktop_baseline(void)
+char **image_codec_desktop_baseline(void)
 {
     GPtrArray *types = g_ptr_array_new();
     for (guint i = 0; i < G_N_ELEMENTS(loaders); i++)
@@ -68,7 +68,7 @@ static void add_backend(JsonBuilder *builder, const char *operation, const char 
 static void *collect_operation(GType type, void *data)
 {
     if (G_TYPE_IS_ABSTRACT(type)) return NULL;
-    CatalogueContext *ctx = data;
+    CatalogContext *ctx = data;
     VipsObjectClass *klass = g_type_class_ref(type);
     VipsForeignClass *foreign = VIPS_FOREIGN_CLASS(klass);
     if (klass->nickname) {
@@ -98,11 +98,11 @@ static void *collect_operation(GType type, void *data)
     return NULL;
 }
 
-char *majoris_codec_codec_json(void)
+char *image_codec_catalog_json(void)
 {
     g_autoptr(JsonBuilder) builder = json_builder_new();
     json_builder_begin_array(builder);
-    CatalogueContext ctx = {builder, FALSE};
+    CatalogContext ctx = {builder, FALSE};
     vips_type_map_all(VIPS_TYPE_FOREIGN_LOAD, collect_operation, &ctx);
     ctx.encoder = TRUE;
     vips_type_map_all(VIPS_TYPE_FOREIGN_SAVE, collect_operation, &ctx);
@@ -121,11 +121,11 @@ char *majoris_codec_codec_json(void)
         if (heif_have_decoder_for_format(heif_compression_HEVC))
             add_backend(builder, "heifload-hevc", "image/heif;image/heic", 1 | 4 | 8 | 16 | 64 | 256);
     }
-#ifdef MAJORIS_AVIF_SEQUENCE
+#ifdef IMAGE_CODEC_AVIF_SEQUENCE
     if (avifCodecName(AVIF_CODEC_CHOICE_AUTO, AVIF_CODEC_FLAG_CAN_DECODE))
         add_backend(builder, "libavif-sequence", "image/avif-sequence", 1 | 2 | 8 | 16 | 64 | 256);
 #endif
-#ifdef MAJORIS_HEIF_SEQUENCE
+#ifdef IMAGE_CODEC_HEIF_SEQUENCE
     if (heif_have_decoder_for_format(heif_compression_HEVC))
         add_backend(builder, "libheif-sequence", "image/heif-sequence;image/heic-sequence", 1 | 2 | 8 | 16 | 64 | 256);
 #endif

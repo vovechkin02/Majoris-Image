@@ -1,9 +1,9 @@
-namespace MajorisImage {
+namespace ImageKit {
     [Flags]
     public enum ImageCapabilities {
         STILL = 1, ANIMATION = 2, MULTI_IMAGE = 4, HIGH_DEPTH = 8, HDR = 16,
         REGION = 32, THUMBNAIL = 64, EMBEDDED_PREVIEW = 128, METADATA = 256,
-        ENCODE = 512, VECTOR = 1024, GAIN_MAP = 2048, COLOUR_MANAGED = 4096
+        ENCODE = 512, VECTOR = 1024, GAIN_MAP = 2048, COLOR_MANAGED = 4096
     }
     public enum RawState { NOT_RAW, RAW_PREVIEW_AVAILABLE, RAW_DEVELOPING, RAW_DEVELOPED, RAW_UNSUPPORTED, RAW_DEVELOPMENT_FAILED }
     internal enum DecodeFailure { UNSUPPORTED, CODEC_MISSING, CORRUPT, CRASH, TIMEOUT, MEMORY, COLOR_PROFILE, FAILURE }
@@ -25,8 +25,8 @@ namespace MajorisImage {
         public int depth { get; set; default = 8; }
         public int source_bit_depth { get; set; }
         public bool has_alpha { get; set; }
-        public bool colour_managed { get; set; }
-        public string colour_diagnostic { get; set; default = ""; }
+        public bool color_managed { get; set; }
+        public string color_diagnostic { get; set; default = ""; }
         public bool embedded_preview { get; set; }
         public string mime { get; set; default = "application/octet-stream"; }
         public string loader { get; set; default = ""; }
@@ -49,16 +49,24 @@ namespace MajorisImage {
             if (animated) flags |= ImageCapabilities.ANIMATION;
             if (depth > 8) flags |= ImageCapabilities.HIGH_DEPTH;
             if (hdr) flags |= ImageCapabilities.HDR;
-            if (colour_managed) flags |= ImageCapabilities.COLOUR_MANAGED;
+            if (color_managed) flags |= ImageCapabilities.COLOR_MANAGED;
             if (region) flags |= ImageCapabilities.REGION;
             if (embedded_preview) flags |= ImageCapabilities.EMBEDDED_PREVIEW;
             if (vector) flags |= ImageCapabilities.VECTOR;
             if (gain_map) flags |= ImageCapabilities.GAIN_MAP;
             return flags;
         } }
+        private const string WIRE_MANAGED = "colour-managed";
+        private const string WIRE_DIAGNOSTIC = "colour-diagnostic";
+        private const string PROPERTY_MANAGED = "color-managed";
+        private const string PROPERTY_DIAGNOSTIC = "color-diagnostic";
+
         internal string serialize () {
             var node = Json.gobject_serialize (this);
-            node.get_object ().set_int_member ("protocol-version", 1);
+            var object = node.get_object ();
+            object.set_int_member ("protocol-version", 1);
+            rename_json_member (object, PROPERTY_MANAGED, WIRE_MANAGED);
+            rename_json_member (object, PROPERTY_DIAGNOSTIC, WIRE_DIAGNOSTIC);
             var generator = new Json.Generator ();
             generator.set_root (node);
             return generator.to_data (null);
@@ -75,6 +83,8 @@ namespace MajorisImage {
                 throw new ImageError.INVALID_RESPONSE ("Unsupported decoder manifest version");
             object.remove_member ("protocol-version");
             object.remove_member ("capabilities");
+            rename_json_member (object, WIRE_MANAGED, PROPERTY_MANAGED);
+            rename_json_member (object, WIRE_DIAGNOSTIC, PROPERTY_DIAGNOSTIC);
             var result = Json.gobject_deserialize (typeof (ImageProbe), root) as ImageProbe;
             if (result == null || result.width < 1 || result.height < 1 ||
                 result.width > 1000000 || result.height > 1000000 ||

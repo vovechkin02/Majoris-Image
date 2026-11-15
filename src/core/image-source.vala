@@ -1,5 +1,5 @@
-[CCode (gir_namespace = "MajorisImage", gir_version = "1.0")]
-namespace MajorisImage {
+[CCode (gir_namespace = "ImageKit", gir_version = "2.0")]
+namespace ImageKit {
     /** The original file or GVfs URI. The decoder receives a read-only mount. */
     public sealed class ImageSource : Object {
         public File file { get; construct; }

@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     internal class WorkerFailure : Object {
         public static DecodeFailure classify (Error error) {
             if (error is ImageError.UNSUPPORTED || error is ImageError.RAW_UNSUPPORTED) return DecodeFailure.UNSUPPORTED;

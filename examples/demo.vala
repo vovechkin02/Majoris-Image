@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 int main (string[] args) {
     var app = new Gtk.Application ("org.majoris.Image.Demo", ApplicationFlags.DEFAULT_FLAGS);

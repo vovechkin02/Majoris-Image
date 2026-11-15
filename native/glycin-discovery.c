@@ -1,6 +1,6 @@
 #include "glycin-discovery.h"
 
-gboolean majoris_mime_matches(const char *first, const char *second)
+gboolean image_mime_matches(const char *first, const char *second)
 {
     if (g_strcmp0(first, second) == 0) return TRUE;
     if (!first || !second) return FALSE;
@@ -37,7 +37,7 @@ static int compare_mimes(gconstpointer a, gconstpointer b)
     return g_strcmp0(*(const char * const *)a, *(const char * const *)b);
 }
 
-char **majoris_discover_glycin_loaders(void)
+char **image_discover_glycin_loaders(void)
 {
     g_autoptr(GHashTable) entries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     const char * const *roots = g_get_system_data_dirs();

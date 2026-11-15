@@ -1,6 +1,6 @@
-namespace MajorisImage {
+namespace ImageKit {
     internal sealed class WorkerClient : Object {
-        [CCode (cname = "majoris_image_worker_path")]
+        [CCode (cname = "image_worker_path")]
         private extern static unowned string installed_worker ();
 
         private string? backend;

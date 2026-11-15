@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public class ExportEngine : Object {
         public static void write (Vips.Image input, string target, ExportOptions options, bool source_hdr) throws Error {
             Vips.Image image = input;
@@ -16,7 +16,7 @@ namespace MajorisImage {
                 if (alpha) { Vips.Image straight; ImageProcessor.check (Vips.unpremultiply (image,out straight,"max_alpha",1.0,null)); image=straight; }
             }
             if (!options.hdr && source_hdr) image = ToneMapper.map (image, options.tone_mode);
-            // Privacy policy is independent of the colour profile. Remove opaque
+            // Privacy policy is independent of the color profile. Remove opaque
             // source blobs before encoding; filtered metadata is reattached below.
             foreach (string field in image.fields ()) {
                 if (options.metadata == "remove-all" && (field.has_prefix ("exif-") || field.has_prefix ("xmp-") || field == "exif-data" || field == "xmp-data" || field == "iptc-data")) image.remove (field);

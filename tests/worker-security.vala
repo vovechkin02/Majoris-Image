@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 private class FaultBackend : Object, DecoderBackend {
     public string id { get { return "test-fault"; } }

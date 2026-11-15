@@ -4,14 +4,14 @@ See [1.1.3 widget verification](verification-1.1.3.md) for the current release.
 
 | Area | Changes | Main files |
 | --- | --- | --- |
-| Desktop thumbnails | Debian creates the system descriptor from the installed native catalogue and system Glycin loaders. Codec package transactions refresh it atomically. Package removal cleans it up. The build installs a reproducible baseline for standalone Meson deployments. The thumbnailer continues to validate each source and share the existing cache. | `src/thumbnail/{meson.build,mime-registration.c}`, `native/codec-catalogue.c`, `debian/majoris-image-thumbnailer.*`, `debian/rules`, `tests/thumbnail-registration.py` |
-| Colour | The sandboxed header probe validates the QOI colour declaration. Glycin fallback satisfies strict colour requests for sRGB QOI and PNG. Linear QOI preserves its numerical transfer and reports the default primaries assumption. Alpha remains independent of colour conversion. | `src/worker/metadata-reader.vala`, `src/core/{glycin-fallback.vala,glycin-pixels.c}`, `tests/decoders.vala` |
+| Desktop thumbnails | Debian creates the system descriptor from the installed native catalog and system Glycin loaders. Codec package transactions refresh it atomically. Package removal cleans it up. The build installs a reproducible baseline for standalone Meson deployments. The thumbnailer continues to validate each source and share the existing cache. | `src/thumbnail/{meson.build,mime-registration.c}`, `native/codec-catalog.c`, `debian/majoris-image-thumbnailer.*`, `debian/rules`, `tests/thumbnail-registration.py` |
+| Color | The sandboxed header probe validates the QOI color declaration. Glycin fallback satisfies strict color requests for sRGB QOI and PNG. Linear QOI preserves its numerical transfer and reports the default primaries assumption. Alpha remains independent of color conversion. | `src/worker/metadata-reader.vala`, `src/core/{glycin-fallback.vala,glycin-pixels.c}`, `tests/decoders.vala` |
 | HEIF | A bounded timeline maps unit-rate edit segments to the frames emitted by libheif. It supports clipped frames, multiple media segments, transparent empty intervals and a clipped final cycle for finite whole-media repeats with matching timescales. Existing complete and infinite repeats remain delegated to libheif and the viewer. | `native/sequences.c`, `tests/{decoders.vala,make-formats.py}` |
-| HDR | The existing output probe keeps HDR display unavailable until the compositor path can be verified. A GDK regression downloads a floating-point texture in the same colour state and verifies extended samples and straight alpha. | `tests/image-texture.c`, `tests/meson.build`, `docs/api-1.md` |
+| HDR | The existing output probe keeps HDR display unavailable until the compositor path can be verified. A GDK regression downloads a floating-point texture in the same color state and verifies extended samples and straight alpha. | `tests/image-texture.c`, `tests/meson.build`, `docs/api-2.md` |
 | Integration and security | The existing public consumers retain their independent viewer and worker lifetimes. The installed stress test alternates sources while a separate process requests thumbnails and checks the private temporary directory after both finish. Timeline arithmetic and allocations have fixed budgets and remain in Bubblewrap. | `examples/files-preview.vala`, `tests/installed-consumers.sh`, `native/sequences.c` |
 | Distribution | Git records executable Debian rules. Source tarballs retain the mode through extraction. Both package profiles keep the same ABI and package names. | `debian/{rules,changelog,control}`, `meson.build`, `README.md` |
 
-The [ABI 1 guide](api-1.md) includes the format matrix and a physical HDR
+The [ABI 1 guide](api-2.md) includes the format matrix and a physical HDR
 procedure. The [1.1.1 verification](verification-1.1.1.md) gives background
 on ICC, animation, and presentation policies. This release makes no public
 API or SONAME changes.
@@ -38,7 +38,7 @@ API or SONAME changes.
   Debian provided security build `1.23.6-2~deb13u1` for this test.
 - Public GDK through the examined 4.24 API offers surface and monitor information
   without a verified surface HDR negotiation query. The tested GTK 4.18 path
-  presents colour-managed SDR. Physical HDR and the production Majoris OS
+  presents color-managed SDR. Physical HDR and the production Majoris OS
   image require external validation. [GDK surface API](https://docs.gtk.org/gdk4/class.Surface.html)
 
 ## Validation

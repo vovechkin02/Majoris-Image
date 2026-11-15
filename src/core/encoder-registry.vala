@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public sealed class EncoderRegistry : Object {
         private WorkerClient worker = new WorkerClient ();
 

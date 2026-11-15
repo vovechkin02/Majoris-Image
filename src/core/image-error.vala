@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     public errordomain ImageError {
         DECODE, EXPORT, SANDBOX, INVALID_RECIPE, UNSUPPORTED, CODEC_MISSING,
         CORRUPT, DECODER_CRASH, MEMORY, COLOR_PROFILE, RAW_UNSUPPORTED,

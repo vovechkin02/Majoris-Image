@@ -1,4 +1,4 @@
-using MajorisImage;
+using ImageKit;
 
 async void measure (string mode, ImageSource source) throws Error {
     int64 began = get_monotonic_time ();

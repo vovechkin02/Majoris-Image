@@ -6,20 +6,20 @@ See [1.1.2 verification](verification-1.1.2.md) for the current release.
 | --- | --- | --- |
 | HDR output | The output detector distinguishes unrealized surfaces, known SDR renderers, unknown output and verified HDR. GTK 4.18 supplies surface, monitor and renderer information. Public GDK through the examined 4.24 API supplies no surface HDR negotiation query. Xvfb tested the actual SDR fallback. A policy test exercised every output classification, including simulated verified output. | `src/gtk/presentation.vala`, `src/gtk/image-texture.c`, `tests/presentation.vala` |
 | Presentation regeneration | Independent presentation generations cancel stale conversions. Base previews, tiles and the active animation frame use the same tone-map decision. Equivalent policies preserve existing textures. The viewer retains navigation and playback state. Headless tests tone-mapped retained pixels after deleting the staged source and compared preview, full decode and tile luminance and alpha. GTK tested policy changes across remapping. | `src/gtk/image-view.vala`, `src/gtk/tile-cache.vala`, `src/core/{image-document,worker-client}.vala`, `src/worker/main.vala`, `tests/{viewer,headless}.vala` |
-| Glycin colour | The worker validates colour declarations. A validated PNG sRGB declaration without competing ICC or CICP metadata establishes the Glycin 1 PNG output contract and satisfies strict colour requests. ICC conversion, assumed defaults and missing evidence carry distinct provenance. RGB and grayscale conversion use the working float buffer and keep alpha independent. A numeric test forced Glycin for sRGB, Display P3, Adobe RGB and grayscale ICC PNG. Tests reject malformed ICC, unsupported CICP and strict requests without an established contract. | `src/core/glycin-fallback.vala`, `src/worker/metadata-reader.vala`, `tests/{decoders.vala,make-formats.py}` |
+| Glycin color | The worker validates color declarations. A validated PNG sRGB declaration without competing ICC or CICP metadata establishes the Glycin 1 PNG output contract and satisfies strict color requests. ICC conversion, assumed defaults and missing evidence carry distinct provenance. RGB and grayscale conversion use the working float buffer and keep alpha independent. A numeric test forced Glycin for sRGB, Display P3, Adobe RGB and grayscale ICC PNG. Tests reject malformed ICC, unsupported CICP and strict requests without an established contract. | `src/core/glycin-fallback.vala`, `src/worker/metadata-reader.vala`, `tests/{decoders.vala,make-formats.py}` |
 | HEIF timeline | The worker selects an image track before a general video track, starts with libheif's presentation classification and factors out recognized whole-cycle repeats for GTK. It rejects unsupported edit lists, playback rates and composition offsets. Tests used finite and indefinite repeats, two visual tracks, malformed duration, non-unit rate, media offset and a nonzero composition offset. The AVIF and HEIC fixtures retained 70 ms and 160 ms frame durations. The 10-bit PQ AVIF test continued to verify HDR and SDR pixels. | `native/sequences.c`, `tests/{decoders.vala,make-formats.py,make-heif-sequence.c}`, `tests/fixtures/` |
-| Desktop registration | Packages consistently register JPEG, PNG, TIFF and OpenEXR from the native catalogue. Runtime API discovery includes applicable optional loaders. The desktop test checks the baseline against the runtime catalogue and exercises generated sample thumbnails. | `native/{bridge.h,codec-catalogue.c}`, `src/thumbnail/{mime-registration.c,meson.build}`, `debian/control`, `tests/thumbnail-registration.py` |
+| Desktop registration | Packages consistently register JPEG, PNG, TIFF and OpenEXR from the native catalog. Runtime API discovery includes applicable optional loaders. The desktop test checks the baseline against the runtime catalog and exercises generated sample thumbnails. | `native/{bridge.h,codec-catalog.c}`, `src/thumbnail/{mime-registration.c,meson.build}`, `debian/control`, `tests/thumbnail-registration.py` |
 | Consumers | Files tests add a bounded 200 MP TIFF preview, ICC PNG and AVIF/HEIC seeks with remapping. Photos tests add ICC PNG, indexed animations and RAW development in the configured real-camera run. Both examples use public Vala interfaces and XML GtkBuilder construction. | `examples/{files-preview,photos-viewer}.vala`, `tests/{meson.build,installed-consumers.sh,installed-gainmap.vala}` |
 
 The additive public API is `ImageDocument.render_preview(bool tone_map, Cancellable?)`.
 It returns retained pixels directly when the requested representation is
 available and uses the sandboxed tone mapper on the in-memory preview
-otherwise. Metadata from Glycin now carries decoder-output colour, working
-colour and provenance. Both libraries retain ABI 1. `nm -D --defined-only`
+otherwise. Metadata from Glycin now carries decoder-output color, working
+color and provenance. Both libraries retain ABI 1. `nm -D --defined-only`
 on the stock 1.1.0 and 1.1.1 libraries confirmed that all existing exports
 are present. Release metadata and deployment guidance changed in
-`meson.build`, `debian/changelog`, `README.md` and `docs/api-1.md`.
-[ABI and format guide](api-1.md)
+`meson.build`, `debian/changelog`, `README.md` and `docs/api-2.md`.
+[ABI and format guide](api-2.md)
 
 ### Security and platform boundaries
 
@@ -37,7 +37,7 @@ are present. Release metadata and deployment guidance changed in
   HEVC sequences and primary image track selection were tested. Other track
   codecs, arbitrary edit arrangements and HEIC alpha/HDR combinations remain
   independently unverified.
-- The Glycin 2.2 colour interfaces belong to a separate ABI and are
+- The Glycin 2.2 color interfaces belong to a separate ABI and are
   documented as unstable. The Debian 13 build uses Glycin 1.2.1. ICC output
   from that ABI remains unverifiable through its C interface. The tested
   strict fallback case is explicitly tagged sRGB PNG. [Glycin C API](https://gnome.pages.gitlab.gnome.org/glycin/libglycin/index.html)

@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     internal struct TileBounds {
         public double left;
         public double top;
@@ -130,7 +130,7 @@ namespace MajorisImage {
             tiles.clear ();
             pending.clear ();
             reserved_bytes = 0;
-            // Cancelled jobs still occupy slots until their completion callbacks.
+            // Canceled jobs still occupy slots until their completion callbacks.
         }
 
         public Gee.List<ImageTile> visible (TileBounds bounds, double zoom) {
@@ -155,7 +155,7 @@ namespace MajorisImage {
                 });
                 foreach (var tile in visible) queue_tile (tile);
 
-                // Prefetch neighbours nearest the visible centre after the visible work.
+                // Prefetch neighbors nearest the visible center after the visible work.
                 var center = visible[0];
                 bool visible_waiting = !pending.is_empty;
                 int64 next_x = ((int64) plan.end_x + plan.extent - 1) / plan.extent * plan.extent;

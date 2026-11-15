@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     // Invoked in the worker: no untrusted native parser runs in the GTK process.
     public class ImageInspector : Object {
         private static uint32 read_be32 (uint8[] bytes, int offset) {
@@ -50,7 +50,7 @@ namespace MajorisImage {
                                                         out Vips.Image? prepared, int sequence_frames = 0) throws Error {
             prepared = null;
             var probe = new ImageProbe ();
-            probe.colour_managed = true;
+            probe.color_managed = true;
             var stream = File.new_for_path (path).read ();
             var bytes = stream.read_bytes (65536); stream.close ();
             bool uncertain; probe.mime = ContentType.get_mime_type (ContentType.guess (null, bytes.get_data (), out uncertain));
@@ -144,7 +144,7 @@ namespace MajorisImage {
             int pages = 1; if (!probe.animated && image.type_of ("n-pages") != Type.INVALID && image.get_int ("n-pages", out pages) == 0) probe.pages = int.max (1, pages);
             unowned string loader = "";
             if (image.type_of ("vips-loader") != Type.INVALID && image.get_string ("vips-loader", out loader) == 0) probe.loader = loader;
-            if (probe.loader.contains ("magick")) probe.colour_managed = false;
+            if (probe.loader.contains ("magick")) probe.color_managed = false;
             if (!probe.animated) probe.animated = probe.pages > 1 && image.type_of ("delay") != Type.INVALID && (probe.loader.contains ("gif") || probe.loader.contains ("webp") || probe.loader.contains ("png"));
             if (probe.animated) probe.timed_sequence = true;
             if (probe.timed_sequence && !probe.animated) probe.pages = 1;

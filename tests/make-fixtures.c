@@ -44,7 +44,7 @@ int main(int argc, char **argv)
     const float linear[] = {.18f, .32f, .12f, .5f, .4f, .2f};
     working = vips_image_new_from_memory_copy(linear, sizeof linear, 2, 1, 3, VIPS_FORMAT_FLOAT);
     working->Type = VIPS_INTERPRETATION_scRGB;
-    profiled = majoris_codec_convert_profile(working, "display-p3", 16, &error);
+    profiled = image_codec_convert_profile(working, "display-p3", 16, &error);
     if (!profiled) {
         g_printerr("%s\n", error->message);
         goto done;
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
     if (vips_pngsave(profiled, argv[5], "bitdepth", 16, NULL) ||
         vips_tiffsave(profiled, argv[6], NULL)) goto done;
     g_clear_object(&profiled);
-    profiled = majoris_codec_convert_profile(working, "adobe-rgb", 16, &error);
+    profiled = image_codec_convert_profile(working, "adobe-rgb", 16, &error);
     if (!profiled || vips_pngsave(profiled, argv[7], "bitdepth", 16, NULL)) goto done;
 
     guint16 gray_alpha[] = {18820, 32768, 32768, 0};

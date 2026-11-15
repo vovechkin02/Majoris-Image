@@ -1,4 +1,4 @@
-namespace MajorisImage {
+namespace ImageKit {
     /** An oriented image page. Its source remains available for lazy region reads. */
     public sealed class ImageDocument : Object {
         public ImageSource source { get; private set; }
@@ -11,8 +11,8 @@ namespace MajorisImage {
         public int source_bit_depth { get; private set; }
         public int pixel_buffer_bit_depth { get { return 32; } }
         public bool has_alpha { get; private set; }
-        public bool colour_managed { get; private set; }
-        public string colour_diagnostic { get; private set; }
+        public bool color_managed { get; private set; }
+        public string color_diagnostic { get; private set; }
         public bool hdr { get; private set; }
         public bool tone_mapped { get; private set; }
         public bool vector { get; private set; }
@@ -58,8 +58,8 @@ namespace MajorisImage {
             bit_depth = probe.depth;
             source_bit_depth = probe.source_bit_depth;
             has_alpha = probe.has_alpha;
-            colour_managed = probe.colour_managed;
-            colour_diagnostic = probe.colour_diagnostic;
+            color_managed = probe.color_managed;
+            color_diagnostic = probe.color_diagnostic;
             hdr = probe.hdr;
             tone_mapped = hdr && options.sdr_presentation;
             vector = probe.vector;
@@ -73,7 +73,7 @@ namespace MajorisImage {
             mime_type = probe.mime;
             if (options.raw_preview_only && probe.raw) warning = "Showing the camera's embedded RAW preview";
             else if (probe.timed_sequence && !probe.animated) warning = "The installed decoder supplied a still preview of this timed sequence";
-            else warning = probe.loader == "Glycin" ? probe.colour_diagnostic : "";
+            else warning = probe.loader == "Glycin" ? probe.color_diagnostic : "";
             metadata = new ImageMetadata (probe.metadata);
         }
 

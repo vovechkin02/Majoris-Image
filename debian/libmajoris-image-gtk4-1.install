@@ -1,2 +1,2 @@
-usr/lib/*/libmajoris-image-gtk4.so.1*
-usr/lib/*/girepository-1.0/MajorisImageGtk-1.0.typelib
+usr/lib/*/libmajoris-image-gtk4.so.2*
+usr/lib/*/girepository-1.0/ImageKitGtk-2.0.typelib

@@ -2,7 +2,7 @@
 
 Majoris Image is a Vala and C/C++ image framework for Debian 13 and Majoris OS.
 Use the headless core to inspect, process, export, and thumbnail images. Embed
-`MajorisImageView` in a GTK4 application to display them.
+`ImageKitView` in a GTK4 application to display them.
 
 ## Build and test
 
@@ -48,8 +48,8 @@ Vala, a C compiler, Xvfb and Python GObject bindings to verify independent
 consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
 
-See the [integration examples and ABI 1 capability matrix](docs/api-1.md) for formats,
-sandbox requirements and integration examples. The [1.1.4 verification report](docs/verification-1.1.4.md) records the build, package and test results.
+See the [integration examples and ABI 2 capability matrix](docs/api-2.md) for formats,
+sandbox requirements and integration examples. The [2.0.0 verification report](docs/verification-2.0.0.md) records the build, package and test results.
 
 On Debian, the thumbnailer package generates its desktop entry from the
 installed system codecs. Package triggers refresh it when loader packages
@@ -61,28 +61,28 @@ Create a source release with Git metadata so Debian rules retain their
 executable mode. From a committed release tree, use:
 
 ```sh
-git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-1.1.4/ HEAD > majoris-image-1.1.4.tar.gz
-python3 tests/check-release-modes.py majoris-image-1.1.4.tar.gz
+git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-2.0.0/ HEAD > majoris-image-2.0.0.tar.gz
+python3 tests/check-release-modes.py majoris-image-2.0.0.tar.gz
 ```
 
 The check verifies both executable scripts in Git and after tar extraction.
 Extract and build on a Linux filesystem that preserves executable permissions.
 
-The view requests the entire visible image, starting at the centre, within
+The view requests the entire visible image, starting at the center, within
 a bounded tile cache. Adjacent image preloads use the same decoder selection
 as foreground opens, including Glycin, at background priority.
 
 The GtkBuilder demo uses ordinary wheel zoom. The Files-style example embeds
 the view in a scrolling pane and assigns Ctrl+wheel zoom. The Photos-style
-example uses the default wheel policy. The [widget guide](docs/api-1.md)
+example uses the default wheel policy. The [widget guide](docs/api-2.md)
 documents shortcuts, per-image accessible descriptions, animations and
 external texture reporting.
 
-## Licence
+## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE) and [debian/copyright](debian/copyright).
-The codec, colour, scheduling, worker, rendering, and test code adapted from
-Majoris Photos retains its GPL-3.0-or-later licence and contributor attribution.
+The codec, color, scheduling, worker, rendering, and test code adapted from
+Majoris Photos retains its GPL-3.0-or-later license and contributor attribution.
 The generated regression images identified in
 [tests/fixtures/README.md](tests/fixtures/README.md) are CC0-1.0.
 Applications that distribute this library with their software should account

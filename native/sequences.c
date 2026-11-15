@@ -1,9 +1,9 @@
 #include "bridge.h"
 #include <math.h>
-#ifdef MAJORIS_AVIF_SEQUENCE
+#ifdef IMAGE_CODEC_AVIF_SEQUENCE
 #include <avif/avif.h>
 #endif
-#ifdef MAJORIS_HEIF_SEQUENCE
+#ifdef IMAGE_CODEC_HEIF_SEQUENCE
 #include <libheif/heif.h>
 #include <libheif/heif_sequences.h>
 #include <libheif/heif_security.h>
@@ -13,7 +13,7 @@
 #define FRAME_LIMIT 10000
 #define PIXEL_LIMIT 16777216
 
-#if defined(MAJORIS_AVIF_SEQUENCE) || defined(MAJORIS_HEIF_SEQUENCE)
+#if defined(IMAGE_CODEC_AVIF_SEQUENCE) || defined(IMAGE_CODEC_HEIF_SEQUENCE)
 static VipsImage *make_image(const guint8 *data, int width, int height, size_t stride,
                              int depth, int bands, GError **error)
 {
@@ -48,7 +48,7 @@ static VipsImage *make_image(const guint8 *data, int width, int height, size_t s
     return image;
 }
 
-static gboolean set_colour(VipsImage *image, const void *profile, size_t size,
+static gboolean set_color(VipsImage *image, const void *profile, size_t size,
                             int primaries, int transfer, GError **error)
 {
     gboolean hdr = transfer == 16 || transfer == 18;
@@ -67,7 +67,7 @@ static gboolean set_colour(VipsImage *image, const void *profile, size_t size,
         (transfer != 1 && transfer != 6 && transfer != 8 && transfer != 13 &&
          transfer != 14 && transfer != 15 && !hdr)) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                            "Sequence colour profile uses unsupported primaries or transfer");
+                            "Sequence color profile uses unsupported primaries or transfer");
         return FALSE;
     }
     vips_image_set_int(image, "majoris-image-primaries", primaries);
@@ -86,7 +86,7 @@ static void set_timing(VipsImage *image, const char *loader, int count, int loop
 }
 #endif
 
-#ifdef MAJORIS_AVIF_SEQUENCE
+#ifdef IMAGE_CODEC_AVIF_SEQUENCE
 static VipsImage *load_avif(const char *path, int frame, GError **error)
 {
     avifDecoder *decoder = avifDecoderCreate();
@@ -123,7 +123,7 @@ static VipsImage *load_avif(const char *path, int frame, GError **error)
     if (result != AVIF_RESULT_OK) goto failed;
     image = make_image(rgb.pixels, src->width, src->height, rgb.rowBytes,
                         src->depth, alpha ? 4 : 3, error);
-    if (image && !set_colour(image, src->icc.data, src->icc.size,
+    if (image && !set_color(image, src->icc.data, src->icc.size,
                               src->colorPrimaries, src->transferCharacteristics, error))
         g_clear_object(&image);
     if (image) {
@@ -145,7 +145,7 @@ done:
 }
 #endif
 
-#ifdef MAJORIS_HEIF_SEQUENCE
+#ifdef IMAGE_CODEC_HEIF_SEQUENCE
 // libheif exposes the repeat classification, but its C API does not
 // expose composition offsets or edit playback rates. Check only those
 // declarations on the chosen track; libheif still owns timeline decoding.
@@ -412,7 +412,7 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
     heif_image *decoded = NULL;
     VipsImage *image = NULL;
     gpointer profile = NULL;
-    heif_color_profile_nclx *colour = NULL;
+    heif_color_profile_nclx *color = NULL;
     if (!context) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "Could not allocate HEIF decoder");
         goto done;
@@ -538,7 +538,7 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
         if (!plane || plane_depth < 8 || plane_depth > 16 || stride < w * plane_component ||
             heif_image_get_width(decoded, channels[c]) != w || heif_image_get_height(decoded, channels[c]) != h) {
             g_free(packed);
-            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Missing or invalid HEIF colour plane");
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Missing or invalid HEIF color plane");
             goto done;
         }
         unsigned max = (1u << plane_depth) - 1;
@@ -580,9 +580,9 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
         result = heif_image_get_raw_color_profile(decoded, profile);
         if (result.code != heif_error_Ok) { g_clear_object(&image); goto failed; }
     }
-    heif_image_get_nclx_color_profile(decoded, &colour);
-    if (!set_colour(image, profile, size, colour ? colour->color_primaries : 1,
-                     colour ? colour->transfer_characteristics : 13, error)) {
+    heif_image_get_nclx_color_profile(decoded, &color);
+    if (!set_color(image, profile, size, color ? color->color_primaries : 1,
+                     color ? color->transfer_characteristics : 13, error)) {
         g_clear_object(&image);
         goto done;
     }
@@ -597,7 +597,7 @@ failed:
                 G_IO_ERROR_NOT_SUPPORTED : G_IO_ERROR_INVALID_DATA, "HEIF sequence: %s", result.message);
 done:
     g_free(profile);
-    if (colour) heif_nclx_color_profile_free(colour);
+    if (color) heif_nclx_color_profile_free(color);
     if (decoded) heif_image_release(decoded);
     if (options) heif_decoding_options_free(options);
     if (decode_track) heif_track_release(decode_track);
@@ -606,12 +606,12 @@ done:
 }
 #endif
 
-VipsImage *majoris_codec_sequence(const char *path, int frame, gboolean avif, int known_count, GError **error)
+VipsImage *image_codec_sequence(const char *path, int frame, gboolean avif, int known_count, GError **error)
 {
-#ifdef MAJORIS_AVIF_SEQUENCE
+#ifdef IMAGE_CODEC_AVIF_SEQUENCE
     if (avif) return load_avif(path, frame, error);
 #endif
-#ifdef MAJORIS_HEIF_SEQUENCE
+#ifdef IMAGE_CODEC_HEIF_SEQUENCE
     return load_heif(path, frame, known_count, error);
 #else
     (void)path; (void)frame; (void)avif; (void)known_count; (void)error;

@@ -10,7 +10,30 @@ private async void exercise (ImageView view, File large, File next, File destina
     var preload = yield thumbnails.generate (next_source, 128);
     assert (preload.get_size () > 45);
 
-    var document = yield registry.open (source, options);
+    var navigation = new PreloadManager.with_registry (registry);
+    ImageSource[] neighbours = {source, next_source};
+    foreach (var path in extra) {
+        if (path.has_suffix (".jpg")) {
+            var first = yield navigation.open (new ImageSource (File.new_for_path (path)), options);
+            view.set_document (first);
+        } else if (path.has_suffix (".qoi")) {
+            var mimes = yield registry.thumbnail_mime_types ();
+            if ("image/qoi" in mimes || "image/x-qoi" in mimes)
+                neighbours += new ImageSource (File.new_for_path (path));
+        }
+    }
+    yield navigation.preload (neighbours, options);
+    if (neighbours.length > 2) {
+        var qoi = yield navigation.open (neighbours[2], options);
+        assert (qoi == (yield navigation.open (neighbours[2], options)));
+        view.set_document (qoi);
+    }
+
+    var document = yield navigation.open (source, options);
+    assert (document == (yield navigation.open (source, options)));
+    var small = options.copy ();
+    small.preview_size = 128;
+    assert ((yield navigation.open (source, small)) != document);
     assert (document.supports_regions && document.width > 10000 && document.bit_depth >= 16);
     assert (view.scroll_zoom_mode == ScrollZoomMode.ALWAYS);
     view.set_document (document);
@@ -32,6 +55,7 @@ private async void exercise (ImageView view, File large, File next, File destina
     if (view.document.page_count > 1) yield view.set_page (1);
 
     foreach (var path in extra) {
+        if (path.has_suffix (".jpg") || path.has_suffix (".qoi")) continue;
         yield view.load_file (File.new_for_path (path), options);
         if (view.animated) {
             yield view.seek_frame (1);

@@ -213,6 +213,13 @@ async void exercise (string[] args) throws Error {
     recipe.turns = 1;
     var rotated = yield registry.render (qoi, recipe, 8);
     assert (rotated.width == 1 && rotated.height == 2);
+    // The registered test worker forces the native-missing path. Cache
+    // identity distinguishes a successful preload from a foreground retry.
+    var preloader = new PreloadManager.with_registry (registry);
+    yield preloader.preload ({ qoi });
+    var preloaded_qoi = yield preloader.open (qoi);
+    assert (preloaded_qoi.decoder == "Glycin");
+    assert (preloaded_qoi == (yield preloader.open (qoi)));
     var strict = new DecodeOptions ();
     strict.required_capabilities |= ImageCapabilities.COLOUR_MANAGED;
     assert ((yield registry.open (qoi, strict)).colour_managed);
@@ -225,6 +232,11 @@ async void exercise (string[] args) throws Error {
     catch (ImageError.COLOR_PROFILE error) { }
     var probe = yield registry.inspect (qoi);
     assert (probe.loader == first.decoder && probe.depth == first.bit_depth);
+    yield preloader.preload ({ linear_qoi, qoi }, strict);
+    try { yield preloader.open (linear_qoi, strict); assert_not_reached (); }
+    catch (ImageError.COLOR_PROFILE error) { }
+    var verified_qoi = yield preloader.open (qoi, strict);
+    assert (verified_qoi.colour_managed && verified_qoi == (yield preloader.open (qoi, strict)));
     var options = new DecodeOptions ();
     options.required_capabilities = ImageCapabilities.HDR;
     try { yield registry.open (qoi, options); assert_not_reached (); }

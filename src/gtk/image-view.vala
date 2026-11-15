@@ -772,18 +772,9 @@ namespace MajorisImage {
                 return;
             }
 
-            // Invert the quarter-turn and mirror transform for the visible source rectangle.
-            double left = double.MAX, top = double.MAX, right = -double.MAX, bottom = -double.MAX;
-            for (int i = 0; i < 4; i++) {
-                double x = (i % 2 == 0 ? 0 : get_width ()) - center_x;
-                double y = (i < 2 ? 0 : get_height ()) - center_y;
-                for (int turn = 0; turn < turns; turn++) { double old = x; x = y; y = -old; }
-                x = ((flipped_x ? -x : x) - offset_x) / scale;
-                y = ((flipped_y ? -y : y) - offset_y) / scale;
-                left = double.min (left, x); top = double.min (top, y);
-                right = double.max (right, x); bottom = double.max (bottom, y);
-            }
-            var visible = tiles.visible (left, top, right, bottom, pixel_zoom);
+            var viewport = TileBounds.from_view (get_width (), get_height (), center_x, center_y,
+                offset_x, offset_y, scale, turns, flipped_x, flipped_y);
+            var visible = tiles.visible (viewport, pixel_zoom);
             bool ready = false;
             foreach (var tile in visible) if (tile.texture != null) { ready = true; break; }
             if (ready) {

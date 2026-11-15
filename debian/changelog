@@ -1,3 +1,11 @@
+majoris-image (1.1.4) unstable; urgency=medium
+
+  * Cover the complete visible image and prioritise tiles near its centre.
+  * Reuse decoder selection and Glycin fallback in background previews.
+  * Verify source-release executable modes.
+
+ -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 18:00:00 +1100
+
 majoris-image (1.1.3) unstable; urgency=medium
 
   * Finalise GTK viewport input, accessibility and colour-aware presentation.

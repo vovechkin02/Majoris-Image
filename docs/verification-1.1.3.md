@@ -1,5 +1,7 @@
 # Majoris Image 1.1.3 widget verification
 
+See [1.1.4 verification](verification-1.1.4.md) for the current release.
+
 | Area | Change | Main files |
 | --- | --- | --- |
 | Wheel input | Per-view default, Ctrl-only and disabled modes. Parent controllers receive unhandled events, including horizontal scrolling and attempts to zoom at a limit. Pointer anchoring uses the same transform as pinch and keyboard zoom. | `src/gtk/image-view.vala`, `tests/widget-interaction.c` |

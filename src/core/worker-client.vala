@@ -29,7 +29,7 @@ namespace MajorisImage {
                                    Cancellable cancel, int size = 0, DecodeOptions? options = null, ExportOptions? encoding = null, bool preload = false) throws Error {
             if (size < 0 || size > 4096)
                 throw new IOError.INVALID_ARGUMENT ("Image output edge must be at most 4096 pixels");
-            int priority = preload ? 3 : operation == "thumbnail" ? 2 : operation == "tile" ? 1 : 0;
+            int priority = preload ? JobScheduler.PRELOAD_PRIORITY : operation == "thumbnail" ? 2 : operation == "tile" ? 1 : 0;
             var scheduler = JobScheduler.shared ();
             yield scheduler.acquire (priority, cancel);
             try { return yield execute (source, operation, transform, cancel, size, options, encoding); }

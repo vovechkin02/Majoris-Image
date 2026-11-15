@@ -14,14 +14,15 @@ namespace MajorisImage {
             }
         }
 
-        private async WorkerClient select (ImageSource source, ImageCapabilities required, Cancellable stop) throws Error {
+        private async WorkerClient select (ImageSource source, ImageCapabilities required, Cancellable stop, bool preload = false) throws Error {
             DecoderBackend[] snapshot;
             lock (custom_workers) { snapshot = custom_workers.to_array (); }
             if (snapshot.length > 0) {
                 yield source.stamp (stop);
-                var stream = yield source.file.read_async (Priority.DEFAULT, stop);
-                var bytes = yield stream.read_bytes_async (65536, Priority.DEFAULT, stop);
-                yield stream.close_async (Priority.DEFAULT, stop);
+                int priority = preload ? Priority.LOW : Priority.DEFAULT;
+                var stream = yield source.file.read_async (priority, stop);
+                var bytes = yield stream.read_bytes_async (65536, priority, stop);
+                yield stream.close_async (priority, stop);
                 bool uncertain;
                 string content_type = ContentType.guess (null, bytes.get_data (), out uncertain);
                 string mime = ContentType.get_mime_type (content_type);
@@ -85,34 +86,41 @@ namespace MajorisImage {
         }
 
         public async ImageProbe inspect (ImageSource source, Cancellable? cancel = null) throws Error {
-            var stop = cancel ?? new Cancellable ();
-            var worker = yield select (source, ImageCapabilities.METADATA, stop);
+            return yield inspect_internal (source, cancel ?? new Cancellable (), false);
+        }
+
+        private async ImageProbe inspect_internal (ImageSource source, Cancellable stop, bool preload) throws Error {
+            var worker = yield select (source, ImageCapabilities.METADATA, stop, preload);
             try {
-                string output = yield worker.run (source.file, "probe", null, stop);
+                string output = yield worker.run (source.file, "probe", null, stop, 0, null, null, preload);
                 try { return ImageProbe.deserialize (yield WorkerClient.read_text (output, stop)); }
                 finally { WorkerClient.cleanup (output); }
             } catch (Error error) {
                 if (!GlycinFallback.eligible (error)) throw error;
                 var options = new DecodeOptions ();
                 options.preview_size = 1;
-                return (yield GlycinFallback.open (source, options, stop, error, timeout_seconds)).probe;
+                return (yield GlycinFallback.open (source, options, stop, error, timeout_seconds, null, null, preload)).probe;
             }
         }
 
         public async ImageDocument open (ImageSource source, DecodeOptions? options = null,
                                          Cancellable? cancel = null) throws Error {
-            var request = (options ?? new DecodeOptions ()).copy ();
-            var stop = cancel ?? new Cancellable ();
-            var worker = yield select (source, request.required_capabilities, stop);
+            return yield open_internal (source, (options ?? new DecodeOptions ()).copy (),
+                                        cancel ?? new Cancellable (), false);
+        }
+
+        internal async ImageDocument open_internal (ImageSource source, DecodeOptions request,
+                                                     Cancellable stop, bool preload) throws Error {
             if (request.preview_size < 1 || request.preview_size > 4096)
                 throw new IOError.INVALID_ARGUMENT ("Preview edge must be between 1 and 4096");
-            try { return yield open_with (worker, source, request, stop); }
+            var worker = yield select (source, request.required_capabilities, stop, preload);
+            try { return yield open_with (worker, source, request, stop, preload); }
             catch (Error error) {
                 if (!GlycinFallback.eligible (error)) throw error;
                 ImageProbe? animation = null;
                 if (request.page > 0) {
                     try {
-                        var header = yield inspect (source, stop);
+                        var header = yield inspect_internal (source, stop, preload);
                         if (header.animated && header.mime == "image/apng") {
                             if (request.page >= header.pages)
                                 throw new IOError.INVALID_ARGUMENT ("Frame is outside the animation");
@@ -123,7 +131,7 @@ namespace MajorisImage {
                             throw probe_error;
                     }
                 }
-                return yield GlycinFallback.open (source, request, stop, error, timeout_seconds, animation);
+                return yield GlycinFallback.open (source, request, stop, error, timeout_seconds, animation, null, preload);
             }
         }
 

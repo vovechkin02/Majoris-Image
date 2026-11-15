@@ -7,8 +7,8 @@ trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/fil
 cd "$scratch"
 unset MAJORIS_IMAGE_WORKER
 
-pkg-config --atleast-version=1.1.3 majoris-image-1
-pkg-config --atleast-version=1.1.3 majoris-image-gtk4-1
+pkg-config --atleast-version=1.1.4 majoris-image-1
+pkg-config --atleast-version=1.1.4 majoris-image-gtk4-1
 valac --pkg majoris-image-1 "$source_root/tests/benchmark.vala" -o headless
 ./headless open "$source_root/tests/fixtures/rgb16.png"
 if ldd ./headless | grep -E 'libgtk|libgdk-'; then
@@ -25,7 +25,12 @@ valac --pkg majoris-image-gtk4-1 "$source_root/examples/files-preview.vala" -o f
 valac --pkg majoris-image-gtk4-1 "$source_root/examples/photos-viewer.vala" -o photos
 xvfb-run -a ./files "$source_root/tests/fixtures/rgb16.png" "$source_root/tests/fixtures/multipart.exr"
 if [ -f "$source_root/tests/fixtures/large.tiff" ]; then
-    xvfb-run -a ./photos "$source_root/tests/fixtures/large.tiff" "$source_root/tests/fixtures/multipart.exr" photo.png
+    fixtures="$source_root/tests/fixtures"
+    set -- ./photos "$fixtures/large.tiff" "$fixtures/multipart.exr" photo.png
+    if [ -f "$fixtures/navigation.jpg" ] && [ -f "$fixtures/fallback.qoi" ]; then
+        set -- "$@" "" "$fixtures/navigation.jpg" "$fixtures/fallback.qoi"
+    fi
+    xvfb-run -a "$@"
 fi
 if [ "${MAJORIS_TEST_STRESS:-0}" = 1 ]; then
     mkdir "$scratch/work"

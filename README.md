@@ -49,7 +49,7 @@ consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
 
 See the [integration examples and ABI 1 capability matrix](docs/api-1.md) for formats,
-sandbox requirements and integration examples. The [1.1.3 verification report](docs/verification-1.1.3.md) records the build, package and test results.
+sandbox requirements and integration examples. The [1.1.4 verification report](docs/verification-1.1.4.md) records the build, package and test results.
 
 On Debian, the thumbnailer package generates its desktop entry from the
 installed system codecs. Package triggers refresh it when loader packages
@@ -61,11 +61,16 @@ Create a source release with Git metadata so Debian rules retain their
 executable mode. From a committed release tree, use:
 
 ```sh
-git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-1.1.3/ HEAD > majoris-image-1.1.3.tar.gz
-tar -tvf majoris-image-1.1.3.tar.gz | grep 'debian/rules$'
+git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-1.1.4/ HEAD > majoris-image-1.1.4.tar.gz
+python3 tests/check-release-modes.py majoris-image-1.1.4.tar.gz
 ```
 
+The check verifies both executable scripts in Git and after tar extraction.
 Extract and build on a Linux filesystem that preserves executable permissions.
+
+The view requests the entire visible image, starting at the centre, within
+a bounded tile cache. Adjacent image preloads use the same decoder selection
+as foreground opens, including Glycin, at background priority.
 
 The GtkBuilder demo uses ordinary wheel zoom. The Files-style example embeds
 the view in a scrolling pane and assigns Ctrl+wheel zoom. The Photos-style

@@ -7,6 +7,13 @@ namespace MajorisImage {
             public Entry (string key, ImageDocument document) { this.key = key; this.document = document; }
         }
 
+        private DecoderRegistry registry;
+
+        public PreloadManager () { registry = new DecoderRegistry (); }
+
+        /** Reuse the same registered backends and timeout as the foreground consumer. */
+        public PreloadManager.with_registry (DecoderRegistry registry) { this.registry = registry; }
+
         private Gee.ArrayList<Entry> entries = new Gee.ArrayList<Entry> ();
         private Cancellable pending = new Cancellable ();
         private uint generation;
@@ -24,7 +31,10 @@ namespace MajorisImage {
                                          Cancellable? cancel = null) throws Error {
             var request = (options ?? new DecodeOptions ()).copy ();
             var stop = cancel ?? new Cancellable ();
-            var key = yield key_for (source, request, stop);
+            string? key = null;
+            try { key = yield key_for (source, request, stop); }
+            catch (Error error) { stop.set_error_if_cancelled (); }
+            stop.set_error_if_cancelled ();
             if (key != null) {
                 for (int i = 0; i < entries.size; i++) {
                     var entry = entries[i];
@@ -34,7 +44,7 @@ namespace MajorisImage {
                     return entry.document;
                 }
             }
-            return yield new DecoderRegistry ().open (source, request, stop);
+            return yield registry.open (source, request, stop);
         }
 
         public async void preload (ImageSource[] neighbours, DecodeOptions? options = null) {
@@ -48,12 +58,13 @@ namespace MajorisImage {
                     var source = neighbours[i];
                     var key = yield key_for (source, request, stop);
                     if (key == null) continue;
-                    var document = yield DecoderRegistry.open_with (new WorkerClient (), source, request, stop, true);
+                    if (entries.any_match (entry => entry.key == key)) continue;
+                    var document = yield registry.open_internal (source, request, stop, true);
                     var after = yield key_for (source, request, stop);
                     if (request_id != generation) return;
                     if (key != after) continue;
                     size_t length = document.preview.bytes.get_size ();
-                    if (bytes + length > 64 * 1024 * 1024) return;
+                    if (length > 64 * 1024 * 1024 - bytes) return;
                     entries.add (new Entry (key, document));
                     bytes += length;
                 } catch (IOError.CANCELLED e) { return; }

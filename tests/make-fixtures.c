@@ -3,7 +3,7 @@
 
 int main(int argc, char **argv)
 {
-    if (argc != 10 || VIPS_INIT(argv[0])) return 1;
+    if (argc != 11 || VIPS_INIT(argv[0])) return 1;
     VipsImage *black = NULL, *mid = NULL, *tiff = NULL, *raster = NULL;
     VipsImage *still = NULL;
     VipsImage *working = NULL, *profiled = NULL, *gray = NULL;
@@ -32,7 +32,8 @@ int main(int argc, char **argv)
     vips_image_set_array_int(raster, "delay", alternate, 3);
     if (vips_webpsave(raster, argv[3], "lossless", TRUE, NULL)) goto done;
     still = vips_image_new_from_memory(pixels, 8 * 8 * 3, 8, 8, 3, VIPS_FORMAT_UCHAR);
-    if (!still || vips_webpsave(still, argv[9], "lossless", TRUE, NULL)) goto done;
+    if (!still || vips_webpsave(still, argv[9], "lossless", TRUE, NULL) ||
+        vips_jpegsave(still, argv[10], "Q", 95, NULL)) goto done;
     if (vips_type_find("VipsOperation", "jp2ksave")) {
         VipsImage *first = NULL;
         if (vips_crop(raster, &first, 0, 0, 8, 8, NULL)) goto done;

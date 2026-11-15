@@ -7,7 +7,7 @@ if get_option('tests')
   fixture_dir = meson.current_source_dir() / 'fixtures'
   fixture_maker = executable('make-fixtures', 'make-fixtures.c', dependencies: native_api)
   fixtures = custom_target('large and animated fixtures',
-    output: ['large.tiff', 'animated.gif', 'animated.webp', 'jpeg2000.jp2', 'profiled.png', 'profiled.tiff', 'adobe.png', 'gray-profile.png', 'still.webp'],
+    output: ['large.tiff', 'animated.gif', 'animated.webp', 'jpeg2000.jp2', 'profiled.png', 'profiled.tiff', 'adobe.png', 'gray-profile.png', 'still.webp', 'navigation.jpg'],
     command: [fixture_maker, '@OUTPUT@'])
   python = find_program('python3')
   fs = import('fs')
@@ -22,6 +22,11 @@ if get_option('tests')
 
   worker_env = environment({'MAJORIS_IMAGE_WORKER': worker.full_path(),
     'G_DEBUG': 'fatal-criticals', 'XDG_CACHE_HOME': meson.current_build_dir() / 'test-cache'})
+  scheduler_source = configure_file(input: '../src/core/job-scheduler.vala',
+    output: 'job-scheduler-impl.vala', copy: true)
+  scheduler_test = executable('test-preview-scheduler', ['scheduler.vala', scheduler_source],
+    dependencies: [gio, gee])
+  test('foreground, tile and preload scheduling', scheduler_test, timeout: 10)
   executable('majoris-image-benchmark', 'benchmark.vala', dependencies: core_api)
   headless = executable('test-headless', 'headless.vala', dependencies: core_api)
   test('public headless API', headless, args: [fixture_dir, fixtures[0]], depends: [worker, fixtures],
@@ -74,6 +79,12 @@ if get_option('tests')
           args: ['-a', '-s', '-screen 0 1920x1200x24', interaction], env: input_env, timeout: 30)
       endforeach
     endif
+    tile_source = configure_file(input: '../src/gtk/tile-cache.vala',
+      output: 'tile-cache-impl.vala', copy: true)
+    tile_test = executable('test-tile-coverage', ['tile-coverage.vala', tile_source],
+      dependencies: [gtk_api, gee, math], include_directories: include_directories('../src/gtk'))
+    test('wide viewport tile coverage and cancellation', tile_test,
+      args: [fixtures[0], fixture_dir / 'multipart.exr'], depends: [worker, fixtures], env: worker_env, timeout: 45)
     viewer_test = executable('test-image-view', 'viewer.vala', dependencies: gtk_api)
     viewer_args = [fixture_dir, fixtures[8], fixtures[1], fixtures[2]]
     if avif_sequence.found()
@@ -99,7 +110,8 @@ if get_option('tests')
     files_args = [fixture_dir / 'rgb16.png', fixture_dir / 'multipart.exr',
       raw_preview_fixture, fixtures[0], fixtures[4]] + workflow_sequences
     photos_args = [fixtures[0], fixture_dir / 'multipart.exr', meson.current_build_dir() / 'photos-export.png',
-      raw_preview_fixture, fixtures[4]] + workflow_sequences
+      raw_preview_fixture, fixtures[4], fixtures[9]] + workflow_sequences
+    photos_args += [extra_formats[0]]
     test('Files public preview workflow', xvfb.found() ? xvfb : files_preview,
       args: (xvfb.found() ? ['-a', files_preview] : []) + files_args,
       depends: [worker, fixtures, files_preview], env: worker_env, timeout: 90)

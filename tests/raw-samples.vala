@@ -33,6 +33,13 @@ async void exercise (string directory) throws Error {
             assert (preview.bit_depth == 8 || preview.bit_depth == 16);
             assert (preview.pixel_buffer_bit_depth == 32);
             assert (preview.metadata.json.contains ("\"embedded-preview\":true"));
+            if (previews == 0) {
+                var preloader = new PreloadManager.with_registry (registry);
+                yield preloader.preload ({ source }, options);
+                var cached = yield preloader.open (source, options);
+                assert (cached.raw_state == RawState.RAW_PREVIEW_AVAILABLE &&
+                    cached.decoder == preview.decoder && cached == (yield preloader.open (source, options)));
+            }
             previews++;
         } catch (Error error) {
             if (probe.embedded_preview) throw error;

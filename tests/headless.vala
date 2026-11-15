@@ -71,6 +71,51 @@ async void verify (string directory, string large_path) throws Error {
         assert_not_reached ();
     } catch (ImageError.UNSUPPORTED e) { }
 
+    var preloader = new PreloadManager.with_registry (registry);
+    var smaller = new DecodeOptions ();
+    smaller.preview_size = 8;
+    yield preloader.preload ({ corrupt, source, multipart, vector, rgb8.source });
+    var prefetched = yield preloader.open (source);
+    assert (prefetched.decoder == "pngload" && prefetched == (yield preloader.open (source)));
+    var prefetched_exr = yield preloader.open (multipart);
+    assert (prefetched_exr.decoder == exr.decoder && prefetched_exr == (yield preloader.open (multipart)));
+    assert ((yield preloader.open (rgb8.source)) != (yield preloader.open (rgb8.source)));
+    var reduced = yield preloader.open (source, smaller);
+    assert (reduced != prefetched && reduced.preview.width == 8);
+
+    var separate = new PreloadManager ();
+    yield separate.preload ({ source }, smaller);
+    assert ((yield separate.open (source, smaller)) != reduced);
+    assert (prefetched == (yield preloader.open (source)));
+
+    var changing_stream = yield source.file.read_async ();
+    var changing = yield ImageSource.from_stream (changing_stream);
+    yield changing_stream.close_async ();
+    yield preloader.preload ({ changing });
+    var cached_source = yield preloader.open (changing);
+    assert (cached_source.bit_depth == 16 && cached_source == (yield preloader.open (changing)));
+    yield rgb8.source.file.copy_async (changing.file, FileCopyFlags.OVERWRITE, Priority.DEFAULT, null);
+    var changed = yield preloader.open (changing);
+    assert (changed != cached_source && changed.bit_depth == 8);
+
+    bool superseded = false;
+    preloader.preload.begin ({ large_source }, null, (obj, reply) => {
+        preloader.preload.end (reply);
+        superseded = true;
+    });
+    yield preloader.preload ({ source, multipart });
+    assert (superseded);
+    assert ((yield preloader.open (large_source)) != (yield preloader.open (large_source)));
+    var foreground = yield preloader.open (source);
+    assert (foreground == (yield preloader.open (source)));
+
+    var heavy = new DecodeOptions ();
+    heavy.preview_size = 3000;
+    yield preloader.preload ({ large_source }, heavy);
+    var too_large = yield preloader.open (large_source, heavy);
+    assert (too_large.preview.bytes.get_size () > 64 * 1024 * 1024);
+    assert (too_large != (yield preloader.open (large_source, heavy)));
+    preloader.clear ();
     string temp = DirUtils.make_tmp ("majoris-export-test-XXXXXX");
     var target = File.new_for_path (Path.build_filename (temp, "export.png"));
     try {

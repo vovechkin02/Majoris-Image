@@ -91,9 +91,20 @@ Fallback previews use linear-light area filtering with premultiplied alpha.
 edge. The `REGION` flag identifies decoders that can read spatial regions
 directly. `DecoderRegistry.render()` uses the same decoder negotiation.
 
-`PreloadManager` retains up to four adjacent previews and a maximum of 64 MiB.
-Use an instance per navigation session and call `clear()` when its source list
-changes. Call it from the same main context as the consumer.
+`PreloadManager` considers up to four adjacent sources and retains at most
+64 MiB of preview pixels. It uses ordinary decoder selection, including
+registered workers, capability checks and Glycin fallback. Use
+`new PreloadManager.with_registry(registry)` when foreground navigation
+uses a configured registry. Both native and Glycin preload jobs enter
+the shared scheduler below foreground opens, visible tiles and
+thumbnails.
+
+Use one manager per navigation session on the consumer's main context.
+Starting a new batch or calling `clear()` cancels superseded work and
+releases cached documents. Cache identity includes the source stamp and
+serialised decode options, including page, preview size, HDR and required
+capabilities. Foreground `open()` checks the current identity and uses
+ordinary decoding on a miss. A failed preload is never cached.
 
 ## GtkBuilder
 
@@ -181,6 +192,29 @@ also work. Disabled actions, arrows at a pan limit, and unrelated shortcuts
 propagate. Applications can observe `state`, `warning` and `error-message`
 to provide status UI. Test screen-reader announcements and physical pinch
 gestures with the target desktop session.
+
+### High-resolution viewport tiles
+
+The view draws its base preview while tiles arrive. It enumerates the
+complete visible source rectangle, including rotated and flipped views
+at fractional zoom or device scale. It queues visible tiles nearest the
+centre first, followed by up to two neighbouring tiles. Each view runs
+at most two tile jobs, including jobs that are still winding down after
+cancellation. Replaced sources and presentation generations cannot
+publish stale tiles.
+
+The cache reserves a square float32 RGBA allocation for every tile,
+including overlap. It charges up to 256 MiB for the usual warm cache
+and expands its visible working set to a 704 MiB limit for large
+viewports. It evicts unused textures before evicting visible work.
+The workspace admits up to 256 tile entries. When estimated padding
+and the requested pyramid level would exceed either budget, the
+planner first tries display-scale sampling, then coarsens the level
+until the entire viewport fits. The limits apply to cache allocations.
+Worker buffers, the base preview and renderer-owned resources are
+accounted for separately. Ordinary 5K and 8K raster viewports fit the
+full-resolution grid. Overlap, clipping and the existing preview mask
+preserve transparent compositing during progressive rendering.
 
 ### Animation and external textures
 

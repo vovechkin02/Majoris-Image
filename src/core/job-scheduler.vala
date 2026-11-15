@@ -14,6 +14,7 @@ namespace MajorisImage {
 
     // Shared admission queue with a reserved slot for interactive work.
     internal class JobScheduler : Object {
+        internal const int PRELOAD_PRIORITY = 3;
         private static JobScheduler? instance;
         private Mutex mutex;
         private Gee.ArrayList<JobTicket> queue = new Gee.ArrayList<JobTicket> ();

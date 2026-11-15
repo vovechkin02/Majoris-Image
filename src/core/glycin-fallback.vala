@@ -39,10 +39,10 @@ namespace MajorisImage {
             return false;
         }
 
-        private static async Json.Object colour_metadata (ImageSource source, Cancellable stop) throws Error {
+        private static async Json.Object colour_metadata (ImageSource source, Cancellable stop, bool preload) throws Error {
             string? path = null;
             try {
-                path = yield new WorkerClient ().run (source.file, "colour-probe", null, stop);
+                path = yield new WorkerClient ().run (source.file, "colour-probe", null, stop, 0, null, null, preload);
                 var parser = new Json.Parser ();
                 parser.load_from_data (yield WorkerClient.read_text (path, stop));
                 var root = parser.get_root ();
@@ -54,10 +54,11 @@ namespace MajorisImage {
             return new Json.Object ();
         }
 
-        private static async string sniff (File source, Cancellable stop) throws Error {
-            var stream = yield source.read_async (Priority.DEFAULT, stop);
-            var prefix = yield stream.read_bytes_async (4096, Priority.DEFAULT, stop);
-            yield stream.close_async (Priority.DEFAULT, stop);
+        private static async string sniff (File source, Cancellable stop, bool preload) throws Error {
+            int priority = preload ? Priority.LOW : Priority.DEFAULT;
+            var stream = yield source.read_async (priority, stop);
+            var prefix = yield stream.read_bytes_async (4096, priority, stop);
+            yield stream.close_async (priority, stop);
             unowned uint8[] b = prefix.get_data ();
             if (b.length >= 14 && b[0] == 'q' && b[1] == 'o' && b[2] == 'i' && b[3] == 'f') {
                 return "image/qoi";
@@ -66,12 +67,12 @@ namespace MajorisImage {
             string mime = ContentType.get_mime_type (ContentType.guess (null, b, out uncertain));
             if (!uncertain && mime.has_prefix ("image/")) return mime;
             // A TGA 2.0 footer is a content signature, even on an extensionless GFile.
-            var info = yield source.query_info_async ("standard::size", 0, Priority.DEFAULT, stop);
+            var info = yield source.query_info_async ("standard::size", 0, priority, stop);
             if (source.is_native () && info.get_size () >= 26) {
-                var footer = yield source.read_async (Priority.DEFAULT, stop);
+                var footer = yield source.read_async (priority, stop);
                 if (footer.can_seek () && footer.seek (-18, SeekType.END, stop)) {
-                    var signature = yield footer.read_bytes_async (18, Priority.DEFAULT, stop);
-                    yield footer.close_async (Priority.DEFAULT, stop);
+                    var signature = yield footer.read_bytes_async (18, priority, stop);
+                    yield footer.close_async (priority, stop);
                     uint8[] marker = "TRUEVISION-XFILE.".data;
                     unowned uint8[] end = signature.get_data ();
                     if (end.length == 18 && Memory.cmp (end, marker, 17) == 0 && end[17] == 0)
@@ -83,14 +84,14 @@ namespace MajorisImage {
 #endif
 
         internal static async ImageDocument open (ImageSource source, DecodeOptions request, Cancellable stop,
-                                                   Error original, uint seconds = 120, ImageProbe? animation = null, RenderOptions? crop = null) throws Error {
+                                                   Error original, uint seconds = 120, ImageProbe? animation = null, RenderOptions? crop = null, bool preload = false) throws Error {
 #if HAVE_GLYCIN
             var supported = FEATURES | ImageCapabilities.HIGH_DEPTH | ImageCapabilities.COLOUR_MANAGED;
             if (animation != null) supported |= ImageCapabilities.ANIMATION;
             if ((request.page != 0 && animation == null) ||
                 (request.required_capabilities & ~supported) != 0) throw original;
             var identity = yield source.stamp (stop);
-            string mime = animation != null ? animation.mime : yield sniff (source.file, stop);
+            string mime = animation != null ? animation.mime : yield sniff (source.file, stop, preload);
             if (mime == "") throw original;
             string[] loaders = installed ();
             if (!has_loader (mime, loaders)) throw original;
@@ -106,7 +107,7 @@ namespace MajorisImage {
             var scheduler = JobScheduler.shared ();
             bool admitted = false;
             try {
-                var colour = yield colour_metadata (source, job);
+                var colour = yield colour_metadata (source, job, preload);
                 bool tagged = colour.get_boolean_member_with_default ("icc", false);
                 if (colour.get_boolean_member_with_default ("icc-invalid", false))
                     throw new ImageError.COLOR_PROFILE ("Invalid embedded ICC profile");
@@ -130,7 +131,7 @@ namespace MajorisImage {
                 if (!verified && (request.required_capabilities & ImageCapabilities.COLOUR_MANAGED) != 0)
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded colour state");
 
-                yield scheduler.acquire (0, job);
+                yield scheduler.acquire (preload ? JobScheduler.PRELOAD_PRIORITY : 0, job);
                 admitted = true;
                 var loader = new Gly.Loader (source.file);
                 loader.set_sandbox_selector (Gly.SandboxSelector.BWRAP);

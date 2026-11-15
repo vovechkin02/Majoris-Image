@@ -3,7 +3,7 @@ using MajorisImage;
 [CCode (cname = "g_object_run_dispose", cheader_filename = "glib-object.h")]
 private extern void force_dispose (Object object);
 
-async void exercise_view (ImageView view, ImageView other, string fixture_dir, string[] animations) throws Error {
+async void exercise_view (ImageView view, ImageView other, string fixture_dir, string webp_path, string[] animations) throws Error {
     var png = File.new_for_path (Path.build_filename (fixture_dir, "rgb16.png"));
     var tiff = File.new_for_path (Path.build_filename (fixture_dir, "multipage.tiff"));
     var cancelled = new Cancellable ();
@@ -14,6 +14,9 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
     view.visible = false;
     yield view.load_file (png);
     assert (view.state == ViewState.READY && view.image_width == 24);
+    assert (!view.animated && !view.playing);
+    yield view.load_file (File.new_for_path (webp_path));
+    assert (view.document.mime_type == "image/webp" && !view.animated && !view.playing);
     view.visible = true;
 
     bool obsolete_finished = false;
@@ -105,7 +108,17 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
         var file = File.new_for_path (animation);
         yield view.load_file (file);
         assert (view.animated && view.frame_duration_ms > 0);
-        assert (view.presentation_status == PresentationStatus.SDR);
+        bool hdr_animation = view.document.hdr;
+        assert (view.presentation_status == (hdr_animation ?
+            PresentationStatus.SDR_TONE_MAPPED : PresentationStatus.SDR));
+        if (animation.has_suffix (".apng")) {
+            assert (view.document.decoder == "Glycin");
+            if (animation.has_suffix ("wide.apng")) assert (view.document.colour_diagnostic.contains ("ICC"));
+            yield view.seek_frame (1);
+            assert (view.frame_duration_ms == 170);
+            yield view.seek_frame (0);
+            assert (view.frame_duration_ms == 40);
+        }
         if (view.document.decoder.has_suffix ("-sequence")) {
             yield view.seek_frame (1);
             assert (view.current_frame == 1 && view.frame_duration_ms == 160);
@@ -118,14 +131,20 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
         yield delay (60);
         view.visible = true;
         assert (view.playing);
-        yield delay (130);
+        for (int i = 0; view.current_frame == 0 && i < 100; i++) yield delay (15);
         assert (view.current_frame > 0);
+        if (hdr_animation) {
+            view.presentation_policy = PresentationPolicy.HDR_PREFERRED;
+            assert (view.presentation_status == PresentationStatus.HDR_UNAVAILABLE);
+            view.presentation_policy = PresentationPolicy.AUTOMATIC;
+        }
         view.pause ();
         view.visible = false;
         view.visible = true;
         assert (!view.playing);
         view.play ();
-        yield delay (700);
+        if (view.document.loop_count == 0) yield delay (350);
+        else for (int i = 0; view.playing && i < 150; i++) yield delay (15);
         assert (view.playing == (view.document.loop_count == 0));
         view.play ();
         yield view.load_file (png);
@@ -156,7 +175,7 @@ int main (string[] args) {
     window.present ();
     var loop = new MainLoop ();
     int code = 0;
-    exercise_view.begin (view, other, args[1], args[2:args.length], (obj, result) => {
+    exercise_view.begin (view, other, args[1], args[2], args[3:args.length], (obj, result) => {
         try { exercise_view.end (result); }
         catch (Error e) { stderr.printf ("%s\n", e.message); code = 1; }
         loop.quit ();

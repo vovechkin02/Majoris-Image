@@ -13,6 +13,8 @@ private async void exercise (ImageView view, File image, File hdr, File? raw, st
     yield stream.close_async ();
     yield view.load_source (staged, options);
     assert (view.document.preview.width <= 256);
+    assert (view.scroll_zoom_mode == ScrollZoomMode.CONTROL);
+    view.accessible_description = "Selected image preview";
     var details = yield registry.inspect (staged);
     assert (details.width == view.document.width);
 
@@ -44,6 +46,8 @@ private async void exercise (ImageView view, File image, File hdr, File? raw, st
         }
         if (thumbnail_error != null) throw thumbnail_error;
         assert (view.document.hdr == (i % 2 == 0));
+        assert (view.accessible_description == "");
+        view.accessible_description = "Selected image preview";
         view.visible = false;
         view.visible = true;
     }
@@ -64,6 +68,10 @@ private async void exercise (ImageView view, File image, File hdr, File? raw, st
         assert (view.document.raw_state == RawState.RAW_PREVIEW_AVAILABLE);
     }
 
+    var swatch = new Bytes (new uint8[] { 32, 64, 128, 255 });
+    view.set_texture (new Gdk.MemoryTexture (1, 1, Gdk.MemoryFormat.R8G8B8A8, swatch, 4));
+    assert (view.document == null && view.image_width == 1 && view.presentation_status == PresentationStatus.SDR);
+
     var non_image = yield ImageSource.from_bytes (new Bytes ("plain text".data));
     try { yield view.load_source (non_image, options); assert_not_reached (); }
     catch (ImageError.UNSUPPORTED error) { }
@@ -76,10 +84,16 @@ int main (string[] args) {
     if (!Gtk.init_check ()) return 77;
     ImageView.register_type ();
     var builder = new Gtk.Builder.from_string (
-        "<interface><object class='MajorisImageView' id='preview'/></interface>", -1);
+        "<interface><object class='GtkScrolledWindow' id='layout'>" +
+        "<property name='hscrollbar-policy'>never</property><property name='child'>" +
+        "<object class='MajorisImageView' id='preview'>" +
+        "<property name='scroll-zoom-mode'>control</property><property name='height-request'>420</property>" +
+        "<accessibility><property name='label'>Image preview</property></accessibility>" +
+        "</object></property></object></interface>", -1);
     var view = (ImageView) builder.get_object ("preview");
     var window = new Gtk.Window ();
-    window.child = view;
+    window.set_default_size (520, 360);
+    window.child = (Gtk.ScrolledWindow) builder.get_object ("layout");
     window.present ();
     var loop = new MainLoop ();
     int status = 0;

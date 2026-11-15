@@ -2,8 +2,9 @@
 namespace MajorisImage {
     public enum ViewState { EMPTY, LOADING, PREVIEW_READY, READY, UNSUPPORTED, DECODER_UNAVAILABLE, CORRUPT, CANCELLED, ERROR }
     public enum FitMode { CONTAIN, WIDTH, HEIGHT, ACTUAL, COVER, CUSTOM }
+    public enum ScrollZoomMode { ALWAYS, CONTROL, DISABLED }
     public enum PresentationPolicy { AUTOMATIC, SDR, HDR_PREFERRED }
-    public enum PresentationStatus { NONE, SDR, SDR_TONE_MAPPED, NATIVE_HDR, HDR_UNAVAILABLE }
+    public enum PresentationStatus { NONE, SDR, SDR_TONE_MAPPED, NATIVE_HDR, HDR_UNAVAILABLE, EXTERNAL_UNVERIFIED }
 
     [CCode (cname = "majoris_image_texture_new", cheader_filename = "image-texture.h")]
     private extern static Gdk.Texture create_texture (Bytes bytes, int width, int height, size_t stride);
@@ -29,13 +30,16 @@ namespace MajorisImage {
         public PresentationPolicy presentation_policy { get; set; default = PresentationPolicy.AUTOMATIC; }
         public PresentationStatus presentation_status { get; private set; }
         public string presentation_diagnostic { get {
-            return document != null ? presented.diagnostic : "";
+            return texture != null ? presented.diagnostic : "";
         } }
         public bool animated { get; private set; }
         public bool playing { get; private set; }
         public int current_frame { get; private set; }
         public int frame_duration_ms { get; private set; }
         public FitMode fit_mode { get; set; default = FitMode.CONTAIN; }
+        public ScrollZoomMode scroll_zoom_mode { get; set; default = ScrollZoomMode.ALWAYS; }
+        /** Per-image description. Host-provided GTK accessible labels are independent. */
+        public string accessible_description { get; set; default = ""; }
         public bool allow_zoom { get; set; default = true; }
         public bool allow_pan { get; set; default = true; }
         public bool nearest_neighbour { get; set; }
@@ -57,7 +61,6 @@ namespace MajorisImage {
         private uint generation;
         private bool disposed;
         private bool playback_requested;
-        private bool animation_loading;
         private TileCache tiles = new TileCache ();
         private double custom_zoom = 1;
         private double pan_x;
@@ -82,9 +85,10 @@ namespace MajorisImage {
         private weak Gdk.Surface? watched_surface;
         private ulong entered_monitor;
         private ulong left_monitor;
-#if HAVE_GLYCIN
-        private Gly.Image? animation;
-#endif
+
+        static construct {
+            set_accessible_role (Gtk.AccessibleRole.IMG);
+        }
 
         public static void register_type () { typeof (ImageView).ensure (); }
 
@@ -93,6 +97,11 @@ namespace MajorisImage {
             vexpand = true;
             focusable = true;
             overflow = Gtk.Overflow.HIDDEN;
+            notify["accessible-description"].connect (update_accessible_description);
+            notify["state"].connect (() => {
+                update_accessible_description ();
+                update_state (Gtk.AccessibleState.BUSY, state == ViewState.LOADING, -1);
+            });
             notify["fit-mode"].connect (() => update_transform ());
             notify["nearest-neighbour"].connect (() => queue_draw ());
             tiles.changed.connect (() => queue_draw ());
@@ -114,11 +123,17 @@ namespace MajorisImage {
             var motion = new Gtk.EventControllerMotion ();
             motion.motion.connect ((x, y) => { pointer_x = x; pointer_y = y; });
             add_controller (motion);
-            var scroll = new Gtk.EventControllerScroll (Gtk.EventControllerScrollFlags.VERTICAL);
+            var scroll = new Gtk.EventControllerScroll (Gtk.EventControllerScrollFlags.BOTH_AXES);
+            scroll.propagation_phase = Gtk.PropagationPhase.BUBBLE;
             scroll.scroll.connect ((dx, dy) => {
-                if (!allow_zoom || texture == null) return false;
-                zoom_to (zoom * Math.pow (1.15, -dy), pointer_x, pointer_y);
-                return true;
+                var modifiers = scroll.get_current_event_state ();
+                if (scroll_zoom_mode == ScrollZoomMode.DISABLED || dy == 0 ||
+                    Math.fabs (dx) >= Math.fabs (dy) ||
+                    (modifiers & (Gdk.ModifierType.SHIFT_MASK | shortcut_modifiers ())) != 0 ||
+                    (scroll_zoom_mode == ScrollZoomMode.CONTROL &&
+                     (modifiers & Gdk.ModifierType.CONTROL_MASK) == 0))
+                    return false;
+                return interactive_zoom (zoom * Math.pow (1.15, -dy), pointer_x, pointer_y);
             });
             add_controller (scroll);
             var drag = new Gtk.GestureDrag ();
@@ -135,11 +150,12 @@ namespace MajorisImage {
             pinch.scale_changed.connect (scale => {
                 if (!allow_zoom) return;
                 double x, y;
-                if (pinch.get_bounding_box_center (out x, out y)) zoom_to (pinch_start * scale, x, y);
+                if (pinch.get_bounding_box_center (out x, out y)) interactive_zoom (pinch_start * scale, x, y);
             });
             add_controller (pinch);
             var click = new Gtk.GestureClick ();
             click.pressed.connect ((count, x, y) => {
+                grab_focus ();
                 if (allow_zoom && count == 2) {
                     if (fit_mode != FitMode.CONTAIN) fit_to_view ();
                     else zoom_to (1.0 / device_scale (), x, y);
@@ -148,18 +164,47 @@ namespace MajorisImage {
             add_controller (click);
             var keys = new Gtk.EventControllerKey ();
             keys.key_pressed.connect ((key, code, modifiers) => {
+                if (texture == null ||
+                    (modifiers & (shortcut_modifiers () | Gdk.ModifierType.CONTROL_MASK)) != 0)
+                    return false;
                 switch (key) {
-                case Gdk.Key.plus: case Gdk.Key.equal: if (allow_zoom) zoom_in (); return allow_zoom;
-                case Gdk.Key.minus: if (allow_zoom) zoom_out (); return allow_zoom;
-                case 0x30: if (allow_zoom) fit_to_view (); return allow_zoom;
-                case Gdk.Key.Left: if (allow_pan) pan_by (64, 0); return allow_pan;
-                case Gdk.Key.Right: if (allow_pan) pan_by (-64, 0); return allow_pan;
-                case Gdk.Key.Up: if (allow_pan) pan_by (0, 64); return allow_pan;
-                case Gdk.Key.Down: if (allow_pan) pan_by (0, -64); return allow_pan;
+                case Gdk.Key.plus: case Gdk.Key.equal: case Gdk.Key.KP_Add:
+                    return interactive_zoom (zoom * 1.25);
+                case Gdk.Key.minus: case Gdk.Key.KP_Subtract:
+                    return interactive_zoom (zoom / 1.25);
+                case 0x30: case Gdk.Key.KP_0:
+                    if (!allow_zoom) return false;
+                    fit_to_view ();
+                    return true;
+                case Gdk.Key.Left: return keyboard_pan (64, 0);
+                case Gdk.Key.Right: return keyboard_pan (-64, 0);
+                case Gdk.Key.Up: return keyboard_pan (0, 64);
+                case Gdk.Key.Down: return keyboard_pan (0, -64);
                 default: return false;
                 }
             });
             add_controller (keys);
+        }
+
+        private static Gdk.ModifierType shortcut_modifiers () {
+            return Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.META_MASK |
+                   Gdk.ModifierType.HYPER_MASK;
+        }
+
+        private void update_accessible_description () {
+            if (accessible_description != null && accessible_description != "")
+                update_property (Gtk.AccessibleProperty.DESCRIPTION, accessible_description, -1);
+            else if (texture != null)
+                update_property (Gtk.AccessibleProperty.DESCRIPTION, _("Image preview"), -1);
+            else
+                reset_property (Gtk.AccessibleProperty.DESCRIPTION);
+        }
+
+        private bool keyboard_pan (double x, double y) {
+            if (!allow_pan) return false;
+            double previous_x = pan_x, previous_y = pan_y;
+            pan_by (x, y);
+            return pan_x != previous_x || pan_y != previous_y;
         }
 
         private uint invalidate () {
@@ -172,12 +217,9 @@ namespace MajorisImage {
             playback_generation++;
             playback.cancel ();
             playback = new Cancellable ();
-            frame_pending = animation_loading = advance_due = manual_advance = false;
+            frame_pending = advance_due = manual_advance = false;
             prefetched = null;
             frames_presented = 0;
-#if HAVE_GLYCIN
-            animation = null;
-#endif
             animated = false;
             current_frame = frame_duration_ms = 0;
             tiles.reset (null);
@@ -188,9 +230,10 @@ namespace MajorisImage {
             if (!disposed) clear_request ();
         }
 
-        private uint clear_request () {
+        private uint clear_request (bool take_description = false) {
             freeze_notify ();
             uint request = invalidate ();
+            if (!take_description || state != ViewState.EMPTY) accessible_description = "";
             current_document = null;
             notify_property ("document");
             texture = null;
@@ -199,7 +242,9 @@ namespace MajorisImage {
             decoder = warning = error_message = "";
             hdr_source = false;
             notify_property ("presentation-diagnostic");
+            presented = {};
             presentation_status = PresentationStatus.NONE;
+            update_accessible_description ();
             state = ViewState.EMPTY;
             turns = 0;
             flipped_x = flipped_y = false;
@@ -212,14 +257,18 @@ namespace MajorisImage {
 
         public void set_texture (Gdk.Texture value) {
             if (disposed) return;
-            uint request = clear_request ();
+            var retained = value;
+            uint request = clear_request (true);
             if (!is_current (request)) return;
             freeze_notify ();
-            texture = value;
-            image_width = value.get_width ();
-            image_height = value.get_height ();
+            texture = retained;
+            image_width = retained.get_width ();
+            image_height = retained.get_height ();
             page_count = 1;
-            presentation_status = PresentationStatus.SDR;
+            bool external_hdr;
+            var decision = Presentation.external (retained, out external_hdr);
+            hdr_source = external_hdr;
+            publish_presentation (decision);
             state = ViewState.READY;
             thaw_notify ();
             if (is_current (request)) update_transform ();
@@ -227,18 +276,15 @@ namespace MajorisImage {
 
         public void set_document (ImageDocument value) {
             if (disposed) return;
-            uint request = clear_request ();
-            if (is_current (request)) apply_document.begin (value, request, pending);
+            var retained = value;
+            uint request = clear_request (true);
+            if (is_current (request)) apply_document.begin (retained, request, pending);
         }
 
         private async void apply_document (ImageDocument value, uint request, Cancellable stop) {
             state = ViewState.LOADING;
             try {
                 yield present_document (value, request, stop);
-#if HAVE_GLYCIN
-                if (is_current (request) && use_streaming_loader (value))
-                    yield prepare_animation (value.source.file, request, playback);
-#endif
             }
             catch (Error e) { if (is_current (request)) show_error (e); }
         }
@@ -246,13 +292,24 @@ namespace MajorisImage {
         private bool is_current (uint request) { return !disposed && request == generation; }
 
         private async void present_document (ImageDocument value, uint request, Cancellable stop) throws Error {
+            string animation_error = "";
+            if (can_play (value) && value.mime_type == "image/apng" && value.decoder != "Glycin") {
+                try {
+                    value = yield value.open_frame (value.frame, stop);
+                    if (value.decoder != "Glycin") animation_error = _("APNG animation requires Glycin.");
+                }
+                catch (Error error) {
+                    if (error is IOError.CANCELLED) throw error;
+                    animation_error = _("Animation unavailable: ") + error.message;
+                }
+            }
             while (is_current (request)) {
                 var decision = Presentation.inspect (this, presentation_policy, value.hdr);
                 var pixels = yield Presentation.pixels (value, decision, stop);
                 stop.set_error_if_cancelled ();
                 var latest = Presentation.inspect (this, presentation_policy, value.hdr);
                 if (decision.tone_map != latest.tone_map) continue;
-                if (is_current (request)) show_document (value, pixels, latest);
+                if (is_current (request)) show_document (value, pixels, latest, animation_error);
                 return;
             }
         }
@@ -294,7 +351,14 @@ namespace MajorisImage {
 
         private void update_presentation () {
             var source = frame_source ?? document;
-            if (disposed || source == null) return;
+            if (disposed) return;
+            if (source == null) {
+                if (texture != null) {
+                    bool external_hdr;
+                    publish_presentation (Presentation.external (texture, out external_hdr));
+                }
+                return;
+            }
             var decision = Presentation.inspect (this, presentation_policy, source.hdr);
             cancel_presentation ();
             if (presented.tone_map == decision.tone_map) {
@@ -331,7 +395,13 @@ namespace MajorisImage {
             }
         }
 
-        private void show_document (ImageDocument value, PixelBuffer pixels, PresentationDecision decision) {
+        private static bool can_play (ImageDocument value) {
+            return value.animated && value.frame_count > 1 &&
+                (value.capabilities & ImageCapabilities.ANIMATION) != 0;
+        }
+
+        private void show_document (ImageDocument value, PixelBuffer pixels, PresentationDecision decision,
+                                    string animation_error) {
             uint request = generation;
             freeze_notify ();
             cancel_presentation ();
@@ -344,10 +414,10 @@ namespace MajorisImage {
             page_count = value.page_count;
             current_page = value.page;
             decoder = value.decoder;
-            warning = value.warning;
+            warning = animation_error != "" ? animation_error : value.warning;
             metadata = value.metadata;
             hdr_source = value.hdr;
-            animated = value.animated;
+            animated = can_play (value) && animation_error == "";
             current_frame = value.frame;
             frame_duration_ms = value.frame_duration_ms;
             frame_delay = value.frame_duration_us;
@@ -366,7 +436,7 @@ namespace MajorisImage {
         public async void load_source (ImageSource source, DecodeOptions? options = null,
                                         Cancellable? cancel = null) throws Error {
             if (disposed) throw new IOError.CLOSED ("Image view is disposed");
-            uint request = clear_request ();
+            uint request = clear_request (true);
             if (!is_current (request)) throw new IOError.CANCELLED ("Image request was replaced");
             var stop = pending;
             ulong handler = cancel != null ? cancel.connect (() => stop.cancel ()) : 0;
@@ -390,10 +460,6 @@ namespace MajorisImage {
                     var result = yield registry.open (source, decode, stop);
                     stop.set_error_if_cancelled ();
                     if (is_current (request)) yield present_document (result, request, stop);
-#if HAVE_GLYCIN
-                    if (is_current (request) && use_streaming_loader (result))
-                        yield prepare_animation (source.file, request, playback);
-#endif
                 } catch (Error e) {
                     if (preview == null || stop.is_cancelled ()) throw e;
                     if (is_current (request)) warning = "Full RAW development failed: " + e.message;
@@ -434,51 +500,18 @@ namespace MajorisImage {
             } finally { if (handler != 0) cancel.disconnect (handler); }
         }
 
-#if HAVE_GLYCIN
-        private bool use_streaming_loader (ImageDocument value) {
-            // Sequential Glycin loading is inexpensive for the established
-            // GIF, WebP and APNG loaders. Other decoders use indexed documents.
-            return !value.hdr && value.frame == 0 && value.mime_type in new string[] {
-                "image/png", "image/apng", "image/gif", "image/webp" };
-        }
-
-        private async void prepare_animation (File file, uint request, Cancellable stop) {
-            if (animation_loading || !is_current (request)) return;
-            animation_loading = true;
-            try {
-                var loader = new Gly.Loader (file);
-                loader.set_sandbox_selector (Gly.SandboxSelector.BWRAP);
-                var image = yield loader.load_async (stop);
-                if ((uint64) image.get_width () * image.get_height () > 16777216) return;
-                var frame = yield image.next_frame_async (stop);
-                if (!is_current (request) || stop.is_cancelled () || frame.get_delay () <= 0 || frame.get_delay () == int64.MAX) return;
-                freeze_notify ();
-                animation = image;
-                frames_presented = 1;
-                current_frame = 0;
-                animated = true;
-                frame_delay = frame.get_delay ();
-                frame_duration_ms = (int) (frame_delay / 1000).clamp (0, int.MAX);
-                texture = GlyGtk4.frame_get_texture (frame);
-                tiles.reset (null);
-                queue_draw ();
-                thaw_notify ();
-            } catch (Error e) {
-                if (is_current (request) && document != null && document.animated && !stop.is_cancelled ())
-                    warning = "Animation unavailable: " + e.message;
-            } finally { if (is_current (request)) animation_loading = false; }
-        }
-#endif
-
         public void play () {
             if (disposed || !animated) return;
             playback_requested = true;
             if (playing || !get_mapped ()) return;
             playing = true;
             if (playback_finished ()) {
+                uint request = generation;
                 seek_frame.begin (0, null, (object, reply) => {
                     try { seek_frame.end (reply); }
-                    catch (Error error) { if (!(error is IOError.CANCELLED)) warning = error.message; }
+                    catch (Error error) {
+                        if (is_current (request) && !(error is IOError.CANCELLED)) warning = error.message;
+                    }
                 });
             } else schedule_frame ();
         }
@@ -504,7 +537,7 @@ namespace MajorisImage {
         /** Seek within the active timed sequence. Older frame requests are cancelled. */
         public async void seek_frame (int frame, Cancellable? cancel = null) throws Error {
             var source = document;
-            if (disposed || source == null || !source.animated || frame < 0 || frame >= source.frame_count)
+            if (disposed || source == null || !animated || frame < 0 || frame >= source.frame_count)
                 throw new IOError.INVALID_ARGUMENT ("Frame is outside the active sequence");
             if (animation_timer != 0) { Source.remove (animation_timer); animation_timer = 0; }
             playback_generation++;
@@ -515,9 +548,6 @@ namespace MajorisImage {
             prefetched = null;
             advance_due = manual_advance = false;
             frame_pending = true;
-#if HAVE_GLYCIN
-            animation = null;
-#endif
             uint request = generation, seek = playback_generation;
             try {
                 var loaded = yield load_frame (source, frame, stop);
@@ -591,13 +621,6 @@ namespace MajorisImage {
         }
 
         private async AnimationFrame load_frame (ImageDocument source, int index, Cancellable stop) throws Error {
-#if HAVE_GLYCIN
-            var stream = animation;
-            if (stream != null) {
-                var loaded = yield stream.next_frame_async (stop);
-                return new AnimationFrame (GlyGtk4.frame_get_texture (loaded), loaded.get_delay ());
-            }
-#endif
             var frame = yield source.open_frame (index, stop);
             while (true) {
                 var decision = Presentation.inspect (this, presentation_policy, frame.hdr);
@@ -676,11 +699,22 @@ namespace MajorisImage {
             update_transform ();
         }
 
-        public void zoom_to (double value, double x = -1, double y = -1) {
-            if (texture == null || !value.is_finite ()) return;
+        private double bounded_zoom (double value) {
             double low = minimum_zoom.is_finite () ? minimum_zoom.clamp (0.001, 64) : 0.01;
             double high = maximum_zoom.is_finite () ? maximum_zoom.clamp (low, 64) : 64;
-            double next = value.clamp (low, high);
+            return value.clamp (low, high);
+        }
+
+        private bool interactive_zoom (double value, double x = -1, double y = -1) {
+            if (!allow_zoom || texture == null || !value.is_finite () || bounded_zoom (value) == zoom)
+                return false;
+            zoom_to (value, x, y);
+            return true;
+        }
+
+        public void zoom_to (double value, double x = -1, double y = -1) {
+            if (texture == null || !value.is_finite ()) return;
+            double next = bounded_zoom (value);
             double anchor_x = x >= 0 ? x - get_width () / 2.0 : 0;
             double anchor_y = y >= 0 ? y - get_height () / 2.0 : 0;
             double ratio = next / zoom;
@@ -732,7 +766,7 @@ namespace MajorisImage {
             snapshot.rotate (90 * turns);
             snapshot.scale (flipped_x ? -1 : 1, flipped_y ? -1 : 1);
             var preview_rect = bounds (offset_x, offset_y, -2 * offset_x, -2 * offset_y);
-            if (animated || texture.get_width () >= image_width * pixel_zoom && (document == null || !document.vector)) {
+            if (document == null || animated || texture.get_width () >= image_width * pixel_zoom && (document == null || !document.vector)) {
                 snapshot.append_scaled_texture (texture, filter, preview_rect);
                 snapshot.restore ();
                 return;

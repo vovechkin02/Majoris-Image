@@ -1,4 +1,4 @@
-project('majoris-image', ['c', 'cpp', 'vala'], version: '1.1.2',
+project('majoris-image', ['c', 'cpp', 'vala'], version: '1.1.3',
   license: 'GPL-3.0-or-later', meson_version: '>=1.4',
   default_options: ['c_std=gnu11', 'cpp_std=c++17', 'warning_level=1'])
 

@@ -1,3 +1,9 @@
+majoris-image (1.1.3) unstable; urgency=medium
+
+  * Finalise GTK viewport input, accessibility and colour-aware presentation.
+
+ -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 17:00:00 +1100
+
 majoris-image (1.1.2) unstable; urgency=medium
 
   * Register installed thumbnail codecs through Debian package triggers.

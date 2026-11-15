@@ -49,6 +49,17 @@ namespace MajorisImage {
             return result;
         }
 
+        [CCode (cname = "majoris_image_texture_external_description", cheader_filename = "image-texture.h")]
+        private extern static unowned string external_description (Gdk.Texture texture, out bool sdr, out bool hdr);
+
+        internal static PresentationDecision external (Gdk.Texture texture, out bool hdr) {
+            PresentationDecision decision = {};
+            bool sdr;
+            decision.diagnostic = external_description (texture, out sdr, out hdr);
+            decision.status = sdr ? PresentationStatus.SDR : PresentationStatus.EXTERNAL_UNVERIFIED;
+            return decision;
+        }
+
         internal static async PixelBuffer pixels (ImageDocument document, PresentationDecision decision,
                                                    Cancellable stop) throws Error {
             return yield document.render_preview (decision.tone_map, stop);

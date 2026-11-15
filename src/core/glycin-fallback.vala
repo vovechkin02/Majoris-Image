@@ -116,7 +116,7 @@ namespace MajorisImage {
                 bool known_header = colour.get_boolean_member_with_default ("header-read", false);
                 // PNG sRGB has no ICC transform to observe. The PNG loader publishes
                 // its encoded samples in the declared sRGB space on this path.
-                var provenance = mime == "image/png" && colour.get_boolean_member_with_default ("explicit-srgb", false)
+                var provenance = (mime == "image/png" || mime == "image/apng") && colour.get_boolean_member_with_default ("explicit-srgb", false)
                     ? GlycinColourProvenance.TAGGED_SRGB
                     : tagged ? GlycinColourProvenance.ICC_CONVERSION_UNVERIFIED
                     : known_header ? GlycinColourProvenance.ASSUMED_SRGB : GlycinColourProvenance.UNKNOWN;

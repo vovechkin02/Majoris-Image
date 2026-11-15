@@ -3,8 +3,9 @@
 
 int main(int argc, char **argv)
 {
-    if (argc != 9 || VIPS_INIT(argv[0])) return 1;
+    if (argc != 10 || VIPS_INIT(argv[0])) return 1;
     VipsImage *black = NULL, *mid = NULL, *tiff = NULL, *raster = NULL;
+    VipsImage *still = NULL;
     VipsImage *working = NULL, *profiled = NULL, *gray = NULL;
     g_autoptr(GError) error = NULL;
     int rc = 1;
@@ -30,6 +31,8 @@ int main(int argc, char **argv)
     int alternate[] = {40, 170, 250};
     vips_image_set_array_int(raster, "delay", alternate, 3);
     if (vips_webpsave(raster, argv[3], "lossless", TRUE, NULL)) goto done;
+    still = vips_image_new_from_memory(pixels, 8 * 8 * 3, 8, 8, 3, VIPS_FORMAT_UCHAR);
+    if (!still || vips_webpsave(still, argv[9], "lossless", TRUE, NULL)) goto done;
     if (vips_type_find("VipsOperation", "jp2ksave")) {
         VipsImage *first = NULL;
         if (vips_crop(raster, &first, 0, 0, 8, 8, NULL)) goto done;
@@ -67,6 +70,7 @@ int main(int argc, char **argv)
     if (vips_pngsave(gray, argv[8], "bitdepth", 16, NULL)) goto done;
     rc = 0;
 done:
+    g_clear_object(&still);
     g_clear_object(&gray);
     if (rc) g_printerr("%s\n", vips_error_buffer());
     g_clear_object(&profiled);

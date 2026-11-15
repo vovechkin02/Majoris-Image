@@ -7,7 +7,7 @@ if get_option('tests')
   fixture_dir = meson.current_source_dir() / 'fixtures'
   fixture_maker = executable('make-fixtures', 'make-fixtures.c', dependencies: native_api)
   fixtures = custom_target('large and animated fixtures',
-    output: ['large.tiff', 'animated.gif', 'animated.webp', 'jpeg2000.jp2', 'profiled.png', 'profiled.tiff', 'adobe.png', 'gray-profile.png'],
+    output: ['large.tiff', 'animated.gif', 'animated.webp', 'jpeg2000.jp2', 'profiled.png', 'profiled.tiff', 'adobe.png', 'gray-profile.png', 'still.webp'],
     command: [fixture_maker, '@OUTPUT@'])
   python = find_program('python3')
   fs = import('fs')
@@ -16,8 +16,8 @@ if get_option('tests')
       'orientation-1.tiff', 'orientation-2.tiff', 'orientation-3.tiff', 'orientation-4.tiff',
       'orientation-5.tiff', 'orientation-6.tiff', 'orientation-7.tiff', 'orientation-8.tiff',
       'fallback.bmp', 'fallback.ico', 'fallback.tga', 'fallback.dds', 'fallback.pgm', 'invalid-profile.png', 'srgb.png', 'cicp.png',
-      'infinite.heic', 'offset.heic', 'invalid-timing.heic', 'rate.heic', 'composition.heic', 'trimmed.heic', 'linear.qoi', 'partial-repeat.heic'],
-    command: [python, '@INPUT@', '@OUTPUT@'])
+      'infinite.heic', 'offset.heic', 'invalid-timing.heic', 'rate.heic', 'composition.heic', 'trimmed.heic', 'linear.qoi', 'partial-repeat.heic', 'wide.apng'],
+    command: [python, '@INPUT@', fixtures[4], '@OUTPUT@'])
   decoder_test = executable('test-decoders', 'decoders.vala', dependencies: core_api)
 
   worker_env = environment({'MAJORIS_IMAGE_WORKER': worker.full_path(),
@@ -62,16 +62,28 @@ if get_option('tests')
     texture_test = executable('test-image-texture', 'image-texture.c',
       include_directories: include_directories('../src/gtk'), dependencies: gtk_api)
     test('GDK floating-point texture colour state', texture_test)
+    xtst = dependency('xtst', required: false)
+    x11 = dependency('x11', required: false)
+    gtk_x11 = dependency('gtk4-x11', required: false)
+    if xvfb.found() and xtst.found() and x11.found() and gtk_x11.found()
+      interaction = executable('test-widget-interaction', 'widget-interaction.c',
+        dependencies: [gtk_api, gtk_x11, xtst, x11])
+      foreach scale : ['1', '2']
+        input_env = environment({'GDK_BACKEND': 'x11', 'GDK_SCALE': scale, 'GTK_A11Y': 'test'})
+        test('GTK input and accessibility at scale ' + scale, xvfb,
+          args: ['-a', '-s', '-screen 0 1920x1200x24', interaction], env: input_env, timeout: 30)
+      endforeach
+    endif
     viewer_test = executable('test-image-view', 'viewer.vala', dependencies: gtk_api)
-    viewer_args = [fixture_dir, fixtures[1], fixtures[2]]
+    viewer_args = [fixture_dir, fixtures[8], fixtures[1], fixtures[2]]
     if avif_sequence.found()
-      viewer_args += [fixture_dir / 'avif-sequence.avif']
+      viewer_args += [fixture_dir / 'avif-sequence.avif', fixture_dir / 'avif-hdr-sequence.avif']
     endif
     if heif_sequence
       viewer_args += [fixture_dir / 'heic-sequence.heic']
     endif
-    if glycin.found() and glycin_gtk.found()
-      viewer_args += [extra_formats[1]]
+    if glycin.found()
+      viewer_args += [extra_formats[1], extra_formats[26]]
     endif
     workflow_sequences = []
     if avif_sequence.found()

@@ -7,8 +7,8 @@ trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/fil
 cd "$scratch"
 unset MAJORIS_IMAGE_WORKER
 
-pkg-config --atleast-version=1.1.2 majoris-image-1
-pkg-config --atleast-version=1.1.2 majoris-image-gtk4-1
+pkg-config --atleast-version=1.1.3 majoris-image-1
+pkg-config --atleast-version=1.1.3 majoris-image-gtk4-1
 valac --pkg majoris-image-1 "$source_root/tests/benchmark.vala" -o headless
 ./headless open "$source_root/tests/fixtures/rgb16.png"
 if ldd ./headless | grep -E 'libgtk|libgdk-'; then
@@ -61,9 +61,17 @@ Gtk.init()
 assert MajorisImage.DecoderRegistry()
 MajorisImageGtk.ImageView.register_type()
 builder = Gtk.Builder.new_from_string(
-    "<interface><object class='MajorisImageView' id='view'/></interface>", -1
+    "<interface><object class='MajorisImageView' id='view'>"
+    "<property name='scroll-zoom-mode'>control</property>"
+    "<property name='accessible-description'>Selected image</property>"
+    "</object></interface>", -1
 )
-assert isinstance(builder.get_object("view"), MajorisImageGtk.ImageView)
+view = builder.get_object("view")
+assert isinstance(view, MajorisImageGtk.ImageView)
+assert view.props.scroll_zoom_mode == MajorisImageGtk.ScrollZoomMode.CONTROL
+assert view.props.accessible_description == "Selected image"
+assert view.get_accessible_role() == Gtk.AccessibleRole.IMG
+assert MajorisImageGtk.PresentationStatus.EXTERNAL_UNVERIFIED
 PY
 
 /usr/libexec/majoris-image-thumbnailer "file://$source_root/tests/fixtures/rgb16.png" thumbnail.png 128

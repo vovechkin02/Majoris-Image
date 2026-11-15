@@ -86,19 +86,25 @@ namespace MajorisImage {
         public async ImageDocument open_frame (int index, Cancellable? cancel = null) throws Error {
             if (!animated || index < 0 || index >= frame_count)
                 throw new IOError.INVALID_ARGUMENT ("Frame is outside the animation");
-            return yield open_index (index, cancel);
+            return yield open_index (index, cancel, true);
         }
 
-        private async ImageDocument open_index (int index, Cancellable? cancel) throws Error {
+        private async ImageDocument open_index (int index, Cancellable? cancel, bool animation_frame = false) throws Error {
             var stop = cancel ?? new Cancellable ();
             yield verify_source (stop);
             if (decoder == "Glycin" && !animated && index == 0) return this;
             var requested = options.copy ();
             requested.page = index;
             if (decoder == "libheif-sequence") requested.sequence_frames = frame_count;
-            if (animated && mime_type == "image/apng" && index != frame)
-                return yield GlycinFallback.open (source, requested, stop,
-                    new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"), 120, probe);
+            if (animated && mime_type == "image/apng" && (index != frame || (animation_frame && decoder != "Glycin"))) {
+                try {
+                    return yield GlycinFallback.open (source, requested, stop,
+                        new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"), 120, probe);
+                } catch (ImageError.CODEC_MISSING error) {
+                    if (index == frame) return this;
+                    throw error;
+                }
+            }
             if (animated && index == frame) return this;
             return yield DecoderRegistry.open_with (worker, source, requested, stop);
         }

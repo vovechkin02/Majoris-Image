@@ -80,9 +80,16 @@ int main(int argc, char **argv)
         "<interface><object class='MajorisImageView' id='view'>"
         "<property name='fit-mode'>contain</property>"
         "<property name='allow-zoom'>true</property>"
+        "<property name='scroll-zoom-mode'>control</property>"
+        "<property name='accessible-description'>Selected image</property>"
         "</object></interface>", -1);
     GObject *view = gtk_builder_get_object(builder, "view");
     if (!MAJORIS_IMAGE_IS_IMAGE_VIEW(view)) return 1;
+    MajorisImageView *image_view = MAJORIS_IMAGE_IMAGE_VIEW(view);
+    if (majoris_image_image_view_get_scroll_zoom_mode(image_view) != MAJORIS_IMAGE_SCROLL_ZOOM_MODE_CONTROL ||
+        gtk_accessible_get_accessible_role(GTK_ACCESSIBLE(view)) != GTK_ACCESSIBLE_ROLE_IMG ||
+        g_strcmp0(majoris_image_image_view_get_accessible_description(image_view), "Selected image") != 0)
+        return 1;
     if (argc == 1) return 0;
 
     g_autoptr(GMainLoop) loop = g_main_loop_new(NULL, FALSE);

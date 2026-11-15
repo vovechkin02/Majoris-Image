@@ -12,15 +12,20 @@ private async void exercise (ImageView view, File large, File next, File destina
 
     var document = yield registry.open (source, options);
     assert (document.supports_regions && document.width > 10000 && document.bit_depth >= 16);
+    assert (view.scroll_zoom_mode == ScrollZoomMode.ALWAYS);
     view.set_document (document);
+    view.accessible_description = "High-resolution image";
     view.zoom_to (1.0);
     view.pan_by (-512, -128);
+    view.rotate_clockwise ();
+    view.rotate_counterclockwise ();
     var region = yield document.render_region (10000, 5000, 128, 128, 128);
     assert (region.width == 128 && region.height == 128);
     view.fit_to_view ();
 
     yield view.load_source (next_source, options);
-    assert (view.document.hdr);
+    assert (view.document.hdr && view.accessible_description == "");
+    view.accessible_description = "High-dynamic-range image";
     view.presentation_policy = PresentationPolicy.SDR;
     var sdr = yield view.document.render_region (0, 0, view.document.width, view.document.height, 64, true);
     assert (sdr.width > 0);

@@ -141,6 +141,74 @@ application controls. Use the UI thread for GTK properties and operations.
 `actual_size()` targets one source pixel per surface pixel, including
 fractional device scaling. The widget uses the application's GTK theme.
 
+### Input and accessibility
+
+The wheel policy is local to each view. `ScrollZoomMode.ALWAYS` is the
+default. Use `CONTROL` inside a scrolling pane, or `DISABLED` to give
+the surrounding UI every wheel event. Plain and horizontal scroll,
+unrelated modifier combinations, and attempts to zoom past a limit propagate
+when the viewer does not handle them. GTK pinch gestures remain available
+in all three modes. `allow_zoom` controls interactive wheel, pinch, and
+keyboard zoom.
+
+```xml
+<object class="MajorisImageView" id="preview">
+  <property name="scroll-zoom-mode">control</property>
+  <accessibility>
+    <property name="label" translatable="yes">Image preview</property>
+  </accessibility>
+</object>
+```
+
+The view exposes GTK's image accessibility role and the standard busy
+state during loading. The host can supply a persistent label using GTK
+accessibility properties, and a per-image description using
+`accessible_description`. Source replacement and `clear()` retire the
+old description. A description configured while the viewer is empty
+applies to its first image. Page changes retain the description.
+The generic description is “Image preview” when content is displayed.
+The view does not derive descriptions from file paths or EXIF fields.
+
+```vala
+view.scroll_zoom_mode = MajorisImage.ScrollZoomMode.CONTROL;
+yield view.load_file (selected_file);
+view.accessible_description = description_for_selected_image;
+```
+
+Use Tab or click to focus the viewport. `+` and `=` zoom in, `-` zooms out,
+`0` fits the image, and the arrows pan. The keypad zoom and fit equivalents
+also work. Disabled actions, arrows at a pan limit, and unrelated shortcuts
+propagate. Applications can observe `state`, `warning` and `error-message`
+to provide status UI. Test screen-reader announcements and physical pinch
+gestures with the target desktop session.
+
+### Animation and external textures
+
+Playback requires a confirmed multi-frame document. The viewer decodes
+GIF, WebP, AVIF and HEIF frames with `ImageDocument.open_frame()`. APNG uses
+Glycin's composited buffers through that same API, from its first frame.
+When Glycin cannot provide a compatible frame, the view retains the still
+preview with an animation diagnostic. The viewer has no separate streaming
+GDK texture path. Frame presentation uses the same float buffer, HDR policy,
+texture factory, and generation checks as still images. Indexed APNG
+requests may replay earlier source frames inside Glycin. The viewer keeps
+one prefetched frame and cancels obsolete requests.
+
+`set_texture()` retains the original GDK texture and its declared colour
+state. An sRGB texture reports SDR. Linear sRGB, Rec. 2100 PQ, linear Rec. 2100,
+and other colour states are reported as `EXTERNAL_UNVERIFIED`. Rec. 2100 tags
+set `hdr_source` and describe the input encoding. The actual HDR range and
+monitor output remain unverified. GTK draws the original texture using its
+colour state. The view needs an `ImageDocument` for its own tone mapping and
+source-resolution tiles.
+
+The internal explicit-state constructor accepts prepared straight-alpha
+float32 RGBA and a GDK colour state that describes those samples. Document
+previews, tiles and animation frames currently provide linear sRGB.
+The constructor validates the layout. It does not perform a colour conversion.
+A future verified HDR backend must supply pixels converted to its chosen
+encoding and separately establish compositor output support.
+
 ## HDR and format coverage
 
 The worker converts source ICC or known CICP colour descriptions into linear

@@ -16,9 +16,9 @@ def rgba(pixels):
     return zlib.compress(b"\0" + bytes(pixels))
 
 
-qoi, apng, *formats = map(pathlib.Path, sys.argv[1:])
+profiled, qoi, apng, *formats = map(pathlib.Path, sys.argv[1:])
 oriented = formats[:8]
-bmp, ico, tga, dds, pgm, bad_icc, srgb, cicp, indefinite, offset_edit, invalid_timing, rate_edit, composition, trimmed, qoi_linear, partial_repeat = formats[8:]
+bmp, ico, tga, dds, pgm, bad_icc, srgb, cicp, indefinite, offset_edit, invalid_timing, rate_edit, composition, trimmed, qoi_linear, partial_repeat, wide_apng = formats[8:]
 # Two independently encoded pixels with different transparency.
 qoi.write_bytes(
     b"qoif" + struct.pack(">IIBB", 2, 1, 4, 0)
@@ -164,3 +164,18 @@ fractional = bytearray(heic)
 for tag in (b"tkhd", b"mvhd"):
     struct.pack_into(">I", fractional, heic.index(tag) + 20, 270)
 partial_repeat.write_bytes(fractional)
+
+
+# The native fixture maker supplies a real Display P3 profile.
+profile_png = profiled.read_bytes()
+offset = 8
+while offset + 12 <= len(profile_png):
+    length, kind = struct.unpack_from(">I4s", profile_png, offset)
+    end = offset + length + 12
+    if kind == b"iCCP":
+        source = apng.read_bytes()
+        wide_apng.write_bytes(source[:33] + profile_png[offset:end] + source[33:])
+        break
+    offset = end
+else:
+    raise ValueError("Display P3 fixture has no embedded profile")

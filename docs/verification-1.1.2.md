@@ -1,5 +1,7 @@
 # Majoris Image 1.1.2 verification
 
+See [1.1.3 widget verification](verification-1.1.3.md) for the current release.
+
 | Area | Changes | Main files |
 | --- | --- | --- |
 | Desktop thumbnails | Debian creates the system descriptor from the installed native catalogue and system Glycin loaders. Codec package transactions refresh it atomically. Package removal cleans it up. The build installs a reproducible baseline for standalone Meson deployments. The thumbnailer continues to validate each source and share the existing cache. | `src/thumbnail/{meson.build,mime-registration.c}`, `native/codec-catalogue.c`, `debian/majoris-image-thumbnailer.*`, `debian/rules`, `tests/thumbnail-registration.py` |

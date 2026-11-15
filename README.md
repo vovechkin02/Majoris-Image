@@ -49,7 +49,7 @@ consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
 
 See the [integration examples and ABI 1 capability matrix](docs/api-1.md) for formats,
-sandbox requirements and integration examples. The [1.1.2 verification report](docs/verification-1.1.2.md) records the build, package and test results.
+sandbox requirements and integration examples. The [1.1.3 verification report](docs/verification-1.1.3.md) records the build, package and test results.
 
 On Debian, the thumbnailer package generates its desktop entry from the
 installed system codecs. Package triggers refresh it when loader packages
@@ -61,11 +61,17 @@ Create a source release with Git metadata so Debian rules retain their
 executable mode. From a committed release tree, use:
 
 ```sh
-git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-1.1.2/ HEAD > majoris-image-1.1.2.tar.gz
-tar -tvf majoris-image-1.1.2.tar.gz | grep 'debian/rules$'
+git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-1.1.3/ HEAD > majoris-image-1.1.3.tar.gz
+tar -tvf majoris-image-1.1.3.tar.gz | grep 'debian/rules$'
 ```
 
 Extract and build on a Linux filesystem that preserves executable permissions.
+
+The GtkBuilder demo uses ordinary wheel zoom. The Files-style example embeds
+the view in a scrolling pane and assigns Ctrl+wheel zoom. The Photos-style
+example uses the default wheel policy. The [widget guide](docs/api-1.md)
+documents shortcuts, per-image accessible descriptions, animations and
+external texture reporting.
 
 ## Licence
 

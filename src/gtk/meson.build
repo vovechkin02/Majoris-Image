@@ -1,11 +1,6 @@
 gtk = dependency('gtk4', version: '>=4.16')
-glycin_gtk = dependency('glycin-gtk4-1', required: get_option('glycin'))
 gtk_deps = [core_api, gtk, gee, math]
 gtk_flags = ['--shared-library=libmajoris-image-gtk4.so.1', '--hide-internal']
-if glycin.found() and glycin_gtk.found()
-  gtk_deps += [glycin, glycin_gtk]
-  gtk_flags += ['--define=HAVE_GLYCIN']
-endif
 
 gtk_library = shared_library('majoris-image-gtk4',
   'image-view.vala', 'tile-cache.vala', 'presentation.vala', 'image-texture.c',

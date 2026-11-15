@@ -26,6 +26,8 @@
         </child>
         <child>
           <object class="MajorisImageView" id="viewer">
+            <property name="scroll-zoom-mode">always</property>
+            <accessibility><property name="label" translatable="yes">Image viewer</property></accessibility>
             <property name="fit-mode">contain</property>
             <property name="allow-zoom">true</property>
             <property name="allow-pan">true</property>

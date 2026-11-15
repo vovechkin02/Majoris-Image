@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+case "$1" in
+    remove|purge|abort-install|disappear)
+        rm -f -- /usr/share/thumbnailers/majoris-image.thumbnailer
+        rmdir --ignore-fail-on-non-empty /usr/share/thumbnailers 2>/dev/null || true
+        ;;
+esac
+
+#DEBHELPER#

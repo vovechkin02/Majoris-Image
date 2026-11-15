@@ -123,7 +123,7 @@ char *majoris_codec_codec_json(void)
     }
 #ifdef MAJORIS_AVIF_SEQUENCE
     if (avifCodecName(AVIF_CODEC_CHOICE_AUTO, AVIF_CODEC_FLAG_CAN_DECODE))
-        add_backend(builder, "libavif-sequence", "image/avif;image/avif-sequence", 1 | 2 | 8 | 16 | 64 | 256);
+        add_backend(builder, "libavif-sequence", "image/avif-sequence", 1 | 2 | 8 | 16 | 64 | 256);
 #endif
 #ifdef MAJORIS_HEIF_SEQUENCE
     if (heif_have_decoder_for_format(heif_compression_HEVC))

@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+case "$1" in
+    configure|triggered)
+        directory=/usr/share/thumbnailers
+        baseline=/usr/share/majoris-image/majoris-image.thumbnailer
+        descriptor=$directory/majoris-image.thumbnailer
+        install -d -m 755 "$directory"
+        temporary=$(mktemp "$directory/.majoris-image.XXXXXX")
+        trap 'rm -f -- "$temporary"' EXIT
+        if ! env -i PATH=/usr/bin:/bin HOME=/nonexistent XDG_DATA_HOME=/nonexistent \
+            XDG_DATA_DIRS=/usr/share /usr/libexec/majoris-image-thumbnail-types \
+            "$baseline" "$temporary" /usr/libexec/majoris-image-thumbnailer system; then
+            cp -- "$baseline" "$temporary"
+        fi
+        if ! cmp -s -- "$temporary" "$descriptor"; then
+            chmod 644 "$temporary"
+            mv -fT -- "$temporary" "$descriptor"
+        fi
+        ;;
+esac
+
+#DEBHELPER#

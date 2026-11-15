@@ -16,7 +16,13 @@ private async void exercise (ImageView view, File image, File hdr, File? raw, st
     var details = yield registry.inspect (staged);
     assert (details.width == view.document.width);
 
-    for (int i = 0; i < 24; i++) {
+    int iterations = 24;
+    var stress = Environment.get_variable ("MAJORIS_FILES_SWITCH_COUNT");
+    if (stress != null) {
+        int parsed;
+        if (int.try_parse (stress, out parsed)) iterations = parsed.clamp (24, 512);
+    }
+    for (int i = 0; i < iterations; i++) {
         var stop = new Cancellable ();
         var next = i % 2 == 0 ? hdr : image;
         view.load_file.begin (image, options, stop, (obj, result) => {

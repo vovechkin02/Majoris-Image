@@ -1,0 +1,3 @@
+interest-noawait /usr/share/glycin-loaders
+interest-noawait /usr/libexec/glycin-loaders
+interest-noawait /usr/share/mime/packages

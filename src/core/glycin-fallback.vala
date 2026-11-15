@@ -1,5 +1,5 @@
 namespace MajorisImage {
-    internal enum GlycinColourProvenance { TAGGED_SRGB, ICC_CONVERSION_UNVERIFIED, ASSUMED_SRGB, UNKNOWN }
+    internal enum GlycinColourProvenance { TAGGED_SRGB, ICC_CONVERSION_UNVERIFIED, ASSUMED_SRGB, UNKNOWN, TAGGED_QOI_SRGB, QOI_LINEAR }
     internal class GlycinFallback : Object {
         // Glycin 1 does not expose ICC, transfer functions, page counts or source depth.
         // Negotiate decoder capabilities using the installed loader and sandboxed metadata.
@@ -28,10 +28,10 @@ namespace MajorisImage {
         }
 
 #if HAVE_GLYCIN
-        [CCode (cname = "majoris_image_glycin_pixels_async", finish_name = "majoris_image_glycin_pixels_finish")]
+        [CCode (cname = "majoris_image_glycin_pixels_profile_async", finish_name = "majoris_image_glycin_pixels_finish")]
         private extern static async Bytes convert (Gly.Frame frame, int edge, double left, double top,
                                                    double crop_width, double crop_height, bool nearest,
-                                                   bool gray_icc, Cancellable stop,
+                                                   bool gray_icc, bool linear_rgb, Cancellable stop,
                                                    out int w, out int h, out int depth) throws Error;
 
         private static bool has_loader (string mime, string[] loaders) {
@@ -120,7 +120,13 @@ namespace MajorisImage {
                     ? GlycinColourProvenance.TAGGED_SRGB
                     : tagged ? GlycinColourProvenance.ICC_CONVERSION_UNVERIFIED
                     : known_header ? GlycinColourProvenance.ASSUMED_SRGB : GlycinColourProvenance.UNKNOWN;
-                bool verified = provenance == GlycinColourProvenance.TAGGED_SRGB;
+                if (colour.get_boolean_member_with_default ("invalid-qoi-colour", false))
+                    throw new ImageError.COLOR_PROFILE ("Invalid QOI colour declaration");
+                int qoi_transfer = (int) colour.get_int_member_with_default ("qoi-transfer", -1);
+                if (qoi_transfer == 0) provenance = GlycinColourProvenance.TAGGED_QOI_SRGB;
+                if (qoi_transfer == 1) provenance = GlycinColourProvenance.QOI_LINEAR;
+                bool verified = provenance == GlycinColourProvenance.TAGGED_SRGB ||
+                    provenance == GlycinColourProvenance.TAGGED_QOI_SRGB;
                 if (!verified && (request.required_capabilities & ImageCapabilities.COLOUR_MANAGED) != 0)
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded colour state");
 
@@ -147,7 +153,7 @@ namespace MajorisImage {
                 int width, height, depth;
                 var bytes = yield convert (frame, request.preview_size, view.crop_x, view.crop_y,
                     view.crop_width, view.crop_height, view.nearest_neighbour,
-                    colour.get_boolean_member_with_default ("gray-icc", false), job,
+                    colour.get_boolean_member_with_default ("gray-icc", false), qoi_transfer == 1, job,
                     out width, out height, out depth);
                 if (source_depth > depth)
                     throw new ImageError.UNSUPPORTED ("Glycin would reduce precision from the source samples");
@@ -161,7 +167,8 @@ namespace MajorisImage {
                 probe.depth = depth;
                 probe.source_bit_depth = source_depth;
                 probe.colour_managed = verified;
-                probe.colour_diagnostic = verified ? "Validated PNG sRGB declaration and decoder output contract."
+                probe.colour_diagnostic = verified ? "Validated sRGB declaration and decoder output contract."
+                    : qoi_transfer == 1 ? "QOI declares linear samples. sRGB primaries are assumed."
                     : tagged ? "Glycin 1 applies the embedded ICC profile through Little CMS. Output colour state is unverified."
                     : known_header ? "Untagged source uses the sRGB default." : "Source colour metadata unavailable. Preview uses the sRGB default.";
                 probe.has_alpha = frame.get_memory_format ().has_alpha ();
@@ -189,7 +196,7 @@ namespace MajorisImage {
                 metadata.set_member ("colour-probe", new Json.Node.alloc ().init_object (colour));
                 metadata.set_string_member ("colour", probe.colour_diagnostic);
                 metadata.set_string_member ("colour-provenance", provenance.to_string ());
-                metadata.set_string_member ("decoder-output-colour", verified ? "sRGB (PNG contract)" :
+                metadata.set_string_member ("decoder-output-colour", verified ? "sRGB (declared)" : qoi_transfer == 1 ? "linear RGB (sRGB primaries assumed)" :
                     tagged ? "ICC-converted output unverified" : "sRGB assumed");
                 metadata.set_string_member ("working-colour", "linear sRGB");
                 var node = new Json.Node (Json.NodeType.OBJECT);

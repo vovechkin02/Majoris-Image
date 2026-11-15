@@ -1,5 +1,7 @@
 # Majoris Image 1.1.1 verification
 
+See [1.1.2 verification](verification-1.1.2.md) for the current release.
+
 | Finding | Implementation and verification | Main files |
 | --- | --- | --- |
 | HDR output | The output detector distinguishes unrealized surfaces, known SDR renderers, unknown output and verified HDR. GTK 4.18 supplies surface, monitor and renderer information. Public GDK through the examined 4.24 API supplies no surface HDR negotiation query. Xvfb tested the actual SDR fallback. A policy test exercised every output classification, including simulated verified output. | `src/gtk/presentation.vala`, `src/gtk/image-texture.c`, `tests/presentation.vala` |

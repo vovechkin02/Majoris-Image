@@ -3,12 +3,12 @@
 set -eu
 source_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 scratch=$(mktemp -d)
-trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/files" "$scratch/photos" "$scratch/photo.png" "$scratch/demo-resources.c" "$scratch/thumbnail.png"; rmdir "$scratch"' EXIT
+trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/files" "$scratch/photos" "$scratch/photo.png" "$scratch/demo-resources.c" "$scratch/thumbnail.png"; rmdir "$scratch/work" 2>/dev/null || :; rmdir "$scratch"' EXIT
 cd "$scratch"
 unset MAJORIS_IMAGE_WORKER
 
-pkg-config --atleast-version=1.1.1 majoris-image-1
-pkg-config --atleast-version=1.1.1 majoris-image-gtk4-1
+pkg-config --atleast-version=1.1.2 majoris-image-1
+pkg-config --atleast-version=1.1.2 majoris-image-gtk4-1
 valac --pkg majoris-image-1 "$source_root/tests/benchmark.vala" -o headless
 ./headless open "$source_root/tests/fixtures/rgb16.png"
 if ldd ./headless | grep -E 'libgtk|libgdk-'; then
@@ -26,6 +26,30 @@ valac --pkg majoris-image-gtk4-1 "$source_root/examples/photos-viewer.vala" -o p
 xvfb-run -a ./files "$source_root/tests/fixtures/rgb16.png" "$source_root/tests/fixtures/multipart.exr"
 if [ -f "$source_root/tests/fixtures/large.tiff" ]; then
     xvfb-run -a ./photos "$source_root/tests/fixtures/large.tiff" "$source_root/tests/fixtures/multipart.exr" photo.png
+fi
+if [ "${MAJORIS_TEST_STRESS:-0}" = 1 ]; then
+    mkdir "$scratch/work"
+    png="$source_root/tests/fixtures/rgb16.png"
+    exr="$source_root/tests/fixtures/multipart.exr"
+    TMPDIR="$scratch/work" MAJORIS_FILES_SWITCH_COUNT=96 xvfb-run -a ./files "$png" "$exr" &
+    preview_pid=$!
+    # Independent processes use the same cache namespace and alternate sources.
+    (
+        export TMPDIR="$scratch/work"
+        for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            ./headless thumbnail "$png"
+            ./headless thumbnail "$exr"
+        done
+    ) &
+    thumbnail_pid=$!
+    preview_status=0
+    thumbnail_status=0
+    wait "$preview_pid" || preview_status=$?
+    wait "$thumbnail_pid" || thumbnail_status=$?
+    test "$preview_status" -eq 0
+    test "$thumbnail_status" -eq 0
+    test -z "$(find "$scratch/work" -mindepth 1 -print -quit)"
+    echo "Concurrent installed stress passed with 96 selections and 24 thumbnail requests"
 fi
 xvfb-run -a /usr/bin/python3 - <<'PY'
 import gi

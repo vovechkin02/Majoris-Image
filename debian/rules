@@ -1,5 +1,7 @@
 #!/usr/bin/make -f
 
+include /usr/share/dpkg/architecture.mk
+
 ifneq ($(filter pkg.majoris-image.gainmap,$(DEB_BUILD_PROFILES)),)
 gainmap = enabled
 else
@@ -17,3 +19,10 @@ endif
 
 override_dh_auto_configure:
 	dh_auto_configure -- -Dglycin=enabled -Dintrospection=enabled -Dultrahdr=$(gainmap) -Dsequence=$(sequence)
+
+override_dh_installdeb:
+	dh_installdeb
+	@printf '%s\n' \
+		'interest-noawait /usr/lib/$(DEB_HOST_MULTIARCH)/libheif' \
+		'interest-noawait /usr/lib/$(DEB_HOST_MULTIARCH)/vips-modules-$(shell pkg-config --modversion vips | cut -d. -f1,2)' \
+		>> debian/majoris-image-thumbnailer/DEBIAN/triggers

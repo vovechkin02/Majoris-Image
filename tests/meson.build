@@ -16,7 +16,7 @@ if get_option('tests')
       'orientation-1.tiff', 'orientation-2.tiff', 'orientation-3.tiff', 'orientation-4.tiff',
       'orientation-5.tiff', 'orientation-6.tiff', 'orientation-7.tiff', 'orientation-8.tiff',
       'fallback.bmp', 'fallback.ico', 'fallback.tga', 'fallback.dds', 'fallback.pgm', 'invalid-profile.png', 'srgb.png', 'cicp.png',
-      'infinite.heic', 'offset.heic', 'invalid-timing.heic', 'rate.heic', 'composition.heic'],
+      'infinite.heic', 'offset.heic', 'invalid-timing.heic', 'rate.heic', 'composition.heic', 'trimmed.heic', 'linear.qoi', 'partial-repeat.heic'],
     command: [python, '@INPUT@', '@OUTPUT@'])
   decoder_test = executable('test-decoders', 'decoders.vala', dependencies: core_api)
 
@@ -59,6 +59,9 @@ if get_option('tests')
       ['presentation.vala', policy_source],
       include_directories: include_directories('../src/gtk'), dependencies: gtk_api)
     test('HDR presentation policy', presentation_test)
+    texture_test = executable('test-image-texture', 'image-texture.c',
+      include_directories: include_directories('../src/gtk'), dependencies: gtk_api)
+    test('GDK floating-point texture colour state', texture_test)
     viewer_test = executable('test-image-view', 'viewer.vala', dependencies: gtk_api)
     viewer_args = [fixture_dir, fixtures[1], fixtures[2]]
     if avif_sequence.found()

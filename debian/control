@@ -55,7 +55,7 @@ Section: libdevel
 Architecture: any
 Multi-Arch: same
 Depends: ${misc:Depends}, libmajoris-image-1 (= ${binary:Version}),
- libmajoris-image-gtk4-1 (= ${binary:Version}), libglib2.0-dev, libgtk-4-dev
+ libmajoris-image-gtk4-1 (= ${binary:Version}), libglib2.0-dev, libgtk-4-dev (>= 4.16)
 Description: Majoris Image public development interfaces
  C headers, Vala bindings, pkg-config metadata and examples for the Majoris
  Image core and GTK4 libraries.

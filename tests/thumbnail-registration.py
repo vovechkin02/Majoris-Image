@@ -54,7 +54,10 @@ with tempfile.TemporaryDirectory(prefix="majoris-registration-test-") as tmp:
     assert glycin - native == {"image/x-majoris-test"}
     assert set(mimes) <= native
     assert run_generator("baseline.thumbnailer", "baseline", clean_env) == set(mimes)
-    available = run_generator("default.thumbnailer", mode, os.environ)
+    available = run_generator("default.thumbnailer", "system", os.environ)
+    assert available == run_generator("explicit.thumbnailer", mode, os.environ)
+    system_without = run_generator("without.thumbnailer", "system", clean_env)
+    assert system_without == (glycin if mode == "glycin" else native)
     assert set(mimes) <= available
     assert "image/x-canon-cr2" in native
     empty_plugins = root / "no-plugins"
@@ -64,6 +67,11 @@ with tempfile.TemporaryDirectory(prefix="majoris-registration-test-") as tmp:
     assert reduced <= native and {"image/png", "image/tiff", "image/x-exr"} <= reduced
 
     out = Path(tmp) / "out.png"
+    failed = subprocess.run(
+        [str(thumbnailer), (source_fixtures / "corrupt.bin").as_uri(), str(out), "48"],
+        env=dict(os.environ, XDG_CACHE_HOME=tmp), capture_output=True,
+    )
+    assert failed.returncode != 0 and not out.exists()
     for mime, fixture, size in cases:
         if mime not in available:
             print(f"{mime} omitted by this build")

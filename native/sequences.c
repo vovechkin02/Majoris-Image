@@ -195,41 +195,157 @@ static int find_box(FILE *file, SequenceBox parent, uint32_t type, SequenceBox *
     }
 }
 
-static gboolean verify_timing_boxes(FILE *file, SequenceBox track, unsigned *budget)
+typedef struct {
+    int sample; // -1 is the transparent interval specified by an empty edit.
+    uint64_t start;
+    uint64_t duration;
+} PresentationFrame;
+
+static gboolean build_edit_frames(FILE *file, SequenceBox list, SequenceBox table,
+                                  uint32_t movie_scale, uint32_t track_scale, uint64_t movie_duration, GArray *frames,
+                                  gboolean *uses_libheif, unsigned *budget)
+{
+    uint32_t header[2];
+    if (list.end - list.payload < sizeof header ||
+        !read_at(file, list.payload, header, sizeof header)) return FALSE;
+    uint32_t fullbox = GUINT32_FROM_BE(header[0]);
+    uint32_t edits = GUINT32_FROM_BE(header[1]);
+    unsigned version = fullbox >> 24;
+    unsigned stride = version ? 20 : 12;
+    if (version > 1 || edits < 1 || edits > 64 ||
+        list.end - list.payload != sizeof header + edits * stride) return FALSE;
+    unsigned flags = fullbox & 0xffffff;
+    if (flags & ~1u) return FALSE;
+    uint64_t period = 0;
+    if (flags == 1) {
+        uint32_t rate, duration32;
+        if (edits != 1 || !read_at(file, list.end - sizeof rate, &rate, sizeof rate) ||
+            GUINT32_FROM_BE(rate) != 0x10000) return FALSE;
+        if (version == 1) {
+            if (!read_at(file, list.payload + sizeof header, &period, sizeof period)) return FALSE;
+            period = GUINT64_FROM_BE(period);
+        } else {
+            if (!read_at(file, list.payload + sizeof header, &duration32, sizeof duration32)) return FALSE;
+            period = GUINT32_FROM_BE(duration32);
+        }
+        if (!period) return FALSE;
+        if (movie_duration == G_MAXUINT32 || movie_duration == G_MAXUINT64 ||
+            movie_duration % period == 0) {
+            *uses_libheif = TRUE;
+            return TRUE;
+        }
+        // A finite whole-media repeat may end in the middle of a cycle.
+        uint64_t cycles = movie_duration / period + 1;
+        if (cycles > FRAME_LIMIT) return FALSE;
+        edits = cycles;
+    }
+
+    SequenceBox timing;
+    if (!movie_scale || !track_scale ||
+        find_box(file, table, heif_fourcc('s','t','t','s'), &timing, budget) != 1 ||
+        timing.end - timing.payload < sizeof header ||
+        !read_at(file, timing.payload, header, sizeof header)) return FALSE;
+    uint32_t runs = GUINT32_FROM_BE(header[1]);
+    if (GUINT32_FROM_BE(header[0]) || !runs || runs > FRAME_LIMIT ||
+        timing.end - timing.payload != sizeof header + 8u * runs) return FALSE;
+
+    g_autofree uint64_t *starts = g_new0(uint64_t, FRAME_LIMIT + 1);
+    unsigned samples = 0;
+    for (unsigned i = 0; i < runs; i++) {
+        uint32_t fields[2];
+        if (!read_at(file, timing.payload + sizeof header + i * sizeof fields, fields, sizeof fields))
+            return FALSE;
+        uint32_t count = GUINT32_FROM_BE(fields[0]), duration = GUINT32_FROM_BE(fields[1]);
+        if (!count || count > FRAME_LIMIT - samples || !duration ||
+            duration > (uint64_t)86400 * track_scale) return FALSE;
+        for (unsigned n = 0; n < count; n++, samples++)
+            starts[samples + 1] = starts[samples] + duration;
+    }
+
+    uint64_t cursor = 0, movie_cursor = 0;
+    for (unsigned i = 0; i < edits; i++) {
+        uint8_t fields[20];
+        if (!read_at(file, list.payload + sizeof header + (period ? 0 : i) * stride, fields, stride)) return FALSE;
+        uint32_t rate;
+        memcpy(&rate, fields + stride - sizeof rate, sizeof rate);
+        if (GUINT32_FROM_BE(rate) != 0x10000) return FALSE;
+        uint64_t length, start;
+        if (version == 1) {
+            memcpy(&length, fields, 8);
+            memcpy(&start, fields + 8, 8);
+            length = GUINT64_FROM_BE(length);
+            start = GUINT64_FROM_BE(start);
+        } else {
+            uint32_t length32, start32;
+            memcpy(&length32, fields, 4);
+            memcpy(&start32, fields + 4, 4);
+            length = GUINT32_FROM_BE(length32);
+            start = GUINT32_FROM_BE(start32);
+            if (start == G_MAXUINT32) start = G_MAXUINT64;
+        }
+        if (period) {
+            // Only expand a repeat of the complete stored timeline.
+            if (start != 0 || movie_scale != track_scale || period != starts[samples]) return FALSE;
+            length = MIN(period, movie_duration - movie_cursor);
+            movie_cursor += length;
+        }
+        if (length == 0 || length / movie_scale > 86400) return FALSE;
+        uint64_t fraction = (length % movie_scale) * track_scale;
+        if (fraction % movie_scale) return FALSE;
+        length = (length / movie_scale) * track_scale + fraction / movie_scale;
+        if (!length || length > (uint64_t)86400 * track_scale ||
+            cursor + length > (uint64_t)86400000 * track_scale) return FALSE;
+        if (start == G_MAXUINT64) {
+            PresentationFrame blank = {-1, cursor, length};
+            if (frames->len >= FRAME_LIMIT) return FALSE;
+            g_array_append_val(frames, blank);
+        } else {
+            if (start > starts[samples] || length > starts[samples] - start) return FALSE;
+            uint64_t end = start + length;
+            for (unsigned n = 0; n < samples && starts[n] < end; n++) {
+                uint64_t first = MAX(start, starts[n]);
+                uint64_t last = MIN(end, starts[n + 1]);
+                if (first >= last) continue;
+                PresentationFrame frame = {(int)n, cursor + (first - start), last - first};
+                if (frames->len >= FRAME_LIMIT) return FALSE;
+                g_array_append_val(frames, frame);
+            }
+        }
+        cursor += length;
+    }
+    return frames->len > 0;
+}
+
+static gboolean verify_timing_boxes(FILE *file, SequenceBox track, unsigned *budget,
+                                     uint32_t movie_scale, uint32_t track_scale, uint64_t movie_duration,
+                                     GArray *frames, gboolean *uses_libheif)
 {
     SequenceBox edit, list, media, info, table, offsets;
-    int status = find_box(file, track, heif_fourcc('e','d','t','s'), &edit, budget);
-    if (status < 0) return FALSE;
-    if (status > 0) {
-        uint32_t header[2], rate;
-        if (find_box(file, edit, heif_fourcc('e','l','s','t'), &list, budget) != 1 ||
-            list.end - list.payload < sizeof header ||
-            !read_at(file, list.payload, header, sizeof header)) return FALSE;
-        unsigned version = GUINT32_FROM_BE(header[0]) >> 24;
-        unsigned rate_offset = version == 1 ? 24 : 16;
-        if (version > 1 || GUINT32_FROM_BE(header[1]) != 1 ||
-            list.end - list.payload != rate_offset + sizeof rate ||
-            !read_at(file, list.payload + rate_offset, &rate, sizeof rate) ||
-            GUINT32_FROM_BE(rate) != 0x10000) return FALSE;
-    }
     if (find_box(file, track, heif_fourcc('m','d','i','a'), &media, budget) != 1 ||
         find_box(file, media, heif_fourcc('m','i','n','f'), &info, budget) != 1 ||
         find_box(file, info, heif_fourcc('s','t','b','l'), &table, budget) != 1) return FALSE;
-    status = find_box(file, table, heif_fourcc('c','t','t','s'), &offsets, budget);
-    if (status <= 0) return status == 0;
-    uint32_t header[2];
-    uint64_t length = offsets.end - offsets.payload;
-    if (length < sizeof header || !read_at(file, offsets.payload, header, sizeof header)) return FALSE;
-    uint32_t entries = GUINT32_FROM_BE(header[1]);
-    if (entries > FRAME_LIMIT || length != sizeof header + 8u * entries) return FALSE;
-    for (uint32_t i = 0; i < entries; i++) {
-        uint32_t offset;
-        if (!read_at(file, offsets.payload + 12 + 8u * i, &offset, sizeof offset) || offset != 0) return FALSE;
+    int status = find_box(file, table, heif_fourcc('c','t','t','s'), &offsets, budget);
+    if (status < 0) return FALSE;
+    if (status > 0) {
+        uint32_t header[2];
+        uint64_t length = offsets.end - offsets.payload;
+        if (length < sizeof header || !read_at(file, offsets.payload, header, sizeof header)) return FALSE;
+        uint32_t entries = GUINT32_FROM_BE(header[1]);
+        if (entries > FRAME_LIMIT || length != sizeof header + 8u * entries) return FALSE;
+        for (uint32_t i = 0; i < entries; i++) {
+            uint32_t offset;
+            if (!read_at(file, offsets.payload + 12 + 8u * i, &offset, sizeof offset) || offset != 0) return FALSE;
+        }
     }
-    return TRUE;
+    status = find_box(file, track, heif_fourcc('e','d','t','s'), &edit, budget);
+    if (status <= 0) return status == 0;
+    return find_box(file, edit, heif_fourcc('e','l','s','t'), &list, budget) == 1 &&
+           build_edit_frames(file, list, table, movie_scale, track_scale, movie_duration, frames, uses_libheif, budget);
 }
 
-static gboolean verify_track_timing(const char *path, uint32_t track_id)
+static gboolean verify_track_timing(const char *path, uint32_t track_id,
+                                      uint32_t movie_scale, uint32_t track_scale, uint64_t movie_duration,
+                                      GArray *frames, gboolean *uses_libheif)
 {
     FILE *file = fopen(path, "rb");
     if (!file) return FALSE;
@@ -250,7 +366,7 @@ static gboolean verify_track_timing(const char *path, uint32_t track_id)
         if (version > 1 || header.end - header.payload < id_offset + sizeof id ||
             !read_at(file, header.payload + id_offset, &id, sizeof id)) goto done;
         if (GUINT32_FROM_BE(id) != track_id) continue;
-        supported = verify_timing_boxes(file, track, &budget);
+        supported = verify_timing_boxes(file, track, &budget, movie_scale, track_scale, movie_duration, frames, uses_libheif);
         break;
     }
 done:
@@ -289,6 +405,7 @@ static heif_track *presentation_track(heif_context *context)
 
 static VipsImage *load_heif(const char *path, int frame, int known_count, GError **error)
 {
+    g_autoptr(GArray) frames = g_array_new(FALSE, FALSE, sizeof(PresentationFrame));
     heif_context *context = heif_context_alloc();
     heif_track *decode_track = NULL;
     heif_decoding_options *options = NULL;
@@ -330,16 +447,23 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
     uint32_t repetitions = heif_track_get_number_of_repetitions(decode_track);
     uint64_t movie_duration = heif_context_get_sequence_duration(context);
     uint32_t movie_timescale = heif_context_get_sequence_timescale(context);
-    if (repetitions == 0) {
-        // libheif reports zero when it falls back to the unedited media timeline.
-        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED, "Unsupported HEIF presentation edit list");
-        goto done;
-    }
-    if (!verify_track_timing(path, heif_track_get_id(decode_track))) {
+    gboolean uses_libheif = FALSE;
+    if (!verify_track_timing(path, heif_track_get_id(decode_track), movie_timescale, timescale, movie_duration,
+                              frames, &uses_libheif) || (repetitions == 0 && !frames->len)) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
                             "Unsupported HEIF presentation edit list or composition timing");
         goto done;
     }
+    PresentationFrame edited = {0};
+    if (frames->len) {
+        if (frame < 0 || (unsigned)frame >= frames->len) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT, "HEIF frame index is outside the sequence");
+            goto done;
+        }
+        edited = g_array_index(frames, PresentationFrame, frame);
+        repetitions = 1;
+    }
+    int sample_index = frames->len ? MAX(0, edited.sample) : frame;
     gboolean infinite = repetitions == heif_sequence_track_number_of_repetitions_infinite &&
                         (movie_duration == G_MAXUINT32 || movie_duration == G_MAXUINT64);
     if (!infinite && repetitions > G_MAXINT) {
@@ -347,7 +471,7 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
         goto done;
     }
     // Only factor out whole-track repetition explicitly recognized by libheif.
-    options->ignore_sequence_editlist = repetitions > 1;
+    options->ignore_sequence_editlist = frames->len || (uses_libheif && repetitions > 1);
     gboolean alpha = heif_track_has_alpha_channel(decode_track);
     int count = 0;
     uint64_t elapsed = 0, timestamp = 0;
@@ -365,7 +489,7 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
             g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid HEIF frame timing");
             goto done;
         }
-        if (count == frame) {
+        if (count == sample_index) {
             decoded = next;
             timestamp = elapsed;
         } else {
@@ -373,6 +497,7 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
         }
         elapsed += duration;
         count++;
+        if (frames->len && decoded) { count = frames->len; break; }
         if (known_count > frame && decoded) { count = known_count; break; }
         if (count > FRAME_LIMIT) {
             g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "HEIF track exceeds frame budget");
@@ -396,14 +521,16 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Unsupported HEIF frame layout");
         goto done;
     }
-    int bands = alpha ? 4 : 3, component = depth > 8 ? 2 : 1;
+    gboolean blank = frames->len && edited.sample < 0;
+    int bands = alpha || blank ? 4 : 3, component = depth > 8 ? 2 : 1;
     size_t row = (size_t)w * bands * component;
     guint8 *packed = g_try_malloc_n(row, h);
     if (!packed) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "Could not allocate HEIF plane buffer");
         goto done;
     }
-    for (int c = 0; c < bands; c++) {
+    if (blank) memset(packed, 0, row * h);
+    for (int c = 0; !blank && c < bands; c++) {
         int stride = 0;
         int plane_depth = heif_image_get_bits_per_pixel_range(decoded, channels[c]);
         const guint8 *plane = heif_image_get_plane_readonly(decoded, channels[c], &stride);
@@ -461,7 +588,8 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
     }
     int loops = infinite ? 0 : (int)repetitions;
     set_timing(image, "libheif-sequence", count, loops,
-               (double)timestamp / timescale, (double)heif_image_get_duration(decoded) / timescale);
+               (double)(frames->len ? edited.start : timestamp) / timescale,
+               (double)(frames->len ? edited.duration : heif_image_get_duration(decoded)) / timescale);
     goto done;
 
 failed:

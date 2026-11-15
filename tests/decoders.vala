@@ -92,6 +92,23 @@ async void exercise (string[] args) throws Error {
             Path.build_filename (generated, "infinite.heic"))));
         assert (infinite.loop_count == 0 && infinite.frame_count == 2);
         assert ((yield infinite.open_frame (1)).frame_timestamp_us == 70000);
+        var trimmed = yield registry.open (new ImageSource (File.new_for_path (
+            Path.build_filename (generated, "trimmed.heic"))));
+        assert (trimmed.frame_count == 3 && trimmed.loop_count == 1);
+        assert (trimmed.frame_timestamp_us == 0 && trimmed.frame_duration_us == 20000);
+        assert (sample (trimmed.preview, 0, 3) == 0);
+        var trim_red = yield trimmed.open_frame (1);
+        assert (trim_red.frame_timestamp_us == 20000 && trim_red.frame_duration_us == 35000);
+        assert (sample (trim_red.preview, 0, 0) > 0.9f);
+        var trim_green = yield trimmed.open_frame (2);
+        assert (trim_green.frame_timestamp_us == 55000 && trim_green.frame_duration_us == 60000);
+        assert (sample (trim_green.preview, 0, 1) > 0.9f);
+        var fractional = yield registry.open (new ImageSource (File.new_for_path (
+            Path.build_filename (generated, "partial-repeat.heic"))));
+        assert (fractional.frame_count == 3 && fractional.loop_count == 1);
+        var tail = yield fractional.open_frame (2);
+        assert (tail.frame_timestamp_us == 230000 && tail.frame_duration_us == 40000);
+        assert (sample (tail.preview, 0, 0) > 0.9f);
         foreach (var invalid in new string[] { "offset.heic", "invalid-timing.heic", "rate.heic", "composition.heic" }) {
             var source = new ImageSource (File.new_for_path (Path.build_filename (generated, invalid)));
             try { yield registry.open (source); assert_not_reached (); }
@@ -198,7 +215,13 @@ async void exercise (string[] args) throws Error {
     assert (rotated.width == 1 && rotated.height == 2);
     var strict = new DecodeOptions ();
     strict.required_capabilities |= ImageCapabilities.COLOUR_MANAGED;
-    try { yield registry.open (qoi, strict); assert_not_reached (); }
+    assert ((yield registry.open (qoi, strict)).colour_managed);
+    var linear_qoi = new ImageSource (File.new_for_path (Path.build_filename (directory, "linear.qoi")));
+    var linear = yield registry.open (linear_qoi);
+    assert (Math.fabs (sample (linear.preview, 0, 0) - 128.0 / 255) < 0.002);
+    assert (Math.fabs (sample (linear.preview, 0, 3) - 128.0 / 255) < 0.002);
+    assert (sample (linear.preview, 1, 0) == 0);
+    try { yield registry.open (linear_qoi, strict); assert_not_reached (); }
     catch (ImageError.COLOR_PROFILE error) { }
     var probe = yield registry.inspect (qoi);
     assert (probe.loader == first.decoder && probe.depth == first.bit_depth);

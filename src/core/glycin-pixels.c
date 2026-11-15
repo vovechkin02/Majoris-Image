@@ -12,7 +12,7 @@ static double linear_sample(const guint8 *data, int depth)
 
 static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top,
                               double region_width, double region_height, gboolean nearest,
-                              gboolean gray_icc, int *width, int *height, int *depth,
+                              gboolean gray_icc, gboolean linear_rgb, int *width, int *height, int *depth,
                               GCancellable *stop, GError **error)
 {
     guint w = gly_frame_get_width(frame), h = gly_frame_get_height(frame);
@@ -92,7 +92,7 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
                     for (int c = 0; c < 3; c++) {
                         double v = linear_sample(src + channels[c] * component, *depth);
                         if (premultiplied) v = MIN(v / alpha, 1.0);
-                        double linear = gray_icc && r == g ?
+                        double linear = linear_rgb ? v : gray_icc && r == g ?
                             pow(v, 2.2) : v <= .04045 ? v / 12.92 : pow((v + .055) / 1.055, 2.4);
                         sum[c] += weight * linear;
                     }
@@ -111,7 +111,7 @@ typedef struct {
     GlyFrame *frame;
     int edge, width, height, depth;
     double left, top, region_width, region_height;
-    gboolean nearest, gray_icc;
+    gboolean nearest, gray_icc, linear_rgb;
 } PixelJob;
 
 static void pixel_job_free(PixelJob *job)
@@ -125,15 +125,15 @@ static void convert_thread(GTask *task, gpointer source, gpointer data, GCancell
     PixelJob *job = data;
     GError *error = NULL;
     GBytes *pixels = convert_pixels(job->frame, job->edge, job->left, job->top,
-        job->region_width, job->region_height, job->nearest, job->gray_icc,
+        job->region_width, job->region_height, job->nearest, job->gray_icc, job->linear_rgb,
         &job->width, &job->height, &job->depth, stop, &error);
     if (pixels) g_task_return_pointer(task, pixels, (GDestroyNotify)g_bytes_unref);
     else g_task_return_error(task, error);
 }
 
-void majoris_image_glycin_pixels_async(GlyFrame *frame, int edge, double left, double top,
+void majoris_image_glycin_pixels_profile_async(GlyFrame *frame, int edge, double left, double top,
                                        double region_width, double region_height, gboolean nearest,
-                                       gboolean gray_icc, GCancellable *stop,
+                                       gboolean gray_icc, gboolean linear_rgb, GCancellable *stop,
                                        GAsyncReadyCallback callback, gpointer data)
 {
     PixelJob *job = g_new0(PixelJob, 1);
@@ -145,10 +145,20 @@ void majoris_image_glycin_pixels_async(GlyFrame *frame, int edge, double left, d
     job->region_height = region_height;
     job->nearest = nearest;
     job->gray_icc = gray_icc;
+    job->linear_rgb = linear_rgb;
     GTask *task = g_task_new(NULL, stop, callback, data);
     g_task_set_task_data(task, job, (GDestroyNotify)pixel_job_free);
     g_task_run_in_thread(task, convert_thread);
     g_object_unref(task);
+}
+
+void majoris_image_glycin_pixels_async(GlyFrame *frame, int edge, double left, double top,
+                                      double region_width, double region_height, gboolean nearest,
+                                      gboolean gray_icc, GCancellable *stop,
+                                      GAsyncReadyCallback callback, gpointer data)
+{
+    majoris_image_glycin_pixels_profile_async(frame, edge, left, top, region_width,
+        region_height, nearest, gray_icc, FALSE, stop, callback, data);
 }
 
 GBytes *majoris_image_glycin_pixels_finish(GAsyncResult *result, int *width, int *height,

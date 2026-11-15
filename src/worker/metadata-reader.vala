@@ -38,6 +38,15 @@ namespace MajorisImage {
                         throw new IOError.INVALID_DATA ("Invalid PNG colour chunks");
                 }
             }
+            if (bytes.length == 8 && bytes[0] == 'q' && bytes[1] == 'o' &&
+                bytes[2] == 'i' && bytes[3] == 'f') {
+                var tail = input.read_bytes (6);
+                unowned uint8[] fields = tail.get_data ();
+                if (fields.length != 6 || (fields[4] != 3 && fields[4] != 4) || fields[5] > 1)
+                    output.set_boolean_member ("invalid-qoi-colour", true);
+                else
+                    output.set_int_member ("qoi-transfer", fields[5]);
+            }
             input.close ();
             var image = Vips.Image.from_file (path, null);
             output.set_boolean_member ("header-read", image != null);

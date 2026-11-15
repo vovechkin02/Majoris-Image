@@ -18,7 +18,7 @@ def rgba(pixels):
 
 qoi, apng, *formats = map(pathlib.Path, sys.argv[1:])
 oriented = formats[:8]
-bmp, ico, tga, dds, pgm, bad_icc, srgb, cicp, indefinite, offset_edit, invalid_timing, rate_edit, composition = formats[8:]
+bmp, ico, tga, dds, pgm, bad_icc, srgb, cicp, indefinite, offset_edit, invalid_timing, rate_edit, composition, trimmed, qoi_linear, partial_repeat = formats[8:]
 # Two independently encoded pixels with different transparency.
 qoi.write_bytes(
     b"qoif" + struct.pack(">IIBB", 2, 1, 4, 0)
@@ -132,3 +132,35 @@ for i in range(struct.unpack_from(">I", heic, offset_table + 8)[0]):
     struct.pack_into(">I", composed, field, value + len(ctts))
 composed[insert_at:insert_at] = ctts
 composition.write_bytes(composed)
+
+
+# A 20 ms empty edit followed by part of the red picture and 60 ms of green.
+edited = bytearray(heic)
+entry = heic.index(b"elst")
+old_size = struct.unpack_from(">I", heic, entry - 4)[0]
+edits = ((20, -1), (35, 35), (60, 70))
+new_box = struct.pack(">I4sII", 16 + 12 * len(edits), b"elst", 0, len(edits))
+new_box += b"".join(struct.pack(">IiI", length, start, 0x10000) for length, start in edits)
+delta = len(new_box) - old_size
+for parent in (b"edts", b"trak", b"moov"):
+    pos = heic.index(parent) - 4
+    struct.pack_into(">I", edited, pos, struct.unpack_from(">I", heic, pos)[0] + delta)
+for tag in (b"tkhd", b"mvhd"):
+    struct.pack_into(">I", edited, heic.index(tag) + 20, sum(length for length, _ in edits))
+for i in range(struct.unpack_from(">I", heic, offset_table + 8)[0]):
+    field = offset_table + 12 + 4 * i
+    struct.pack_into(">I", edited, field, struct.unpack_from(">I", heic, field)[0] + delta)
+edited[entry - 4:entry - 4 + old_size] = new_box
+trimmed.write_bytes(edited)
+
+qoi_linear.write_bytes(
+    b"qoif" + struct.pack(">IIBB", 2, 1, 4, 1)
+    + bytes((255, 128, 64, 32, 128, 255, 32, 64, 128, 0)) + bytes(7) + bytes((1,))
+)
+
+
+# Play one complete 230 ms cycle and the first 40 ms of the next.
+fractional = bytearray(heic)
+for tag in (b"tkhd", b"mvhd"):
+    struct.pack_into(">I", fractional, heic.index(tag) + 20, 270)
+partial_repeat.write_bytes(fractional)

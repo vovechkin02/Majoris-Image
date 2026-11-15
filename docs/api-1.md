@@ -74,7 +74,10 @@ cannot interpret or an invalid ICC profile yields `COLOR_PROFILE`. Untagged
 integer previews use an sRGB default. Applications can request
 `ImageCapabilities.COLOUR_MANAGED` to require a verified interpretation.
 Glycin 1 can satisfy it for PNG carrying a validated sRGB declaration and
-no competing ICC or CICP declaration. The PNG samples follow the loader's
+no competing ICC or CICP declaration, and for QOI that declares sRGB.
+Linear QOI preserves the stored transfer and assumes sRGB primaries. Its
+metadata reports that assumption and strict requests require declared
+primaries. The PNG samples follow the loader's
 sRGB contract. Tagged ICC previews rely on Glycin's internal Little CMS
 conversion and carry an unverified provenance. The framework never
 re-applies the source profile to those pixels. Assumed and unknown source
@@ -167,8 +170,11 @@ tested Debian 13 security build (1.23.6). A compatible decoder plugin is
 required for the track codec. HEIF chooses an image-sequence track before a
 general video track. The public frame count and timestamps describe one
 presentation cycle, and the GTK scheduler applies whole-cycle repeats.
-Unsupported edit-list offsets, non-unit rates and nonzero composition
-offsets return a timeline diagnostic. Libheif handles frame emission and
+Bounded unit-rate edit lists can trim and reassemble media intervals,
+including transparent empty intervals. A finite repeat of the complete
+media timeline can end in a clipped cycle when movie and track timescales
+agree. Nonzero composition offsets, non-unit rates and incompatible repeat
+patterns return a timeline diagnostic. Libheif handles frame emission and
 duration within the supported cycle. Track scans, frame sizes and queued
 previews are bounded. An HEIF input without a compatible track backend may
 supply a still preview with a diagnostic.
@@ -243,12 +249,15 @@ staging files.
 The desktop entry invokes the same service with `%u %o %s`. For sources that
 provide modification timestamps, generated PNGs include the URI and mtime.
 The desktop thumbnail manager owns placement and validation in its shared
-thumbnail directories. The descriptor ships a reproducible baseline for JPEG, PNG, TIFF and
-OpenEXR, which use the framework's required native stack. The runtime
-catalogue and direct thumbnail APIs discover optional formats independently.
-Adding or removing Glycin loaders or HEIF plugins changes direct runtime
-capabilities. Desktop MIME discovery continues to use the packaged
-baseline. The descriptor can coexist with system thumbnailers.
+thumbnail directories. The Debian package generates one system descriptor from the native
+catalogue plus the installed system Glycin loaders. File triggers on loader
+configurations, decoder plugin directories and shared MIME definitions
+refresh it during package transactions. Removal cleans up the generated
+file. Standalone Meson installs ship a reproducible JPEG, PNG, TIFF and
+OpenEXR baseline. The direct API also considers the current user's
+Glycin configurations. A MIME entry describes a decoder family. The
+thumbnailer validates the actual input, camera and colour profile before
+publication.
 See the [Freedesktop Thumbnail Managing Standard](https://specifications.freedesktop.org/thumbnail/latest/).
 
 ## Worker protocol and security

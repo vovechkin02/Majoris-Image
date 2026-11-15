@@ -1,6 +1,7 @@
 #include "bridge.h"
 #include "glycin-discovery.h"
 #include <json-glib/json-glib.h>
+#include <libheif/heif.h>
 
 static void add_mime(GString *mimes, GHashTable *seen, const char *mime)
 {
@@ -12,6 +13,8 @@ static void add_mime(GString *mimes, GHashTable *seen, const char *mime)
 int main(int argc, char **argv)
 {
     if (argc != 5 || VIPS_INIT(argv[0])) return 1;
+    if (!g_str_equal(argv[4], "baseline") && !g_str_equal(argv[4], "native") &&
+        !g_str_equal(argv[4], "glycin") && !g_str_equal(argv[4], "system")) return 1;
     g_autoptr(GString) mimes = g_string_new(NULL);
     g_autoptr(GHashTable) seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     if (g_str_equal(argv[4], "baseline")) {
@@ -29,9 +32,19 @@ int main(int argc, char **argv)
             for (guint j = 0; j < json_array_get_length(formats); j++)
                 add_mime(mimes, seen, json_array_get_string_element(formats, j));
         }
-        if (g_str_equal(argv[4], "glycin")) {
+        gboolean discover_glycin = g_str_equal(argv[4], "glycin");
+#ifdef MAJORIS_GLYCIN_SYSTEM
+        discover_glycin = discover_glycin || g_str_equal(argv[4], "system");
+#endif
+        if (discover_glycin) {
             g_auto(GStrv) formats = majoris_discover_glycin_loaders();
-            for (char **mime = formats; *mime; mime++) add_mime(mimes, seen, *mime);
+            for (char **mime = formats; *mime; mime++) {
+                if (majoris_mime_matches(*mime, "image/avif") &&
+                    !heif_have_decoder_for_format(heif_compression_AV1)) continue;
+                if ((majoris_mime_matches(*mime, "image/heif") || majoris_mime_matches(*mime, "image/heic")) &&
+                    !heif_have_decoder_for_format(heif_compression_HEVC)) continue;
+                add_mime(mimes, seen, *mime);
+            }
         }
     }
 

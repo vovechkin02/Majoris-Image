@@ -1,3 +1,11 @@
+majoris-image (1.1.2) unstable; urgency=medium
+
+  * Register installed thumbnail codecs through Debian package triggers.
+  * Extend playback timeline and fallback colour verification.
+  * Retain executable release packaging rules.
+
+ -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 16:00:00 +1100
+
 majoris-image (1.1.1) unstable; urgency=medium
 
   * Coordinate preview, tile and animation presentation generations.

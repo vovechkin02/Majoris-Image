@@ -49,11 +49,23 @@ consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
 
 See the [integration examples and ABI 1 capability matrix](docs/api-1.md) for formats,
-sandbox requirements and integration examples. The [1.1.1 verification report](docs/verification-1.1.1.md) records the build, package and test results.
+sandbox requirements and integration examples. The [1.1.2 verification report](docs/verification-1.1.2.md) records the build, package and test results.
 
-The desktop thumbnail entry registers JPEG, PNG, TIFF and OpenEXR. Use
-`DecoderRegistry.thumbnail_mime_types()` to query the installed optional
-decoders for direct thumbnail requests.
+On Debian, the thumbnailer package generates its desktop entry from the
+installed system codecs. Package triggers refresh it when loader packages
+change. A standalone Meson installation registers the mandatory native
+baseline. Query `DecoderRegistry.thumbnail_mime_types()` for direct thumbnail
+requests, including codecs from the user's loader configuration.
+
+Create a source release with Git metadata so Debian rules retain their
+executable mode. From a committed release tree, use:
+
+```sh
+git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-1.1.2/ HEAD > majoris-image-1.1.2.tar.gz
+tar -tvf majoris-image-1.1.2.tar.gz | grep 'debian/rules$'
+```
+
+Extract and build on a Linux filesystem that preserves executable permissions.
 
 ## Licence
 

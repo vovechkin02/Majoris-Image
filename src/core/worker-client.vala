@@ -178,6 +178,23 @@ namespace MajorisImage {
             return (string) text;
         }
 
+        internal async PixelBuffer render_pixels (PixelBuffer pixels, RenderOptions? transform, int edge,
+                                                  DecodeOptions options, Cancellable stop) throws Error {
+            uint8[] header = { 'M', 'I', 'F', '1', 0, 0, 0, 0, 0, 0, 0, 0 };
+            for (int n = 0; n < 4; n++) {
+                header[4 + n] = (uint8) ((uint) pixels.width >> (24 - n * 8));
+                header[8 + n] = (uint8) ((uint) pixels.height >> (24 - n * 8));
+            }
+            var stream = new MemoryInputStream ();
+            stream.add_bytes (new Bytes (header));
+            stream.add_bytes (pixels.bytes);
+            var staged = yield ImageSource.from_stream (stream, stop);
+            string output = yield run (staged.file,
+                "render-buffer", transform, stop, edge, options);
+            try { return yield WorkerClient.read_pixels (output, stop); }
+            finally { WorkerClient.cleanup (output); }
+        }
+
         internal static async PixelBuffer read_pixels (string path, Cancellable stop) throws Error {
             var bytes = yield read_output (path, 268435468, stop);
             unowned uint8[] data = bytes.get_data ();

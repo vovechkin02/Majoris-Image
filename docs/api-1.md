@@ -72,7 +72,14 @@ can use Glycin 1's Little CMS conversion, whose output colour state is
 unavailable through its public C API. An explicit source transfer the adapter
 cannot interpret or an invalid ICC profile yields `COLOR_PROFILE`. Untagged
 integer previews use an sRGB default. Applications can request
-`ImageCapabilities.COLOUR_MANAGED` to require the verified native pipeline.
+`ImageCapabilities.COLOUR_MANAGED` to require a verified interpretation.
+Glycin 1 can satisfy it for PNG carrying a validated sRGB declaration and
+no competing ICC or CICP declaration. The PNG samples follow the loader's
+sRGB contract. Tagged ICC previews rely on Glycin's internal Little CMS
+conversion and carry an unverified provenance. The framework never
+re-applies the source profile to those pixels. Assumed and unknown source
+states remain separate in the metadata. Glycin 2.2 publishes frame colour
+metadata under a separate, unstable API, while this build targets Glycin 1.
 Inspect `colour_managed` and `colour_diagnostic` on probes or documents.
 
 Fallback previews use linear-light area filtering with premultiplied alpha.
@@ -143,8 +150,12 @@ tone-mapped SDR for HDR sources. `SDR` explicitly selects that same
 colour-managed path. `HDR_PREFERRED` reports `HDR_UNAVAILABLE` and displays
 the same SDR fallback. `NATIVE_HDR` is reserved for a verified path; a
 floating-point texture alone is insufficient evidence. The view retains
-the extended-range document and reuses the SDR preview across policy changes.
-Visible tiles are regenerated using the active presentation path. Physical
+the extended-range document. `ImageDocument.render_preview()` can tone-map
+the retained float pixels in the worker without reopening the source.
+Base preview, current animation frame and tiles share presentation decisions.
+A material mode change cancels obsolete conversions and publishes the new
+preview and tile policy together. Equivalent SDR policies reuse existing
+textures. Monitor and surface changes re-evaluate the active output. Physical
 HDR output remains unverified.
 
 Use `open_frame()` or `ImageView.seek_frame()` for indexed frames.
@@ -153,9 +164,14 @@ A loop count of zero means indefinite playback. A count of one plays once. GIF a
 requires Glycin. AVIF uses libavif 1.1+ when enabled. HEIF visual tracks require
 the libheif sequence and edit-list APIs detected by Meson, available in the
 tested Debian 13 security build (1.23.6). A compatible decoder plugin is
-required for the track codec. Track scans, frame sizes and queued previews
-are bounded. An HEIF sequence without a compatible track backend may supply
-a still preview with a diagnostic.
+required for the track codec. HEIF chooses an image-sequence track before a
+general video track. The public frame count and timestamps describe one
+presentation cycle, and the GTK scheduler applies whole-cycle repeats.
+Unsupported edit-list offsets, non-unit rates and nonzero composition
+offsets return a timeline diagnostic. Libheif handles frame emission and
+duration within the supported cycle. Track scans, frame sizes and queued
+previews are bounded. An HEIF input without a compatible track backend may
+supply a still preview with a diagnostic.
 
 | Format | Decode backend | Still | Animation / pages | Precision and HDR | ICC | Region | Thumbnail | Encode |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -227,11 +243,12 @@ staging files.
 The desktop entry invokes the same service with `%u %o %s`. For sources that
 provide modification timestamps, generated PNGs include the URI and mtime.
 The desktop thumbnail manager owns placement and validation in its shared
-thumbnail directories. The build generates its desktop MIME registration
-from installed native loaders and, when enabled, executable Glycin loader
-configurations. HEIF and AVIF entries also require the corresponding installed
-decoder plugin. The descriptor has its own name and can coexist with system
-thumbnailers; desktop software chooses among matching entries.
+thumbnail directories. The descriptor ships a reproducible baseline for JPEG, PNG, TIFF and
+OpenEXR, which use the framework's required native stack. The runtime
+catalogue and direct thumbnail APIs discover optional formats independently.
+Adding or removing Glycin loaders or HEIF plugins changes direct runtime
+capabilities. Desktop MIME discovery continues to use the packaged
+baseline. The descriptor can coexist with system thumbnailers.
 See the [Freedesktop Thumbnail Managing Standard](https://specifications.freedesktop.org/thumbnail/latest/).
 
 ## Worker protocol and security

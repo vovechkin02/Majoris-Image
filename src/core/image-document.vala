@@ -103,6 +103,18 @@ namespace MajorisImage {
             return yield DecoderRegistry.open_with (worker, source, requested, stop);
         }
 
+        /** Render presentation pixels from the existing preview when possible. */
+        public async PixelBuffer render_preview (bool tone_map = false, Cancellable? cancel = null) throws Error {
+            var stop = cancel ?? new Cancellable ();
+            stop.set_error_if_cancelled ();
+            if (!hdr || tone_mapped == tone_map) return preview;
+            if (!tone_map)
+                return yield render_region (0, 0, width, height, int.max (preview.width, preview.height), false, stop);
+            var requested = options.copy ();
+            requested.sdr_presentation = true;
+            return yield new WorkerClient ().render_pixels (preview, null, 0, requested, stop);
+        }
+
         /** Coordinates refer to the oriented page at its original resolution. */
         public async PixelBuffer render_region (int x, int y, int width, int height, int edge,
                                                 bool tone_map = false, Cancellable? cancel = null) throws Error {

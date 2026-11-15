@@ -26,10 +26,12 @@ namespace MajorisImage {
         public signal void changed ();
 
         public void reset (ImageDocument? source, bool tone_map = false) {
+            if (source != null && !source.supports_regions) source = null;
+            if (document == source && this.tone_map == tone_map) return;
             generation++;
             this.tone_map = tone_map;
             foreach (var tile in tiles.values) tile.request?.cancel ();
-            document = source != null && source.supports_regions ? source : null;
+            document = source;
             tiles.clear ();
             pending.clear ();
             active = 0;

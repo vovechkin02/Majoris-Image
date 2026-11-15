@@ -52,8 +52,10 @@ with tempfile.TemporaryDirectory(prefix="majoris-registration-test-") as tmp:
     native = run_generator("native.thumbnailer", "native", clean_env)
     glycin = run_generator("simulated.thumbnailer", "glycin", clean_env)
     assert glycin - native == {"image/x-majoris-test"}
-    assert native <= set(mimes)
-    assert run_generator("default.thumbnailer", mode, os.environ) == set(mimes)
+    assert set(mimes) <= native
+    assert run_generator("baseline.thumbnailer", "baseline", clean_env) == set(mimes)
+    available = run_generator("default.thumbnailer", mode, os.environ)
+    assert set(mimes) <= available
     assert "image/x-canon-cr2" in native
     empty_plugins = root / "no-plugins"
     empty_plugins.mkdir()
@@ -63,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix="majoris-registration-test-") as tmp:
 
     out = Path(tmp) / "out.png"
     for mime, fixture, size in cases:
-        if mime not in mimes:
+        if mime not in available:
             print(f"{mime} omitted by this build")
             continue
         if mime == "image/jp2" and fixture.stat().st_size == 0:

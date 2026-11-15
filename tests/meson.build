@@ -7,14 +7,16 @@ if get_option('tests')
   fixture_dir = meson.current_source_dir() / 'fixtures'
   fixture_maker = executable('make-fixtures', 'make-fixtures.c', dependencies: native_api)
   fixtures = custom_target('large and animated fixtures',
-    output: ['large.tiff', 'animated.gif', 'animated.webp', 'jpeg2000.jp2', 'profiled.png', 'profiled.tiff'],
+    output: ['large.tiff', 'animated.gif', 'animated.webp', 'jpeg2000.jp2', 'profiled.png', 'profiled.tiff', 'adobe.png', 'gray-profile.png'],
     command: [fixture_maker, '@OUTPUT@'])
   python = find_program('python3')
+  fs = import('fs')
   extra_formats = custom_target('legacy and APNG fixtures',
-    input: 'make-formats.py', output: ['fallback.qoi', 'partial.apng',
+    input: 'make-formats.py', depend_files: files('fixtures/heic-sequence.heic'), output: ['fallback.qoi', 'partial.apng',
       'orientation-1.tiff', 'orientation-2.tiff', 'orientation-3.tiff', 'orientation-4.tiff',
       'orientation-5.tiff', 'orientation-6.tiff', 'orientation-7.tiff', 'orientation-8.tiff',
-      'fallback.bmp', 'fallback.ico', 'fallback.tga', 'fallback.dds', 'fallback.pgm', 'invalid-profile.png'],
+      'fallback.bmp', 'fallback.ico', 'fallback.tga', 'fallback.dds', 'fallback.pgm', 'invalid-profile.png', 'srgb.png', 'cicp.png',
+      'infinite.heic', 'offset.heic', 'invalid-timing.heic', 'rate.heic', 'composition.heic'],
     command: [python, '@INPUT@', '@OUTPUT@'])
   decoder_test = executable('test-decoders', 'decoders.vala', dependencies: core_api)
 
@@ -68,11 +70,24 @@ if get_option('tests')
     if glycin.found() and glycin_gtk.found()
       viewer_args += [extra_formats[1]]
     endif
-    files_args = [fixture_dir / 'rgb16.png', fixture_dir / 'multipart.exr']
-    photos_args = [fixtures[0], fixture_dir / 'multipart.exr', meson.current_build_dir() / 'photos-export.png']
+    workflow_sequences = []
+    if avif_sequence.found()
+      workflow_sequences += [fixture_dir / 'avif-sequence.avif']
+    endif
+    if heif_sequence
+      workflow_sequences += [fixture_dir / 'heic-sequence.heic']
+    endif
+    raw_preview_fixture = ''
+    if get_option('raw_fixtures') != '' and fs.is_file(get_option('raw_fixtures') / '350D.CR2')
+      raw_preview_fixture = get_option('raw_fixtures') / '350D.CR2'
+    endif
+    files_args = [fixture_dir / 'rgb16.png', fixture_dir / 'multipart.exr',
+      raw_preview_fixture, fixtures[0], fixtures[4]] + workflow_sequences
+    photos_args = [fixtures[0], fixture_dir / 'multipart.exr', meson.current_build_dir() / 'photos-export.png',
+      raw_preview_fixture, fixtures[4]] + workflow_sequences
     test('Files public preview workflow', xvfb.found() ? xvfb : files_preview,
       args: (xvfb.found() ? ['-a', files_preview] : []) + files_args,
-      depends: [worker, files_preview], env: worker_env, timeout: 90)
+      depends: [worker, fixtures, files_preview], env: worker_env, timeout: 90)
     test('Photos public full-quality workflow', xvfb.found() ? xvfb : photos_viewer,
       args: (xvfb.found() ? ['-a', photos_viewer] : []) + photos_args,
       depends: [worker, fixtures, photos_viewer], env: worker_env, timeout: 90)

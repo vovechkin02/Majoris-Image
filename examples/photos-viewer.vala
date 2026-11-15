@@ -1,6 +1,6 @@
 using MajorisImage;
 
-private async void exercise (ImageView view, File large, File next, File destination, File? raw) throws Error {
+private async void exercise (ImageView view, File large, File next, File destination, File? raw, string[] extra) throws Error {
     var registry = new DecoderRegistry ();
     var options = new DecodeOptions ();
     options.preview_size = 800;
@@ -26,7 +26,21 @@ private async void exercise (ImageView view, File large, File next, File destina
     assert (sdr.width > 0);
     if (view.document.page_count > 1) yield view.set_page (1);
 
-    if (raw != null) yield view.load_file (raw, options);
+    foreach (var path in extra) {
+        yield view.load_file (File.new_for_path (path), options);
+        if (view.animated) {
+            yield view.seek_frame (1);
+            view.play ();
+            view.pause ();
+            assert (view.current_frame == 1);
+        } else {
+            assert (view.document.colour_managed && view.document.bit_depth >= 16);
+        }
+    }
+    if (raw != null) {
+        yield view.load_file (raw, options);
+        assert (view.document.raw_state == RawState.RAW_DEVELOPED);
+    }
     var export_options = new ExportOptions ();
     export_options.format = "png";
     yield new EncoderRegistry ().encode (next_source, destination, export_options);
@@ -47,7 +61,8 @@ int main (string[] args) {
     var loop = new MainLoop ();
     int status = 0;
     exercise.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]),
-        File.new_for_path (args[3]), args.length > 4 ? File.new_for_path (args[4]) : null, (obj, result) => {
+        File.new_for_path (args[3]), args.length > 4 && args[4] != "" ? File.new_for_path (args[4]) : null,
+        args.length > 5 ? args[5:args.length] : new string[0], (obj, result) => {
         try { exercise.end (result); }
         catch (Error error) { stderr.printf ("%s\n", error.message); status = 1; }
         loop.quit ();

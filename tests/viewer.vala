@@ -68,6 +68,15 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
     var hdr = view.document;
     assert (hdr.hdr && !hdr.tone_mapped);
     assert (view.presentation_status == PresentationStatus.SDR_TONE_MAPPED);
+    var active_hdr = view.document;
+    view.zoom_to (2.5);
+    view.pan_by (14, 10);
+    double active_zoom = view.zoom;
+    view.visible = false;
+    view.presentation_policy = PresentationPolicy.HDR_PREFERRED;
+    view.presentation_policy = PresentationPolicy.SDR;
+    view.visible = true;
+    assert (view.document == active_hdr && view.zoom == active_zoom);
     view.presentation_policy = PresentationPolicy.HDR_PREFERRED;
     assert (view.presentation_status == PresentationStatus.HDR_UNAVAILABLE);
     assert (view.presentation_diagnostic.contains ("cannot verify"));

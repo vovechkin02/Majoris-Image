@@ -12,7 +12,7 @@ private class MissingFixtureCodec : Object, DecoderBackend {
     public MissingFixtureCodec (string path) { this.path = path; }
     public string id { get { return "test-missing-fixture"; } }
     public string executable { get { return path; } }
-    public ImageCapabilities capabilities { get { return ImageCapabilities.STILL | ImageCapabilities.METADATA; } }
+    public ImageCapabilities capabilities { get { return ImageCapabilities.STILL | ImageCapabilities.METADATA | ImageCapabilities.COLOUR_MANAGED; } }
     public string[] mime_types { owned get { return { "image/qoi", "image/bmp", "image/vnd.microsoft.icon", "image/x-tga",
                    "image/vnd-ms.dds", "image/x-portable-graymap" }; } }
     public bool accepts (string mime, Bytes signature) {
@@ -33,8 +33,7 @@ async void exercise (string[] args) throws Error {
     registration.load_from_file (args[9], KeyFileFlags.NONE);
     string[] registered = registration.get_string_list ("Thumbnailer Entry", "MimeType");
     var advertised = yield registry.thumbnail_mime_types ();
-    assert (registered.length == advertised.length);
-    foreach (var mime in advertised) assert (mime in registered);
+    foreach (var mime in registered) assert (mime in advertised);
 
     int[] corner = { 4, 1, 5, 6, 4, 6, 5, 1 };
     for (int i = 0; i < 8; i++) {
@@ -85,6 +84,20 @@ async void exercise (string[] args) throws Error {
         var second_heic = yield heic.open_frame (1);
         assert (second_heic.frame_timestamp_us == 70000 && second_heic.frame_duration_us == 160000);
         assert (sample (second_heic.preview, 0, 1) > 0.9f);
+        var multi = yield registry.open (new ImageSource (File.new_for_path (
+            Path.build_filename (Path.get_dirname (args[7]), "heic-multitrack.heic"))));
+        assert (multi.frame_count == 2 && sample (multi.preview, 0, 0) > 0.9f);
+        var generated = Path.get_dirname (args[1]);
+        var infinite = yield registry.open (new ImageSource (File.new_for_path (
+            Path.build_filename (generated, "infinite.heic"))));
+        assert (infinite.loop_count == 0 && infinite.frame_count == 2);
+        assert ((yield infinite.open_frame (1)).frame_timestamp_us == 70000);
+        foreach (var invalid in new string[] { "offset.heic", "invalid-timing.heic", "rate.heic", "composition.heic" }) {
+            var source = new ImageSource (File.new_for_path (Path.build_filename (generated, invalid)));
+            try { yield registry.open (source); assert_not_reached (); }
+            catch (ImageError.DECODE error) { assert (error.message.contains ("edit list")); }
+            catch (ImageError.CORRUPT error) { }
+        }
     }
     var apng = new ImageSource (File.new_for_path (args[2]));
     var animation = yield registry.open (apng);
@@ -119,6 +132,28 @@ async void exercise (string[] args) throws Error {
         assert (!fallback_p3.colour_managed && fallback_p3.colour_diagnostic.contains ("ICC"));
         for (int channel = 0; channel < 3; channel++)
             assert (Math.fabs (sample (fallback_p3.preview, 0, channel) - reference[channel]) < 0.01);
+        var adobe = new ImageSource (File.new_for_path (Path.build_filename (directory, "adobe.png")));
+        var fallback_adobe = yield registry.open (adobe);
+        assert (fallback_adobe.decoder == "Glycin" && fallback_adobe.bit_depth == 16);
+        for (int channel = 0; channel < 3; channel++)
+            assert (Math.fabs (sample (fallback_adobe.preview, 0, channel) - reference[channel]) < 0.01);
+        var gray = new ImageSource (File.new_for_path (Path.build_filename (directory, "gray-profile.png")));
+        var fallback_gray = yield registry.open (gray);
+        assert (fallback_gray.decoder == "Glycin" && fallback_gray.bit_depth == 16);
+        for (int channel = 0; channel < 3; channel++)
+            assert (Math.fabs (sample (fallback_gray.preview, 0, channel) - 0.106) < 0.01);
+        assert (Math.fabs (sample (fallback_gray.preview, 0, 3) - 0.5) < 0.002);
+        assert (sample (fallback_gray.preview, 1, 3) == 0 && sample (fallback_gray.preview, 1, 0) == 0);
+        var srgb = new ImageSource (File.new_for_path (Path.build_filename (directory, "srgb.png")));
+        var require_colour = new DecodeOptions ();
+        require_colour.required_capabilities |= ImageCapabilities.COLOUR_MANAGED;
+        var verified = yield registry.open (srgb, require_colour);
+        assert (verified.decoder == "Glycin" && verified.colour_managed);
+        assert (Math.fabs (sample (verified.preview, 0, 0) - 0.21586) < 0.002);
+        assert (Math.fabs (sample (verified.preview, 0, 3) - 128.0 / 255) < 0.002);
+        var cicp = new ImageSource (File.new_for_path (Path.build_filename (directory, "cicp.png")));
+        try { yield registry.open (cicp); assert_not_reached (); }
+        catch (ImageError.COLOR_PROFILE error) { }
         var broken = new ImageSource (File.new_for_path (Path.build_filename (directory, "invalid-profile.png")));
         try { yield registry.open (broken); assert_not_reached (); }
         catch (ImageError.COLOR_PROFILE error) { }

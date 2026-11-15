@@ -49,7 +49,11 @@ consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
 
 See the [integration examples and ABI 1 capability matrix](docs/api-1.md) for formats,
-sandbox requirements and integration examples. The [1.1.0 verification report](docs/verification-1.1.0.md) records the build, package and test results.
+sandbox requirements and integration examples. The [1.1.1 verification report](docs/verification-1.1.1.md) records the build, package and test results.
+
+The desktop thumbnail entry registers JPEG, PNG, TIFF and OpenEXR. Use
+`DecoderRegistry.thumbnail_mime_types()` to query the installed optional
+decoders for direct thumbnail requests.
 
 ## Licence
 

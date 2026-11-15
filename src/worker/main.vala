@@ -60,6 +60,7 @@ namespace MajorisImage {
             if (edge < 0 || edge > 4096) throw new IOError.INVALID_ARGUMENT ("Invalid output edge");
             if (operation == "render-buffer") {
                 var image = ImageProcessor.render_image (ImageNative.read_pixels (source), request.transform, edge);
+                if (options.sdr_presentation) image = ToneMapper.map (image, options.tone_mode);
                 ImageNative.write_pixels (image, output);
                 return 0;
             }

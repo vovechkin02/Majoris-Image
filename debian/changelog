@@ -1,3 +1,11 @@
+majoris-image (1.1.1) unstable; urgency=medium
+
+  * Coordinate preview, tile and animation presentation generations.
+  * Validate Glycin output provenance and HEIF presentation timelines.
+  * Generate reproducible desktop registration for required codecs.
+
+ -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 14:00:00 +1100
+
 majoris-image (1.1.0) unstable; urgency=medium
 
   * Add sandboxed timed image tracks and indexed frame timing.

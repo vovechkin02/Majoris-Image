@@ -1,6 +1,6 @@
 using MajorisImage;
 
-private async void exercise (ImageView view, File image, File hdr, File? raw) throws Error {
+private async void exercise (ImageView view, File image, File hdr, File? raw, string[] extra) throws Error {
     var registry = new DecoderRegistry ();
     var thumbnails = new ThumbnailService ();
     var options = new DecodeOptions ();
@@ -41,7 +41,22 @@ private async void exercise (ImageView view, File image, File hdr, File? raw) th
         view.visible = false;
         view.visible = true;
     }
-    if (raw != null) yield view.load_file (raw, options);
+    foreach (var path in extra) {
+        yield view.load_file (File.new_for_path (path), options);
+        assert (!view.document.supports_regions && view.document.preview.width <= 256);
+        if (view.animated) {
+            yield view.seek_frame (1);
+            view.play ();
+            view.visible = false;
+            view.visible = true;
+            view.pause ();
+            assert (view.current_frame == 1);
+        }
+    }
+    if (raw != null) {
+        yield view.load_file (raw, options);
+        assert (view.document.raw_state == RawState.RAW_PREVIEW_AVAILABLE);
+    }
 
     var non_image = yield ImageSource.from_bytes (new Bytes ("plain text".data));
     try { yield view.load_source (non_image, options); assert_not_reached (); }
@@ -63,7 +78,8 @@ int main (string[] args) {
     var loop = new MainLoop ();
     int status = 0;
     exercise.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]),
-        args.length > 3 ? File.new_for_path (args[3]) : null, (obj, result) => {
+        args.length > 3 && args[3] != "" ? File.new_for_path (args[3]) : null,
+        args.length > 4 ? args[4:args.length] : new string[0], (obj, result) => {
         try { exercise.end (result); }
         catch (Error error) { stderr.printf ("%s\n", error.message); status = 1; }
         loop.quit ();

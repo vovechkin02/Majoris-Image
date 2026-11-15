@@ -25,6 +25,16 @@ async void verify (string directory, string large_path) throws Error {
     var multipart = new ImageSource (File.new_for_path (Path.build_filename (directory, "multipart.exr")));
     var exr = yield registry.open (multipart);
     assert (exr.hdr && exr.bit_depth == 32 && exr.page_count >= 2);
+    var exr_stream = yield multipart.file.read_async ();
+    var staged = yield ImageSource.from_stream (exr_stream);
+    yield exr_stream.close_async ();
+    var retained = yield registry.open (staged);
+    assert (staged.file.delete ());
+    var retained_sdr = yield retained.render_preview (true);
+    var retained_hdr = yield retained.render_preview ();
+    assert (retained_hdr.bytes.compare (exr.preview.bytes) == 0);
+    assert (luminance (retained_sdr, 16, 8) < 1.0);
+    assert (Math.fabs (sample (retained_sdr, 16, 8, 3) - 0.75) < 0.0001);
     var part = yield exr.open_page (1);
     assert (part.page == 1 && part.hdr && part.supports_regions);
 
@@ -34,6 +44,7 @@ async void verify (string directory, string large_path) throws Error {
     assert (sdr.tone_mapped);
     double original_y = luminance (exr.preview, 16, 8);
     double mapped_y = luminance (sdr.preview, 16, 8);
+    assert (Math.fabs (luminance (retained_sdr, 16, 8) - mapped_y) < 0.0001);
     assert (Math.fabs (mapped_y - 1.6 * original_y / (1 + 1.6 * original_y)) < 0.0001);
     assert (Math.fabs (sample (sdr.preview, 16, 8, 3) - 0.75) < 0.0001);
     var sdr_tile = yield sdr.render_region (16, 8, 1, 1, 1, true);

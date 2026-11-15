@@ -29,7 +29,7 @@ namespace MajorisImage {
         public PresentationPolicy presentation_policy { get; set; default = PresentationPolicy.AUTOMATIC; }
         public PresentationStatus presentation_status { get; private set; }
         public string presentation_diagnostic { get {
-            return document != null ? Presentation.inspect (this, presentation_policy, hdr_source).diagnostic : "";
+            return document != null ? presented.diagnostic : "";
         } }
         public bool animated { get; private set; }
         public bool playing { get; private set; }
@@ -45,6 +45,14 @@ namespace MajorisImage {
         public signal void transformed ();
 
         private Gdk.Texture? texture;
+        private PresentationDecision presented;
+        private ImageDocument? frame_source;
+        private uint presentation_generation;
+        private Cancellable presentation_work = new Cancellable ();
+        private bool presentation_pending;
+        private ListModel? monitors;
+        private ulong monitors_changed;
+        private ulong surface_scale_changed;
         private Cancellable pending = new Cancellable ();
         private uint generation;
         private bool disposed;
@@ -100,7 +108,7 @@ namespace MajorisImage {
                 watch_output (false);
                 tiles.reset (null);
                 suspend_playback ();
-                notify_property ("presentation-diagnostic");
+                update_presentation ();
             });
 
             var motion = new Gtk.EventControllerMotion ();
@@ -156,6 +164,8 @@ namespace MajorisImage {
 
         private uint invalidate () {
             generation++;
+            cancel_presentation ();
+            frame_source = null;
             pending.cancel ();
             pending = new Cancellable ();
             pause ();
@@ -236,42 +246,99 @@ namespace MajorisImage {
         private bool is_current (uint request) { return !disposed && request == generation; }
 
         private async void present_document (ImageDocument value, uint request, Cancellable stop) throws Error {
-            var decision = Presentation.inspect (this, presentation_policy, value.hdr);
-            var pixels = yield Presentation.pixels (value, decision, stop);
-            stop.set_error_if_cancelled ();
-            if (is_current (request)) show_document (value, pixels);
-            stop.set_error_if_cancelled ();
+            while (is_current (request)) {
+                var decision = Presentation.inspect (this, presentation_policy, value.hdr);
+                var pixels = yield Presentation.pixels (value, decision, stop);
+                stop.set_error_if_cancelled ();
+                var latest = Presentation.inspect (this, presentation_policy, value.hdr);
+                if (decision.tone_map != latest.tone_map) continue;
+                if (is_current (request)) show_document (value, pixels, latest);
+                return;
+            }
         }
 
         private void watch_output (bool attach = true) {
             if (watched_surface != null) {
                 watched_surface.disconnect (entered_monitor);
                 watched_surface.disconnect (left_monitor);
+                watched_surface.disconnect (surface_scale_changed);
+            }
+            if (monitors != null) {
+                monitors.disconnect (monitors_changed);
+                monitors = null;
             }
             watched_surface = attach ? get_native ()?.get_surface () : null;
             if (watched_surface != null) {
                 entered_monitor = watched_surface.enter_monitor.connect ((monitor) => update_presentation ());
                 left_monitor = watched_surface.leave_monitor.connect ((monitor) => update_presentation ());
+                surface_scale_changed = watched_surface.notify["scale"].connect (update_presentation);
+                monitors = watched_surface.get_display ().get_monitors ();
+                monitors_changed = monitors.items_changed.connect (() => update_presentation ());
             }
         }
 
-        private void update_presentation () {
-            if (disposed) return;
-            if (document != null) {
-                var decision = Presentation.inspect (this, presentation_policy, hdr_source);
-                presentation_status = decision.status;
-                tiles.reset (get_mapped () && !animated ? document : null, decision.tone_map);
-            }
+        private void cancel_presentation () {
+            presentation_generation++;
+            presentation_work.cancel ();
+            presentation_work = new Cancellable ();
+            presentation_pending = false;
+        }
+
+        private void publish_presentation (PresentationDecision decision) {
+            presented = decision;
+            tiles.reset (get_mapped () && !animated ? document : null, decision.tone_map);
+            presentation_status = decision.status;
             notify_property ("presentation-diagnostic");
             queue_draw ();
         }
 
-        private void show_document (ImageDocument value, PixelBuffer? presentation = null) {
+        private void update_presentation () {
+            var source = frame_source ?? document;
+            if (disposed || source == null) return;
+            var decision = Presentation.inspect (this, presentation_policy, source.hdr);
+            cancel_presentation ();
+            if (presented.tone_map == decision.tone_map) {
+                publish_presentation (decision);
+                if (advance_due) advance_when_ready ();
+                else schedule_frame ();
+                return;
+            }
+            tiles.reset (null);
+            presentation_pending = true;
+            prefetched = null;
+            if (animation_timer != 0) { Source.remove (animation_timer); animation_timer = 0; }
+            refresh_presentation.begin (source, decision, presentation_generation, presentation_work);
+        }
+
+        private async void refresh_presentation (ImageDocument source, PresentationDecision decision,
+                                                  uint request, Cancellable stop) {
+            try {
+                var pixels = yield Presentation.pixels (source, decision, stop);
+                if (disposed || stop.is_cancelled () || request != presentation_generation) return;
+                texture = texture_for_pixels (pixels);
+                publish_presentation (decision);
+            } catch (Error error) {
+                if (!stop.is_cancelled () && request == presentation_generation) {
+                    warning = error.message;
+                    publish_presentation (presented);
+                }
+            } finally {
+                if (!disposed && request == presentation_generation) {
+                    presentation_pending = false;
+                    if (advance_due) advance_when_ready ();
+                    else schedule_frame ();
+                }
+            }
+        }
+
+        private void show_document (ImageDocument value, PixelBuffer pixels, PresentationDecision decision) {
             uint request = generation;
             freeze_notify ();
+            cancel_presentation ();
             current_document = value;
             notify_property ("document");
-            texture = texture_for_pixels (presentation ?? value.preview);
+            frame_source = null;
+            texture = texture_for_pixels (pixels);
             image_width = value.width;
             image_height = value.height;
             page_count = value.page_count;
@@ -285,7 +352,7 @@ namespace MajorisImage {
             frame_duration_ms = value.frame_duration_ms;
             frame_delay = value.frame_duration_us;
             frames_presented = value.frame + 1;
-            update_presentation ();
+            publish_presentation (decision);
             state = value.raw_state == RawState.RAW_PREVIEW_AVAILABLE ? ViewState.PREVIEW_READY : ViewState.READY;
             thaw_notify ();
             if (is_current (request)) update_transform ();
@@ -472,7 +539,7 @@ namespace MajorisImage {
         }
 
         private void schedule_frame () {
-            if (disposed || !playing || !get_mapped () || animation_timer != 0 || advance_due) return;
+            if (disposed || !playing || !get_mapped () || presentation_pending || animation_timer != 0 || advance_due) return;
             animation_timer = Timeout.add ((uint) (frame_delay / 1000).clamp (10, uint.MAX), () => {
                 animation_timer = 0;
                 if (playback_finished ()) pause ();
@@ -492,10 +559,15 @@ namespace MajorisImage {
         }
 
         private void advance_when_ready () {
-            if (!advance_due || (!manual_advance && (!playing || !get_mapped ()))) return;
+            if (presentation_pending || !advance_due || (!manual_advance && (!playing || !get_mapped ()))) return;
             if (prefetched == null) { prefetch.begin (); return; }
             var loaded = prefetched;
             prefetched = null;
+            if (loaded.source != null && loaded.source.hdr &&
+                loaded.decision.tone_map != Presentation.inspect (this, presentation_policy, true).tone_map) {
+                prefetch.begin ();
+                return;
+            }
             advance_due = manual_advance = false;
             show_frame (loaded, next_frame_index (), frames_presented + 1);
             schedule_frame ();
@@ -507,7 +579,13 @@ namespace MajorisImage {
             current_frame = index;
             frame_delay = loaded.interval;
             frame_duration_ms = (int) (frame_delay / 1000).clamp (0, int.MAX);
+            frame_source = loaded.source;
             texture = loaded.texture;
+            if (frame_source != null && (presentation_pending ||
+                this.presented.status != loaded.decision.status || this.presented.tone_map != loaded.decision.tone_map)) {
+                cancel_presentation ();
+                publish_presentation (loaded.decision);
+            }
             queue_draw ();
             thaw_notify ();
         }
@@ -521,9 +599,17 @@ namespace MajorisImage {
             }
 #endif
             var frame = yield source.open_frame (index, stop);
-            var decision = Presentation.inspect (this, presentation_policy, frame.hdr);
-            var pixels = yield Presentation.pixels (frame, decision, stop);
-            return new AnimationFrame (texture_for_pixels (pixels), frame.frame_duration_us);
+            while (true) {
+                var decision = Presentation.inspect (this, presentation_policy, frame.hdr);
+                var pixels = yield Presentation.pixels (frame, decision, stop);
+                stop.set_error_if_cancelled ();
+                if (decision.tone_map != Presentation.inspect (this, presentation_policy, frame.hdr).tone_map)
+                    continue;
+                var result = new AnimationFrame (texture_for_pixels (pixels), frame.frame_duration_us);
+                result.source = frame;
+                result.decision = decision;
+                return result;
+            }
         }
 
         private async void prefetch () {

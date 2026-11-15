@@ -1,4 +1,5 @@
 namespace MajorisImage {
+    internal enum GlycinColourProvenance { TAGGED_SRGB, ICC_CONVERSION_UNVERIFIED, ASSUMED_SRGB, UNKNOWN }
     internal class GlycinFallback : Object {
         // Glycin 1 does not expose ICC, transfer functions, page counts or source depth.
         // Negotiate decoder capabilities using the installed loader and sandboxed metadata.
@@ -113,10 +114,14 @@ namespace MajorisImage {
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot verify the source transfer and primaries");
                 int source_depth = (int) colour.get_int_member_with_default ("source-bit-depth", 0);
                 bool known_header = colour.get_boolean_member_with_default ("header-read", false);
-                // Glycin 1 converts ICC-tagged samples internally. Its C API
-                // cannot attest that the transform succeeded, so strict colour
-                // requests continue to require a native decoder.
-                if ((request.required_capabilities & ImageCapabilities.COLOUR_MANAGED) != 0)
+                // PNG sRGB has no ICC transform to observe. The PNG loader publishes
+                // its encoded samples in the declared sRGB space on this path.
+                var provenance = mime == "image/png" && colour.get_boolean_member_with_default ("explicit-srgb", false)
+                    ? GlycinColourProvenance.TAGGED_SRGB
+                    : tagged ? GlycinColourProvenance.ICC_CONVERSION_UNVERIFIED
+                    : known_header ? GlycinColourProvenance.ASSUMED_SRGB : GlycinColourProvenance.UNKNOWN;
+                bool verified = provenance == GlycinColourProvenance.TAGGED_SRGB;
+                if (!verified && (request.required_capabilities & ImageCapabilities.COLOUR_MANAGED) != 0)
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded colour state");
 
                 yield scheduler.acquire (0, job);
@@ -155,7 +160,9 @@ namespace MajorisImage {
                 probe.height = (int) frame.get_height ();
                 probe.depth = depth;
                 probe.source_bit_depth = source_depth;
-                probe.colour_diagnostic = tagged ? "Glycin 1 applies the embedded ICC profile through Little CMS. Output colour state is unverified."
+                probe.colour_managed = verified;
+                probe.colour_diagnostic = verified ? "Validated PNG sRGB declaration and decoder output contract."
+                    : tagged ? "Glycin 1 applies the embedded ICC profile through Little CMS. Output colour state is unverified."
                     : known_header ? "Untagged source uses the sRGB default." : "Source colour metadata unavailable. Preview uses the sRGB default.";
                 probe.has_alpha = frame.get_memory_format ().has_alpha ();
                 probe.loader = "Glycin";
@@ -181,6 +188,10 @@ namespace MajorisImage {
                 metadata.set_int_member ("effective-bit-depth", depth);
                 metadata.set_member ("colour-probe", new Json.Node.alloc ().init_object (colour));
                 metadata.set_string_member ("colour", probe.colour_diagnostic);
+                metadata.set_string_member ("colour-provenance", provenance.to_string ());
+                metadata.set_string_member ("decoder-output-colour", verified ? "sRGB (PNG contract)" :
+                    tagged ? "ICC-converted output unverified" : "sRGB assumed");
+                metadata.set_string_member ("working-colour", "linear sRGB");
                 var node = new Json.Node (Json.NodeType.OBJECT);
                 node.set_object (metadata);
                 var generator = new Json.Generator ();
@@ -222,20 +233,9 @@ namespace MajorisImage {
             edits.nearest_neighbour = false;
             if (edits.serialize () == new RenderOptions ().serialize ()) return document.preview;
 
-            var pixels = document.preview;
-            uint8[] header = { 'M', 'I', 'F', '1', 0, 0, 0, 0, 0, 0, 0, 0 };
-            for (int n = 0; n < 4; n++) {
-                header[4 + n] = (uint8) ((uint) pixels.width >> (24 - n * 8));
-                header[8 + n] = (uint8) ((uint) pixels.height >> (24 - n * 8));
-            }
-            var stream = new MemoryInputStream ();
-            stream.add_bytes (new Bytes (header));
-            stream.add_bytes (pixels.bytes);
-            var staged = yield ImageSource.from_stream (stream, stop);
-            string output = yield new WorkerClient (null, seconds).run (staged.file,
-                "render-buffer", edits, stop, options.preview_size, options);
-            try { return yield WorkerClient.read_pixels (output, stop); }
-            finally { WorkerClient.cleanup (output); }
+            options.sdr_presentation = false;
+            return yield new WorkerClient (null, seconds).render_pixels (document.preview, edits,
+                                                                          options.preview_size, options, stop);
         }
     }
 }

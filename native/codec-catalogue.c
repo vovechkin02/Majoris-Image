@@ -12,10 +12,11 @@ static const struct NativeLoader {
     const char *operation;
     const char *mimes;
     unsigned capabilities;
+    const char *desktop_baseline;
 } loaders[] = {
-    {"jpegload", "image/jpeg", 1 | 64 | 256},
-    {"pngload", "image/png;image/apng", 1 | 8 | 64 | 256},
-    {"tiffload", "image/tiff", 1 | 4 | 8 | 16 | 32 | 64 | 256},
+    {"jpegload", "image/jpeg", 1 | 64 | 256, "image/jpeg"},
+    {"pngload", "image/png;image/apng", 1 | 8 | 64 | 256, "image/png"},
+    {"tiffload", "image/tiff", 1 | 4 | 8 | 16 | 32 | 64 | 256, "image/tiff"},
     {"webpload", "image/webp", 1 | 2 | 64 | 256},
     {"gifload", "image/gif", 1 | 2 | 64 | 256},
     {"jp2kload", "image/jp2", 1 | 8 | 64 | 256},
@@ -24,6 +25,17 @@ static const struct NativeLoader {
     {"radload", "image/vnd.radiance", 1 | 8 | 16 | 64},
     {"ppmload", "image/x-portable-anymap;image/x-portable-bitmap;image/x-portable-graymap;image/x-portable-pixmap", 1 | 8 | 64},
 };
+
+// The package descriptor must be reproducible on hosts with different plugins.
+char **majoris_codec_desktop_baseline(void)
+{
+    GPtrArray *types = g_ptr_array_new();
+    for (guint i = 0; i < G_N_ELEMENTS(loaders); i++)
+        if (loaders[i].desktop_baseline) g_ptr_array_add(types, g_strdup(loaders[i].desktop_baseline));
+    g_ptr_array_add(types, g_strdup("image/x-exr"));
+    g_ptr_array_add(types, NULL);
+    return (char **)g_ptr_array_free(types, FALSE);
+}
 
 static void add_formats(JsonBuilder *builder, const char *mimes, unsigned capabilities)
 {

@@ -44,8 +44,8 @@ Description: isolated Majoris Image decoding worker
 Package: majoris-image-thumbnailer
 Section: graphics
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, glycin-loaders,
- libheif-plugin-libde265, libheif-plugin-dav1d
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Suggests: glycin-loaders, libheif-plugin-libde265, libheif-plugin-dav1d
 Description: desktop thumbnail generator using Majoris Image
  Generates colour-managed PNG thumbnails for supported image formats using
  the Majoris Image worker.

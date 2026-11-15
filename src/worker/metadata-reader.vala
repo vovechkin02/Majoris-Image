@@ -6,6 +6,7 @@ namespace MajorisImage {
             var signature = input.read_bytes (8);
             unowned uint8[] bytes = signature.get_data ();
             bool colour_known = false;
+            bool reached_pixels = false;
             bool explicit_transfer = false;
             bool have_cicp = false;
             bool have_icc = false;
@@ -18,12 +19,21 @@ namespace MajorisImage {
                 while (++metadata_count <= 4096) {
                     uint32 length = chunks.read_uint32 ();
                     uint32 kind = chunks.read_uint32 ();
-                    if (kind == 0x49444154) break; // IDAT
+                    if (kind == 0x49444154) { reached_pixels = true; break; } // IDAT
                     if (kind == 0x63494350) have_cicp = true;
                     if (kind == 0x69434350) have_icc = true;
                     if (kind == 0x67414d41 || kind == 0x6348524d)
                         explicit_transfer = true; // gAMA, cHRM
-                    if (kind == 0x73524742) colour_known = true; // explicit sRGB
+                    if (kind == 0x73524742) {
+                        if (length != 1) throw new IOError.INVALID_DATA ("Invalid PNG sRGB declaration");
+                        uint8 intent = chunks.read_byte ();
+                        uint32[] checksums = { 0xaece1ce9u, 0xd9c92c7fu, 0x40c07dc5u, 0x37c74d53u };
+                        if (intent >= checksums.length || chunks.read_uint32 () != checksums[intent])
+                            throw new IOError.INVALID_DATA ("Invalid PNG sRGB declaration");
+                        if (colour_known) throw new IOError.INVALID_DATA ("Duplicate PNG sRGB declaration");
+                        colour_known = true;
+                        continue;
+                    }
                     if (!chunks.seek ((int64)length + 4, SeekType.CUR))
                         throw new IOError.INVALID_DATA ("Invalid PNG colour chunks");
                 }
@@ -50,6 +60,8 @@ namespace MajorisImage {
             }
             if (have_icc && !output.get_boolean_member_with_default ("icc", false))
                 output.set_boolean_member ("icc-invalid", true);
+            output.set_boolean_member ("explicit-srgb", colour_known && reached_pixels && image != null &&
+                !have_cicp && !output.get_boolean_member_with_default ("icc", false));
             output.set_boolean_member ("unverified-transfer", have_cicp || (explicit_transfer && !colour_known &&
                 !output.get_boolean_member_with_default ("icc", false)));
             var node = new Json.Node (Json.NodeType.OBJECT);

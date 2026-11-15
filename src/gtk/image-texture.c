@@ -7,6 +7,8 @@ GdkTexture *majoris_image_texture_new(GBytes *bytes, int width, int height, gsiz
     gdk_memory_texture_builder_set_height(builder, height);
     gdk_memory_texture_builder_set_stride(builder, stride);
     gdk_memory_texture_builder_set_format(builder, GDK_MEMORY_R32G32B32A32_FLOAT);
+    // Presentation supplies either tone-mapped or extended-range linear sRGB.
+    // Both are straight-alpha float data in the same primaries and transfer.
     gdk_memory_texture_builder_set_color_state(builder, gdk_color_state_get_srgb_linear());
     gdk_memory_texture_builder_set_bytes(builder, bytes);
     GdkTexture *texture = gdk_memory_texture_builder_build(builder);

@@ -18,6 +18,7 @@ gboolean majoris_codec_encoder_available(const char *extension);
 gboolean majoris_codec_ultra_probe(const char *path);
 VipsImage *majoris_codec_ultra_decode(const char *path, gboolean sdr, GError **error);
 gboolean majoris_codec_ultra_encode(VipsImage *image, const char *path, int format, int quality, GError **error);
+char **majoris_codec_desktop_baseline(void);
 char *majoris_codec_codec_json(void);
 char *majoris_codec_image_details(VipsImage *image);
 gboolean majoris_codec_sync_stream(GOutputStream *stream, GError **error);

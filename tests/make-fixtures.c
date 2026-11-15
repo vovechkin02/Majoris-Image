@@ -1,10 +1,11 @@
 #include "bridge.h"
+#include <lcms2.h>
 
 int main(int argc, char **argv)
 {
-    if (argc != 7 || VIPS_INIT(argv[0])) return 1;
+    if (argc != 9 || VIPS_INIT(argv[0])) return 1;
     VipsImage *black = NULL, *mid = NULL, *tiff = NULL, *raster = NULL;
-    VipsImage *working = NULL, *profiled = NULL;
+    VipsImage *working = NULL, *profiled = NULL, *gray = NULL;
     g_autoptr(GError) error = NULL;
     int rc = 1;
     if (vips_black(&black, 20000, 10000, "bands", 3, NULL) ||
@@ -46,8 +47,27 @@ int main(int argc, char **argv)
     }
     if (vips_pngsave(profiled, argv[5], "bitdepth", 16, NULL) ||
         vips_tiffsave(profiled, argv[6], NULL)) goto done;
+    g_clear_object(&profiled);
+    profiled = majoris_codec_convert_profile(working, "adobe-rgb", 16, &error);
+    if (!profiled || vips_pngsave(profiled, argv[7], "bitdepth", 16, NULL)) goto done;
+
+    guint16 gray_alpha[] = {18820, 32768, 32768, 0};
+    gray = vips_image_new_from_memory_copy(gray_alpha, sizeof gray_alpha, 2, 1, 2, VIPS_FORMAT_USHORT);
+    gray->Type = VIPS_INTERPRETATION_GREY16;
+    cmsToneCurve *curve = cmsBuildGamma(NULL, 1.8);
+    cmsHPROFILE gray_profile = curve ? cmsCreateGrayProfile(cmsD50_xyY(), curve) : NULL;
+    if (curve) cmsFreeToneCurve(curve);
+    if (!gray_profile) goto done;
+    guint8 profile_bytes[4096];
+    cmsUInt32Number profile_size = sizeof profile_bytes;
+    gboolean saved = cmsSaveProfileToMem(gray_profile, profile_bytes, &profile_size);
+    cmsCloseProfile(gray_profile);
+    if (!saved) goto done;
+    vips_image_set_blob_copy(gray, VIPS_META_ICC_NAME, profile_bytes, profile_size);
+    if (vips_pngsave(gray, argv[8], "bitdepth", 16, NULL)) goto done;
     rc = 0;
 done:
+    g_clear_object(&gray);
     if (rc) g_printerr("%s\n", vips_error_buffer());
     g_clear_object(&profiled);
     g_clear_object(&working);

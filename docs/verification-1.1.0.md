@@ -1,5 +1,7 @@
 # Majoris Image 1.1.0 implementation and verification
 
+See [1.1.1 verification](verification-1.1.1.md) for the current release.
+
 | Area | Change | Main files |
 | --- | --- | --- |
 | Decoder selection and colour | Discover compatible Glycin 1 loaders in XDG data roots. Negotiate by content, installed MIME and requested capabilities. Probe ICC, CICP and source precision in the native sandbox. Use linear-light area filtering, alpha-weighted accumulation and re-decode for larger crops. General rendering uses the same fallback. | `native/glycin-discovery.{c,h}`, `src/core/{decoder-registry,glycin-fallback,image-document,render-options}.vala`, `src/core/glycin-pixels.c`, `src/worker/{metadata-reader,image-processor,main}.vala`, `native/{metadata,pixels}.c` |

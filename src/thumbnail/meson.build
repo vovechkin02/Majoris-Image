@@ -4,5 +4,5 @@ thumbnail_mime_generator = executable('majoris-image-thumbnail-types', 'mime-reg
 thumbnail_registration = custom_target('majoris-image.thumbnailer',
   input: 'majoris-image.thumbnailer.in', output: 'majoris-image.thumbnailer',
   command: [thumbnail_mime_generator, '@INPUT@', '@OUTPUT@',
-    get_option('prefix') / get_option('libexecdir') / 'majoris-image-thumbnailer', glycin.found() ? 'glycin' : 'native'],
+    get_option('prefix') / get_option('libexecdir') / 'majoris-image-thumbnailer', 'baseline'],
   install: true, install_dir: get_option('datadir') / 'thumbnailers', build_by_default: true)

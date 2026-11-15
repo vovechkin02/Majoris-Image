@@ -18,7 +18,7 @@ def rgba(pixels):
 
 qoi, apng, *formats = map(pathlib.Path, sys.argv[1:])
 oriented = formats[:8]
-bmp, ico, tga, dds, pgm, bad_icc = formats[8:]
+bmp, ico, tga, dds, pgm, bad_icc, srgb, cicp, indefinite, offset_edit, invalid_timing, rate_edit, composition = formats[8:]
 # Two independently encoded pixels with different transparency.
 qoi.write_bytes(
     b"qoif" + struct.pack(">IIBB", 2, 1, 4, 0)
@@ -89,3 +89,46 @@ bad_icc.write_bytes(
     + chunk(b"IDAT", rgba([255, 0, 0, 255] * 2))
     + chunk(b"IEND")
 )
+
+
+for target, declaration in ((srgb, chunk(b"sRGB", bytes(1))),
+                            (cicp, chunk(b"cICP", bytes((9, 16, 0, 1))))):
+    target.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 1, 8, 6, 0, 0, 0))
+        + declaration + chunk(b"IDAT", rgba([128, 64, 32, 128] * 2))
+        + chunk(b"IEND")
+    )
+
+
+# Mutations retain the original sample data and all chunk offsets. The fixture
+# uses version-zero movie, track and edit headers with one whole-track repeat.
+heic = (pathlib.Path(__file__).parent / "fixtures" / "heic-sequence.heic").read_bytes()
+
+def replace_field(box, offset, value):
+    position = heic.index(box) + offset
+    return heic[:position] + struct.pack(">I", value) + heic[position + 4:]
+
+indefinite.write_bytes(replace_field(b"mvhd", 20, 0xffffffff))
+offset_edit.write_bytes(replace_field(b"elst", 16, 1))
+invalid_timing.write_bytes(replace_field(b"stts", 16, 0))
+rate_edit.write_bytes(replace_field(b"elst", 20, 0x20000))
+
+
+# Insert a nonzero composition offset into the selected track's sample table.
+# Relocate the stored offsets for the media bytes after the expanded movie box.
+composed = bytearray(heic)
+sample_table = heic.index(b"stbl") - 4
+insert_at = sample_table + struct.unpack_from(">I", heic, sample_table)[0]
+ctts = struct.pack(">I4sIIII", 24, b"ctts", 0, 1, 2, 1)
+for box in (b"stbl", b"minf", b"mdia", b"trak", b"moov"):
+    size_at = heic.index(box) - 4
+    size = struct.unpack_from(">I", heic, size_at)[0]
+    struct.pack_into(">I", composed, size_at, size + len(ctts))
+offset_table = heic.index(b"stco")
+for i in range(struct.unpack_from(">I", heic, offset_table + 8)[0]):
+    field = offset_table + 12 + i * 4
+    value = struct.unpack_from(">I", heic, field)[0]
+    struct.pack_into(">I", composed, field, value + len(ctts))
+composed[insert_at:insert_at] = ctts
+composition.write_bytes(composed)

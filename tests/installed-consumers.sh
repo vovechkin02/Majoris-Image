@@ -7,8 +7,8 @@ trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/fil
 cd "$scratch"
 unset MAJORIS_IMAGE_WORKER
 
-pkg-config --atleast-version=1.1.0 majoris-image-1
-pkg-config --atleast-version=1.1.0 majoris-image-gtk4-1
+pkg-config --atleast-version=1.1.1 majoris-image-1
+pkg-config --atleast-version=1.1.1 majoris-image-gtk4-1
 valac --pkg majoris-image-1 "$source_root/tests/benchmark.vala" -o headless
 ./headless open "$source_root/tests/fixtures/rgb16.png"
 if ldd ./headless | grep -E 'libgtk|libgdk-'; then

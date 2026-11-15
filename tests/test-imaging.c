@@ -36,6 +36,48 @@ static void pq_reference(void) {
     g_assert_cmpfloat_with_epsilon(sample(linear,0),100.0/203.0,.0001);
     g_object_unref(linear); g_object_unref(input);
 }
+static void rec2020_primary_reference(void)
+{
+    const float red[] = {1, 0, 0, .5f};
+    g_autoptr(VipsImage) source = vips_image_new_from_memory_copy(red, sizeof red, 1, 1, 4, VIPS_FORMAT_FLOAT);
+    source->Type = VIPS_INTERPRETATION_scRGB;
+    vips_image_set_int(source, "majoris-image-transfer", 8);
+    vips_image_set_int(source, "majoris-image-primaries", 9);
+    g_autoptr(GError) error = NULL;
+    g_autoptr(VipsImage) converted = image_codec_to_linear(source, &error);
+    g_assert_no_error(error);
+    g_assert_nonnull(converted);
+    size_t length;
+    g_autofree float *pixel = vips_image_write_to_memory(converted, &length);
+    g_assert_cmpuint(length, ==, sizeof red);
+    // Linear BT.2020 red expressed in linear sRGB, including negative values.
+    g_assert_cmpfloat_with_epsilon(pixel[0], 1.66049, .0001);
+    g_assert_cmpfloat_with_epsilon(pixel[1], -.12455, .0001);
+    g_assert_cmpfloat_with_epsilon(pixel[2], -.01815, .0001);
+    g_assert_cmpfloat_with_epsilon(pixel[3], .5, 1e-6);
+}
+
+static void float_buffer_boundaries(void)
+{
+    const float values[] = {NAN, INFINITY, -INFINITY, NAN, -2, 4, .25f, -1, 4, -2, .5f, 2};
+    const float expected[] = {0, 0, 0, 1, -2, 4, .25f, 0, 4, -2, .5f, 1};
+    g_autoptr(GError) error = NULL;
+    g_autofree char *dir = g_dir_make_tmp("imagekit-float-XXXXXX", &error);
+    g_assert_no_error(error);
+    g_autofree char *path = g_build_filename(dir, "float.buffer", NULL);
+    g_autoptr(VipsImage) source = vips_image_new_from_memory_copy(values, sizeof values, 3, 1, 4, VIPS_FORMAT_FLOAT);
+    g_assert_true(image_codec_write_pixels(source, path, &error));
+    g_assert_no_error(error);
+    g_autoptr(VipsImage) decoded = image_codec_read_pixels(path, &error);
+    g_assert_no_error(error);
+    g_assert_nonnull(decoded);
+    size_t length;
+    g_autofree float *pixels = vips_image_write_to_memory(decoded, &length);
+    g_assert_cmpmem(pixels, length, expected, sizeof expected);
+    g_assert_cmpint(g_unlink(path), ==, 0);
+    g_assert_cmpint(g_rmdir(dir), ==, 0);
+}
+
 static void profile_reference(void) {
     GError *error=NULL; VipsImage *input=constant_image(.18,FALSE);
     const char *profiles[]={"srgb","display-p3","adobe-rgb","prophoto"};
@@ -47,6 +89,24 @@ static void profile_reference(void) {
     }
     g_object_unref(input);
 }
+static void profile_alpha_reference(void)
+{
+    g_autoptr(GError) error = NULL;
+    g_autoptr(VipsImage) input = constant_image(.18, TRUE);
+    for (int depth = 8; depth <= 16; depth += 8) {
+        double max = depth == 16 ? 65535 : 255;
+        g_autoptr(VipsImage) encoded = image_codec_convert_profile(input, "srgb", depth, &error);
+        g_assert_no_error(error);
+        g_assert_nonnull(encoded);
+        g_assert_cmpfloat_with_epsilon(sample(encoded, 3), round(.375 * max), .001);
+        g_autoptr(VipsImage) decoded = image_codec_to_linear(encoded, &error);
+        g_assert_no_error(error);
+        g_assert_nonnull(decoded);
+        g_assert_cmpfloat_with_epsilon(sample(decoded, 3), round(.375 * max) / max, 1e-6);
+        g_assert_cmpfloat_with_epsilon(sample(decoded, 0), .18, .005);
+    }
+}
+
 static void p3_primary_reference(void) {
     GError *error=NULL; VipsImage *gray=constant_image(.18,FALSE);
     VipsImage *profiled=image_codec_convert_profile(gray,"display-p3",16,&error); g_assert_no_error(error);
@@ -151,8 +211,11 @@ int main(int argc,char **argv) {
     g_test_init(&argc,&argv,NULL); VIPS_INIT("majoris-image-imaging-tests"); vips_cache_set_max(0); vips_concurrency_set(2);
     g_test_add_func("/imaging/linear-alpha",linear_reference);
     g_test_add_func("/imaging/pq-reference-white",pq_reference);
+    g_test_add_func("/imaging/rec2020-primary-reference", rec2020_primary_reference);
+    g_test_add_func("/imaging/float-buffer-boundaries", float_buffer_boundaries);
     g_test_add_func("/imaging/icc-roundtrip",profile_reference);
     g_test_add_func("/imaging/p3-primary-reference",p3_primary_reference);
+    g_test_add_func("/imaging/icc-alpha-roundtrip", profile_alpha_reference);
     g_test_add_func("/imaging/exr-roundtrip",exr_roundtrip);
     g_test_add_func("/imaging/hdr-tiff-roundtrip",hdr_tiff_roundtrip);
     g_test_add_func("/imaging/hdr-jxl-roundtrip",hdr_jxl_roundtrip);

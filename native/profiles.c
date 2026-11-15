@@ -36,9 +36,37 @@ static cmsHPROFILE make_profile(const char *name) {
     if (result) { cmsMLU *label = cmsMLUalloc(NULL, 1); cmsMLUsetASCII(label,"en","US",name); cmsWriteTag(result,cmsSigProfileDescriptionTag,label); cmsMLUfree(label); }
     return result;
 }
+static VipsImage *export_profile(VipsImage *linear, const char *path, int depth)
+{
+    g_autoptr(VipsImage) color = NULL;
+    g_autoptr(VipsImage) pcs = NULL;
+    g_autoptr(VipsImage) encoded = NULL;
+    gboolean has_alpha = vips_image_hasalpha(linear);
+    if (has_alpha && vips_extract_band(linear, &color, 0, "n", linear->Bands - 1, NULL))
+        return NULL;
+    if (vips_colourspace(color ? color : linear, &pcs, VIPS_INTERPRETATION_XYZ, NULL) ||
+        vips_icc_export(pcs, &encoded, "output_profile", path, "depth", depth,
+                        "pcs", VIPS_PCS_XYZ, "black_point_compensation", TRUE, NULL))
+        return NULL;
+    if (!has_alpha) return g_steal_pointer(&encoded);
+
+    // Keep straight alpha out of the ICC transform and quantize it in the
+    // destination sample range. The input alpha is normalized float data.
+    g_autoptr(VipsImage) alpha = NULL;
+    g_autoptr(VipsImage) scaled = NULL;
+    g_autoptr(VipsImage) quantized = NULL;
+    VipsImage *output = NULL;
+    if (vips_extract_band(linear, &alpha, linear->Bands - 1, NULL) ||
+        vips_linear1(alpha, &scaled, depth == 16 ? 65535.0 : 255.0, 0.5, NULL) ||
+        vips_cast(scaled, &quantized, encoded->BandFmt, NULL) ||
+        vips_bandjoin2(encoded, quantized, &output, NULL))
+        return NULL;
+    return output;
+}
+
 VipsImage *image_codec_convert_profile(VipsImage *linear, const char *profile_name, int depth, GError **error) {
     const void *source_profile = NULL; size_t source_size = 0;
-    cmsHPROFILE profile = NULL; void *owned = NULL; VipsImage *pcs = NULL, *output = NULL;
+    cmsHPROFILE profile = NULL; void *owned = NULL; VipsImage *output = NULL;
     if (!strcmp(profile_name, "source") && vips_image_get_typeof(linear, "majoris-image-source-icc")) {
         if (vips_image_get_blob(linear, "majoris-image-source-icc", &source_profile, &source_size)) goto fail;
         profile = cmsOpenProfileFromMem(source_profile, source_size);
@@ -50,14 +78,14 @@ VipsImage *image_codec_convert_profile(VipsImage *linear, const char *profile_na
     if (fd < 0) goto fail;
     close(fd);
     gboolean written = g_file_set_contents(path, owned, size, error);
-    if (written && !vips_colourspace(linear, &pcs, VIPS_INTERPRETATION_XYZ, NULL))
-        vips_icc_export(pcs, &output, "output_profile", path, "depth", depth, "pcs", VIPS_PCS_XYZ, "black_point_compensation", TRUE, NULL);
-    unlink(path); g_free(path); g_free(owned); cmsCloseProfile(profile); g_clear_object(&pcs);
+    if (written) output = export_profile(linear, path, depth);
+    unlink(path); g_free(path); g_free(owned); cmsCloseProfile(profile);
     if (output) return output;
     if (!error || !*error) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,vips_error_buffer());
     vips_error_clear(); return NULL;
 fail:
-    if (profile) cmsCloseProfile(profile); g_free(owned); g_clear_object(&pcs); g_clear_object(&output);
+    if (profile) cmsCloseProfile(profile);
+    g_free(owned);
     if (!error || !*error) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,vips_error_buffer());
     vips_error_clear(); return NULL;
 }

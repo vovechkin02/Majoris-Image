@@ -71,12 +71,31 @@ VipsImage *image_codec_to_linear(VipsImage *image, GError **error) {
         transform = float_profile_transform(image);
         if (!transform) { vips_error("Photos","%s","Invalid floating-point RGB profile"); goto fail; }
         rgb = g_object_ref(image);
-    } else if (vips_image_get_typeof(image, VIPS_META_ICC_NAME)) {
-        VipsImage *pcs = NULL;
-        if (vips_icc_import(image, &pcs, "embedded", TRUE, "pcs", VIPS_PCS_XYZ, "black_point_compensation", TRUE, NULL)) goto fail;
-        int status = vips_colourspace(pcs, &rgb, VIPS_INTERPRETATION_scRGB, NULL); g_object_unref(pcs);
-        if (status) goto fail;
-    } else if (vips_colourspace(image, &rgb, VIPS_INTERPRETATION_scRGB, NULL)) goto fail;
+    } else {
+        g_autoptr(VipsImage) color = NULL;
+        g_autoptr(VipsImage) alpha = NULL;
+        g_autoptr(VipsImage) pcs = NULL;
+        g_autoptr(VipsImage) linear = NULL;
+        if (vips_image_hasalpha(image) &&
+            (vips_extract_band(image, &color, 0, "n", image->Bands - 1, NULL) ||
+             vips_extract_band(image, &alpha, image->Bands - 1, NULL)))
+            goto fail;
+        VipsImage *input = color ? color : image;
+        if (vips_image_get_typeof(input, VIPS_META_ICC_NAME)) {
+            if (vips_icc_import(input, &pcs, "embedded", TRUE, "pcs", VIPS_PCS_XYZ,
+                                "black_point_compensation", TRUE, NULL))
+                goto fail;
+            input = pcs;
+        }
+        if (vips_colourspace(input, &linear, VIPS_INTERPRETATION_scRGB, NULL)) goto fail;
+        // The color conversion can normalize or clamp extra bands. Preserve
+        // the original straight alpha so the generator normalizes it once.
+        if (alpha) {
+            if (vips_bandjoin2(linear, alpha, &rgb, NULL)) goto fail;
+        } else {
+            rgb = g_steal_pointer(&linear);
+        }
+    }
     if (vips_cast(rgb, &floating, VIPS_FORMAT_FLOAT, NULL)) goto fail;
     if (floating->Bands != 3 && floating->Bands != 4) { vips_error("Photos", "%s", "Expected RGB or RGBA color data"); goto fail; }
     out = vips_image_new();

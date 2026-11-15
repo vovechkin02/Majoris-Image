@@ -1,0 +1,27 @@
+name: Release qualification
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    # This runner provides the nine checksum-pinned RAW samples and the
+    # vendor libuhdr development and runtime packages.
+    runs-on: [self-hosted, linux, majoris-image-release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Qualify the release build and installed ABI
+        run: |
+          set -eu
+          : "${IMAGEKIT_RAW_FIXTURES:?Configure the protected runner RAW fixture directory}"
+          meson setup release-build -Dextended_tests=true -Dglycin=enabled -Dsequence=enabled \
+            -Dultrahdr=enabled -Dintrospection=enabled -Draw_fixtures="$IMAGEKIT_RAW_FIXTURES"
+          sh tests/qualify-debian.sh release-build
+          python3 tests/qualify.py release-build --installed
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-test-logs
+          path: release-build/meson-logs

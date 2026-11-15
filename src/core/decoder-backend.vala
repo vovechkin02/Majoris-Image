@@ -73,7 +73,10 @@ namespace ImageKit {
         }
         internal static ImageProbe deserialize (string text) throws Error {
             var parser = new Json.Parser ();
-            parser.load_from_data (text);
+            try { parser.load_from_data (text); }
+            catch (Error error) {
+                throw new ImageError.INVALID_RESPONSE ("Invalid decoder manifest JSON: %s", error.message);
+            }
             var root = parser.get_root ();
             if (root == null || root.get_node_type () != Json.NodeType.OBJECT)
                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder manifest");
@@ -85,6 +88,18 @@ namespace ImageKit {
             object.remove_member ("capabilities");
             rename_json_member (object, WIRE_MANAGED, PROPERTY_MANAGED);
             rename_json_member (object, WIRE_DIAGNOSTIC, PROPERTY_DIAGNOSTIC);
+            // JSON-GLib accepts numeric coercions and emits criticals for some
+            // mismatched GObject properties. Reject malformed fields first.
+            ObjectClass klass = (ObjectClass) typeof (ImageProbe).class_ref ();
+            foreach (unowned string member in object.get_members ()) {
+                unowned ParamSpec? property = klass.find_property (member);
+                if (property == null) continue;
+                var node = object.get_member (member);
+                Type expected = property.value_type == typeof (int) ? typeof (int64) : property.value_type;
+                if (node.get_node_type () != Json.NodeType.VALUE || node.get_value_type () != expected ||
+                    (property.value_type == typeof (int) && (node.get_int () < int.MIN || node.get_int () > int.MAX)))
+                    throw new ImageError.INVALID_RESPONSE ("Invalid decoder manifest field: %s", member);
+            }
             var result = Json.gobject_deserialize (typeof (ImageProbe), root) as ImageProbe;
             if (result == null || result.width < 1 || result.height < 1 ||
                 result.width > 1000000 || result.height > 1000000 ||

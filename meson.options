@@ -5,3 +5,6 @@ option('introspection', type: 'feature', value: 'auto', description: 'Generate G
 option('tests', type: 'boolean', value: true, description: 'Build verification targets')
 option('raw_fixtures', type: 'string', value: '', description: 'Directory containing licensed camera RAW regression inputs')
 option('sequence', type: 'feature', value: 'auto', description: 'Enable libavif and compatible libheif timed sequences')
+option('extended_tests', type: 'boolean', value: false, description: 'Register extended large-image and lifecycle tests')
+option('libfuzzer', type: 'boolean', value: false, description: 'Build the Clang libFuzzer harness')
+option('wayland_tests', type: 'boolean', value: false, description: 'Register tests requiring a Wayland compositor')

@@ -43,7 +43,7 @@ for the target system. Use a Linux filesystem for Debian packaging so the
 executable mode on `debian/rules` and regular modes on debhelper files are
 preserved.
 
-Run `sh tests/installed-consumers.sh` with the installed development package,
+Run `sh tests/installed-consumers.sh /absolute/build/tests/large.tiff` with the installed development package,
 Vala, a C compiler, Xvfb and Python GObject bindings to verify independent
 consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
@@ -77,6 +77,9 @@ the view in a scrolling pane and assigns Ctrl+wheel zoom. The Photos-style
 example uses the default wheel policy. The [widget guide](docs/api-2.md)
 documents shortcuts, per-image accessible descriptions, animations and
 external texture reporting.
+
+See the [test guide](docs/TESTING.md) for isolated, extended, sanitizer, benchmark,
+and release qualification workflows.
 
 ## License
 

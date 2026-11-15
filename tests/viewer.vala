@@ -35,7 +35,7 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
     view.visible = false;
     yield view.load_file (tiff);
     view.visible = true;
-    while (other.state == ViewState.LOADING) yield delay (10);
+    yield wait_for ("second viewer load", () => other.state != ViewState.LOADING);
     assert (obsolete_finished);
     assert (view.page_count == 2 && other.page_count == 1);
     assert (view.current_page == 0 && other.image_width == 24);
@@ -62,7 +62,7 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
     });
     try { yield view.load_file (tiff); assert_not_reached (); }
     catch (IOError.CANCELLED error) { }
-    for (int i = 0; !replacement_done && i < 100; i++) yield delay (10);
+    yield wait_for ("replacement callback", () => replacement_done);
     view.disconnect (followup);
     assert (replacement_done && view.document.mime_type == "image/png" && view.image_width == 24);
 
@@ -101,7 +101,7 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
         disposed_callback = true;
     });
     force_dispose (dying);
-    for (int i = 0; !disposed_callback && i < 100; i++) yield delay (10);
+    yield wait_for ("disposed viewer callback", () => disposed_callback);
     assert (disposed_callback && dying.document == null);
 
     foreach (string animation in animations) {
@@ -152,6 +152,17 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
     }
     view.clear ();
     assert (view.state == ViewState.EMPTY && view.document == null && other.document != null);
+}
+
+private delegate bool Condition ();
+
+private async void wait_for (string operation, Condition completed) throws Error {
+    int64 deadline = get_monotonic_time () + 5 * TimeSpan.SECOND;
+    while (!completed ()) {
+        if (get_monotonic_time () >= deadline)
+            throw new IOError.TIMED_OUT ("GTK test timed out waiting for %s", operation);
+        yield delay (10);
+    }
 }
 
 private async void delay (uint milliseconds) {

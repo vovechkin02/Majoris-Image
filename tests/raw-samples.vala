@@ -12,18 +12,34 @@ async string checksum (File file) throws Error {
     return hash.get_string ();
 }
 
-async void exercise (string directory) throws Error {
-    var entries = Dir.open (directory);
+async void exercise (string directory, string manifest) throws Error {
+    string contents;
+    FileUtils.get_contents (manifest, out contents);
     int count = 0, previews = 0;
-    string? name;
-    while ((name = entries.read_name ()) != null) {
+    foreach (string line in contents.split ("\n")) {
+        if (line.strip () == "" || line.has_prefix ("#")) continue;
+        string[] fields = line.split ("\t");
+        if (fields.length != 11)
+            throw new IOError.INVALID_DATA ("Invalid RAW manifest entry: %s", line);
+        string name = fields[0];
         var file = File.new_for_path (Path.build_filename (directory, name));
-        if (file.query_file_type (FileQueryInfoFlags.NOFOLLOW_SYMLINKS) != FileType.REGULAR) continue;
+        if (file.query_file_type (FileQueryInfoFlags.NOFOLLOW_SYMLINKS) != FileType.REGULAR)
+            throw new IOError.NOT_FOUND ("Missing required RAW fixture: %s", file.get_path ());
         var source = new ImageSource (file);
         var registry = new DecoderRegistry ();
         string before = yield checksum (file);
+        if (before != fields[8])
+            throw new IOError.INVALID_DATA ("RAW checksum mismatch for %s: expected %s, got %s",
+                name, fields[8], before);
         var probe = yield registry.inspect (source);
         assert (probe.raw && probe.width > 0 && probe.height > 0);
+        assert (probe.embedded_preview == (fields[6] == "true"));
+        assert (probe.source_bit_depth == int.parse (fields[7]));
+        var parser = new Json.Parser ();
+        parser.load_from_data (probe.metadata);
+        var metadata = parser.get_root ().get_object ();
+        assert (metadata.get_string_member ("camera-model").strip () == fields[1]);
+        assert (metadata.get_string_member ("orientation") == fields[5]);
         var options = new DecodeOptions ();
         options.preview_size = 256;
         options.raw_preview_only = true;
@@ -48,7 +64,9 @@ async void exercise (string directory) throws Error {
         options.raw_preview_only = false;
         var rgb = yield registry.open (source, options);
         assert (rgb.raw_state == RawState.RAW_DEVELOPED && rgb.bit_depth == 16);
-        assert (rgb.source_bit_depth == probe.source_bit_depth);
+        assert (rgb.source_bit_depth == probe.source_bit_depth && rgb.pixel_buffer_bit_depth == 32);
+        assert (rgb.width == int.parse (fields[3]) && rgb.height == int.parse (fields[4]));
+        assert (rgb.preview.bytes.get_size () == rgb.preview.stride * rgb.preview.height);
         options.camera_white_balance = false;
         options.raw_quality = 0;
         var neutral = yield registry.open (source, options);
@@ -60,14 +78,15 @@ async void exercise (string directory) throws Error {
         stdout.printf ("%s developed %dx%d, source precision %d\n", name, rgb.width, rgb.height, rgb.source_bit_depth);
         count++;
     }
-    assert (count > 0 && previews > 0);
+    assert (count == 9 && previews == 9);
     stdout.printf ("%d real RAW samples, %d embedded previews\n", count, previews);
 }
 
 int main (string[] args) {
+    if (args.length != 3) return 2;
     var loop = new MainLoop ();
     int status = 0;
-    exercise.begin (args[1], (obj, result) => {
+    exercise.begin (args[1], args[2], (obj, result) => {
         try { exercise.end (result); }
         catch (Error error) { stderr.printf ("%s\n", error.message); status = 1; }
         loop.quit ();

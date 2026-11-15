@@ -343,7 +343,8 @@ valac --pkg majoris-image-gtk4-1 photos-viewer.vala -o photos-viewer
 ./photos-viewer large.tiff multipart.exr exported.png [camera.raw]
 ```
 
-Run `tests/installed-consumers.sh` with the five installed packages, Xvfb,
+Run `sh tests/installed-consumers.sh /absolute/build/tests/large.tiff` with
+the five installed packages, Xvfb,
 Vala and Python GI. For the Photos workflow, place the generated
 `build/tests/large.tiff` in the external fixture directory beside the other
 inputs. The optional RAW input uses the same public viewer API.
@@ -433,3 +434,5 @@ Benchmark modes are `open`, `full` (up to a 4096-pixel edge), `tile`,
 Use a fresh `XDG_CACHE_HOME` for uncached thumbnail measurement. For zoom and
 pan, use the GTK demo with the generated 200 MP TIFF and profile compositor
 frame times through Sysprof on the target desktop.
+
+See the [test guide](TESTING.md) for fixture staging, test suites, and release qualification.

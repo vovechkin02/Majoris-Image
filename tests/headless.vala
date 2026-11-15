@@ -17,7 +17,26 @@ async void verify (string directory, string large_path) throws Error {
     assert (rgb8.bit_depth == 8);
     var pixels = yield document.render_region (0, 0, 1, 1, 1);
     assert (pixels.width == 1 && pixels.height == 1 && pixels.bytes.get_size () == 16);
+    // Hold the expired entry open while the actual cache maintenance runs.
+    string cache_path = Path.build_filename (Environment.get_user_cache_dir (), "majoris-image", "thumbnails-v2");
+    assert (DirUtils.create_with_parents (cache_path, 0700) == 0);
+    var expired = File.new_for_path (Path.build_filename (cache_path, string.nfill (64, '0') + ".png"));
+    var expired_pixels = yield source.file.load_bytes_async (null, null);
+    unowned uint8[] original_png = expired_pixels.get_data ();
+    expired.replace_contents (original_png, null, false, FileCreateFlags.PRIVATE, null, null);
+    uint64 old_time = (uint64) (new DateTime.now_utc ().to_unix () - 31 * 86400);
+    expired.set_attribute_uint64 (FileAttribute.TIME_MODIFIED, old_time, FileQueryInfoFlags.NONE, null);
+    var active_reader = yield expired.read_async ();
     var output = yield new ThumbnailService ().generate (source, 64);
+    int64 eviction_deadline = get_monotonic_time () + 5 * TimeSpan.SECOND;
+    while (expired.query_exists () && get_monotonic_time () < eviction_deadline)
+        yield wait_for_eviction ();
+    if (expired.query_exists ()) throw new IOError.TIMED_OUT ("Expired thumbnail was not evicted");
+    uint8[] saved_pixels = new uint8[original_png.length];
+    size_t read;
+    assert (active_reader.read_all (saved_pixels, out read, null) && read == original_png.length);
+    assert (expired_pixels.compare (new Bytes (saved_pixels)) == 0);
+    yield active_reader.close_async ();
     var cached = yield new ThumbnailService ().generate (source, 64);
     assert (cached.compare (output) == 0);
     unowned uint8[] png = output.get_data ();
@@ -133,6 +152,11 @@ async void verify (string directory, string large_path) throws Error {
         FileUtils.unlink (target.get_path ());
         DirUtils.remove (temp);
     }
+}
+
+private async void wait_for_eviction () {
+    Timeout.add (10, () => { wait_for_eviction.callback (); return Source.REMOVE; });
+    yield;
 }
 
 private float sample (PixelBuffer pixels, int x, int y, int channel) {

@@ -43,6 +43,28 @@ async void exercise (string[] args) throws Error {
         for (int channel = 0; channel < 3; channel++)
             assert ((sample (oriented.preview, 0, channel) > 0.9f) == ((corner[i] & (4 >> channel)) != 0));
     }
+    string generated_directory = Path.get_dirname (args[1]);
+    foreach (string name in new string[] { "navigation.jpg", "still.webp", "jpeg2000.jp2", "animated.gif", "animated.webp" }) {
+        var file = File.new_for_path (Path.build_filename (generated_directory, name));
+        var info = yield file.query_info_async (FileAttribute.STANDARD_SIZE, 0);
+        if (name == "jpeg2000.jp2" && info.get_size () == 0) {
+            stdout.printf ("Optional JPEG 2000 encoder unavailable for generated fixture\n");
+            continue;
+        }
+        var decoded = yield registry.open (new ImageSource (file));
+        assert (decoded.width == 8 && decoded.height == 8);
+        // JPEG permits quantization error. The other fixtures are lossless.
+        double tolerance = name.has_suffix (".jpg") ? 0.035 : 0.0005;
+        assert (Math.fabs (sample (decoded.preview, 0, 0) - 1) < tolerance);
+        assert (Math.fabs (sample (decoded.preview, 0, 1)) < tolerance);
+        assert (Math.fabs (sample (decoded.preview, 0, 2)) < tolerance);
+        assert (sample (decoded.preview, 0, 3) == 1);
+        if (name.has_prefix ("animated")) {
+            assert (decoded.animated && decoded.frame_count == 3);
+            var green = yield decoded.open_frame (1);
+            assert (sample (green.preview, 0, 1) > 0.99f && sample (green.preview, 0, 0) < 0.01f);
+        }
+    }
     var sequence = new ImageSource (File.new_for_path (args[5]));
     try {
         var still = yield registry.open (sequence);

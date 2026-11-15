@@ -74,7 +74,32 @@ private async void exercise (ImageView view, File large, File next, File destina
     export_options.format = "png";
     yield new EncoderRegistry ().encode (next_source, destination, export_options);
     var exported = yield registry.open (new ImageSource (destination));
-    assert (exported.width > 0 && exported.mime_type == "image/png");
+    var reference = yield registry.open (next_source);
+    assert (exported.width == reference.width && exported.height == reference.height);
+    assert (exported.mime_type == "image/png" && exported.bit_depth == 16);
+    var expected = yield reference.render_region (0, 0, reference.width, reference.height,
+        int.max (reference.width, reference.height), true);
+    var actual = yield exported.render_region (0, 0, exported.width, exported.height,
+        int.max (exported.width, exported.height));
+    foreach (int y in new int[] { 0, exported.height / 2, exported.height - 1 }) {
+        foreach (int x in new int[] { 0, exported.width / 2, exported.width - 1 }) {
+            for (int band = 0; band < 4; band++) {
+                // The PNG export quantizes the linear SDR result to 16-bit sRGB.
+                double wanted = sample (expected, x, y, band).clamp (0, 1);
+                double observed = sample (actual, x, y, band);
+                if (!observed.is_finite () || !wanted.is_finite () || Math.fabs (observed - wanted) >= 0.002)
+                    throw new ImageError.EXPORT ("PNG pixel (%d,%d) channel %d: expected %.6f, got %.6f",
+                        x, y, band, wanted, observed);
+            }
+        }
+    }
+}
+
+private float sample (PixelBuffer buffer, int x, int y, int band) {
+    unowned uint8[] bytes = buffer.bytes.get_data ();
+    float value = 0;
+    Memory.copy (&value, &bytes[y * buffer.stride + (x * 4 + band) * 4], sizeof (float));
+    return value;
 }
 
 int main (string[] args) {

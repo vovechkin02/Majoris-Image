@@ -17,15 +17,15 @@
 #include <mutex>
 #include <cmath>
 
-namespace Imf = OPENEXR_IMF_NAMESPACE;
-namespace Imath = IMATH_NAMESPACE;
+namespace Exr = OPENEXR_IMF_NAMESPACE;
+namespace ExrMath = IMATH_NAMESPACE;
 namespace {
 struct View { int part; std::string name; std::array<std::string,4> channels; };
-std::vector<View> list_views(Imf::MultiPartInputFile &file) {
+std::vector<View> list_views(Exr::MultiPartInputFile &file) {
     std::vector<View> views;
     for (int p=0;p<file.parts();p++) {
         const auto &header=file.header(p); const auto &channels=header.channels();
-        if (header.hasType() && Imf::isDeepData(header.type())) continue;
+        if (header.hasType() && Exr::isDeepData(header.type())) continue;
         std::set<std::string> prefixes;
         for (auto i=channels.begin();i!=channels.end();++i) {
             std::string name=i.name(), prefix;
@@ -49,12 +49,12 @@ std::vector<View> list_views(Imf::MultiPartInputFile &file) {
     return views;
 }
 struct Source {
-    Imf::MultiPartInputFile file;
+    Exr::MultiPartInputFile file;
     std::vector<View> views;
     View view;
-    Imath::Box2i data, display;
-    std::unique_ptr<Imf::InputPart> scanline;
-    std::unique_ptr<Imf::TiledInputPart> tiled;
+    ExrMath::Box2i data, display;
+    std::unique_ptr<Exr::InputPart> scanline;
+    std::unique_ptr<Exr::TiledInputPart> tiled;
     std::array<std::vector<float>,4> buffers;
     std::array<int,4> plane_index;
     std::mutex mutex;
@@ -66,9 +66,9 @@ struct Source {
         int64_t data_width=static_cast<int64_t>(data.max.x)-data.min.x+1;
         if (width<1 || height<1 || width>G_MAXINT || height>G_MAXINT || data_width<1 || data_width>2000000) throw std::runtime_error("OpenEXR dimensions exceed the region decoder memory budget");
         if (header.hasTileDescription()) {
-            tiled=std::make_unique<Imf::TiledInputPart>(file,view.part); buffer_width=tiled->tileXSize(); buffer_height=tiled->tileYSize();
+            tiled=std::make_unique<Exr::TiledInputPart>(file,view.part); buffer_width=tiled->tileXSize(); buffer_height=tiled->tileYSize();
             if (buffer_width<1 || buffer_height<1 || static_cast<uint64_t>(buffer_width)*buffer_height>4194304) throw std::runtime_error("OpenEXR tile exceeds the memory budget");
-        } else { scanline=std::make_unique<Imf::InputPart>(file,view.part); buffer_width=static_cast<int>(data_width); }
+        } else { scanline=std::make_unique<Exr::InputPart>(file,view.part); buffer_width=static_cast<int>(data_width); }
         for (int c=0;c<4;c++) {
             plane_index[c]=c;
             if (view.channels[c].empty()) continue;
@@ -78,10 +78,10 @@ struct Source {
             if (plane_index[c]==c) buffers[c].resize(static_cast<size_t>(buffer_width)*buffer_height);
         }
     }
-    Imf::FrameBuffer frame(int y,bool tile) {
-        Imf::FrameBuffer frame;
+    Exr::FrameBuffer frame(int y,bool tile) {
+        Exr::FrameBuffer frame;
         for (int c=0;c<4;c++) if (!view.channels[c].empty() && plane_index[c]==c)
-            frame.insert(view.channels[c],Imf::Slice::Make(Imf::FLOAT,buffers[c].data(),Imath::V2i(tile ? 0 : data.min.x,tile ? 0 : y),buffer_width,buffer_height,sizeof(float),sizeof(float)*buffer_width,1,1,0,tile,tile));
+            frame.insert(view.channels[c],Exr::Slice::Make(Exr::FLOAT,buffers[c].data(),ExrMath::V2i(tile ? 0 : data.min.x,tile ? 0 : y),buffer_width,buffer_height,sizeof(float),sizeof(float)*buffer_width,1,1,0,tile,tile));
         return frame;
     }
     void pixel(float *target,size_t index) {
@@ -119,10 +119,10 @@ int generate(VipsRegion *output,void *,void *,void *context,gboolean *) {
     } catch (const std::exception &error) { vips_error("OpenEXR","%s",error.what()); return -1; }
 }
 void destroy(void *context) { delete static_cast<Source *>(context); }
-std::string window_string(const Imath::Box2i &window) { return std::to_string(window.min.x)+", "+std::to_string(window.min.y)+" — "+std::to_string(window.max.x)+", "+std::to_string(window.max.y); }
-void profile(VipsImage *image,const Imf::Header &header) {
-    if (Imf::hasChromaticities(header)) {
-        const auto &ch=Imf::chromaticities(header); cmsCIExyY white={ch.white.x,ch.white.y,1};
+std::string window_string(const ExrMath::Box2i &window) { return std::to_string(window.min.x)+", "+std::to_string(window.min.y)+" — "+std::to_string(window.max.x)+", "+std::to_string(window.max.y); }
+void profile(VipsImage *image,const Exr::Header &header) {
+    if (Exr::hasChromaticities(header)) {
+        const auto &ch=Exr::chromaticities(header); cmsCIExyY white={ch.white.x,ch.white.y,1};
         cmsCIExyYTRIPLE primaries={{ch.red.x,ch.red.y,1},{ch.green.x,ch.green.y,1},{ch.blue.x,ch.blue.y,1}};
         cmsToneCurve *curve=cmsBuildGamma(nullptr,1), *curves[]={curve,curve,curve};
         cmsHPROFILE icc=cmsCreateRGBProfile(&white,&primaries,curves); cmsFreeToneCurve(curve);
@@ -132,8 +132,8 @@ void profile(VipsImage *image,const Imf::Header &header) {
         if (cmsSaveProfileToMem(icc,bytes.data(),&size)) vips_image_set_blob_copy(image,VIPS_META_ICC_NAME,bytes.data(),size);
         cmsCloseProfile(icc);
     }
-    if (Imf::hasWhiteLuminance(header)) {
-        double white=Imf::whiteLuminance(header); if (!std::isfinite(white) || white<=0 || white>1e9) throw std::runtime_error("Invalid OpenEXR white luminance metadata");
+    if (Exr::hasWhiteLuminance(header)) {
+        double white=Exr::whiteLuminance(header); if (!std::isfinite(white) || white<=0 || white>1e9) throw std::runtime_error("Invalid OpenEXR white luminance metadata");
         vips_image_set_double(image,"majoris-image-linear-white-nits",white);
     }
 }
@@ -146,8 +146,8 @@ VipsImage *image_codec_exr_image(const char *path,int page,GError **error) {
         if (vips_image_pipelinev(image,VIPS_DEMAND_STYLE_SMALLTILE,nullptr)) throw std::runtime_error(vips_error_buffer());
         int depth=16; std::string channels;
         for (auto channel=header.channels().begin();channel!=header.channels().end();++channel) {
-            if (!channels.empty()) channels+=", "; channels+=channel.name(); channels+=channel.channel().type==Imf::FLOAT ? " (float)" : channel.channel().type==Imf::HALF ? " (half)" : " (uint)";
-            if (channel.channel().type!=Imf::HALF) depth=32;
+            if (!channels.empty()) channels+=", "; channels+=channel.name(); channels+=channel.channel().type==Exr::FLOAT ? " (float)" : channel.channel().type==Exr::HALF ? " (half)" : " (uint)";
+            if (channel.channel().type!=Exr::HALF) depth=32;
         }
         vips_image_set_string(image,"vips-loader","openexr-native"); vips_image_set_int(image,"n-pages",source->views.size()); vips_image_set_int(image,"majoris-image-bit-depth",depth);
         vips_image_set_string(image,"exr-channels",channels.c_str()); vips_image_set_string(image,"exr-view",source->view.name.c_str());

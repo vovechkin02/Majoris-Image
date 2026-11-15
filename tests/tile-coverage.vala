@@ -13,7 +13,9 @@ namespace ImageKit {
 private void assert_plan (TileBounds bounds, int width, int height, double zoom,
                           bool vector, int expected = 0) {
     var plan = TileCoverage.plan (bounds, width, height, zoom, vector);
-    assert (plan.count > 0 && plan.count <= TileCoverage.MAX_SLOTS);
+    if (plan.count < 1 || plan.count > TileCoverage.MAX_SLOTS)
+        error ("Invalid tile count %d for %dx%d [%g,%g,%g,%g], zoom %g", plan.count,
+            width, height, bounds.left, bounds.top, bounds.right, bounds.bottom, zoom);
     if (expected > 0) assert (plan.count == expected && plan.level == 1);
 
     int clipped_left = (int) Math.floor (bounds.left.clamp (0, width));
@@ -54,6 +56,26 @@ private void test_geometry () {
     assert_plan ({ 0, 0, int.MAX, int.MAX }, int.MAX, int.MAX, 8, true);
     assert (TileCoverage.plan ({ 0, 0, 1, 1 }, 10, 10, double.NAN, false).count == 0);
     assert (TileCoverage.plan ({ -20, -20, -1, -1 }, 10, 10, 1, false).count == 0);
+
+    const uint32 seed = 0x496d674b;
+    var random = new Rand.with_seed (seed);
+    stderr.printf ("Tile geometry seed %#x\n", seed);
+    for (int trial = 0; trial < 160; trial++) {
+        int w = random.int_range (600, 16000), h = random.int_range (600, 16000);
+        double left = random.double_range (-512, w - 100);
+        double top = random.double_range (-512, h - 100);
+        double right = double.min (w + 512, double.max (10.0, left + random.double_range (64, 8192)));
+        double bottom = double.min (h + 512, double.max (10.0, top + random.double_range (64, 8192)));
+        TileBounds bounds = { left, top, right, bottom };
+        double zoom = random.double_range (0.2, 4.0);
+        if (Environment.get_variable ("IMAGEKIT_TEST_TRACE") == "1")
+            stderr.printf ("trial %d: %dx%d [%g,%g,%g,%g], zoom %g\n",
+                trial, w, h, left, top, right, bottom, zoom);
+        if (right <= 0 || bottom <= 0)
+            assert (TileCoverage.plan (bounds, w, h, zoom, false).count == 0);
+        else
+            assert_plan (bounds, w, h, zoom, zoom > 1.0);
+    }
 
     var rotated = TileBounds.from_view (100, 80, 30, 20, -100, -80, 0.5, 1, true, false);
     assert (rotated.left == 80 && rotated.right == 240);
@@ -121,7 +143,47 @@ private async void test_cache (string path, string exr_path, bool complete) thro
             yield delay ();
         assert (eight_k.all_match (tile => tile.texture != null));
         var same = cache.visible ({511, 511, 8191, 4831}, 1);
-        assert (same.size == 160 && same[159].texture == eight_k[159].texture);
+        assert (same.size == 160);
+        size_t retained_bytes = 0;
+        for (int i = 0; i < eight_k.size; i++) {
+            var tile = eight_k[i];
+            assert (tile.texture == same[i].texture && tile.x % 512 == 0 && tile.y % 512 == 0);
+            var texture = tile.texture;
+            assert (texture.width == tile.decode_width && texture.height == tile.decode_height);
+            var downloader = new Gdk.TextureDownloader (texture);
+            downloader.set_format (Gdk.MemoryFormat.R8G8B8A8);
+            size_t row_bytes;
+            var downloaded = downloader.download_bytes (out row_bytes);
+            unowned uint8[] pixels = downloaded.get_data ();
+            for (int y = 0; y < texture.height; y++) {
+                int source_y = (tile.decode_y + y) % 131;
+                for (int x = 0; x < texture.width; x++) {
+                    int source_x = (tile.decode_x + x) % 127;
+                    size_t offset = y * row_bytes + x * 4;
+                    bool matches = pixels[offset] == (source_x < 61 ? 255 : 0) &&
+                        pixels[offset + 1] == (source_y < 67 ? 255 : 0) &&
+                        pixels[offset + 2] == (source_x + source_y < 111 ? 255 : 0) &&
+                        pixels[offset + 3] == 255;
+                    if (!matches)
+                        throw new IOError.INVALID_DATA ("Incorrect 8K tile at (%d,%d), pixel (%d,%d): %u,%u,%u,%u",
+                            tile.x, tile.y, x, y, pixels[offset], pixels[offset + 1],
+                            pixels[offset + 2], pixels[offset + 3]);
+                }
+            }
+            retained_bytes += (size_t) texture.width * texture.height * 16;
+        }
+        assert (retained_bytes <= TileCoverage.MAX_BYTES);
+        string memory;
+        FileUtils.get_contents ("/proc/self/status", out memory);
+        bool measured_peak = false;
+        foreach (string line in memory.split ("\n")) {
+            if (!line.has_prefix ("VmHWM:")) continue;
+            int64 peak = int64.parse (line.substring (6).strip ());
+            assert (peak > 0 && peak < 1400 * 1024);
+            measured_peak = true;
+            stdout.printf ("8K peak host RSS: %s KiB\n", peak.to_string ());
+        }
+        assert (measured_peak);
         stdout.printf ("All 160 shifted 8K tiles rendered and retained\n");
         cache.reset (null);
     }

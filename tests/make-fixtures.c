@@ -4,15 +4,29 @@
 int main(int argc, char **argv)
 {
     if (argc != 11 || VIPS_INIT(argv[0])) return 1;
-    VipsImage *black = NULL, *mid = NULL, *tiff = NULL, *raster = NULL;
+    VipsImage *pattern = NULL, *repeated = NULL, *tiff = NULL, *raster = NULL;
     VipsImage *still = NULL;
     VipsImage *working = NULL, *profiled = NULL, *gray = NULL;
     g_autoptr(GError) error = NULL;
     int rc = 1;
-    if (vips_black(&black, 20000, 10000, "bands", 3, NULL) ||
-        vips_linear1(black, &mid, 0, 32768, NULL) ||
-        vips_cast(mid, &tiff, VIPS_FORMAT_USHORT, NULL) ||
-        vips_tiffsave(tiff, argv[1], "tile", TRUE, "compression", VIPS_FOREIGN_TIFF_COMPRESSION_DEFLATE, NULL))
+    // Position-dependent, lossless tile references. These prime periods
+    // prevent a one-tile or one-row shift from reproducing the same samples.
+    guint16 reference[127 * 131 * 3];
+    for (int y = 0; y < 131; y++) {
+        for (int x = 0; x < 127; x++) {
+            guint16 *pixel = reference + (y * 127 + x) * 3;
+            pixel[0] = x < 61 ? 65535 : 0;
+            pixel[1] = y < 67 ? 65535 : 0;
+            pixel[2] = x + y < 111 ? 65535 : 0;
+        }
+    }
+    pattern = vips_image_new_from_memory_copy(reference, sizeof reference, 127, 131, 3, VIPS_FORMAT_USHORT);
+    if (!pattern) goto done;
+    pattern->Type = VIPS_INTERPRETATION_RGB16;
+    if (vips_replicate(pattern, &repeated, 158, 77, NULL) ||
+        vips_crop(repeated, &tiff, 0, 0, 20000, 10000, NULL) ||
+        vips_tiffsave(tiff, argv[1], "tile", TRUE, "bigtiff", TRUE,
+                      "compression", VIPS_FOREIGN_TIFF_COMPRESSION_DEFLATE, NULL))
         goto done;
 
     guint8 pixels[8 * 24 * 3];
@@ -78,8 +92,8 @@ done:
     g_clear_object(&working);
     g_clear_object(&raster);
     g_clear_object(&tiff);
-    g_clear_object(&mid);
-    g_clear_object(&black);
+    g_clear_object(&repeated);
+    g_clear_object(&pattern);
     vips_shutdown();
     return rc;
 }

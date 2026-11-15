@@ -43,3 +43,6 @@ image metadata keys retain their compatibility spellings, including
 `colour-managed`, `colour-diagnostic`, and `colour-probe`. Historical
 verification reports quote the earlier API where applicable. The official
 license text and copyright notices retain their original wording.
+
+See the [test-quality verification report](verification-test-quality.md) for the
+expanded regression and release-qualification results.

@@ -15,27 +15,121 @@ static guint32 read_be32(const guint8 *data)
     return GUINT32_FROM_BE(result);
 }
 
+static unsigned png_pixel_bits(const guint8 *header)
+{
+    unsigned depth = header[8], color = header[9];
+    if (header[10] || header[11] || header[12] > 1) return 0;
+    switch (color) {
+    case 0: return depth == 1 || depth == 2 || depth == 4 || depth == 8 || depth == 16 ? depth : 0;
+    case 3: return depth == 1 || depth == 2 || depth == 4 || depth == 8 ? depth : 0;
+    case 2: return depth == 8 || depth == 16 ? 3 * depth : 0;
+    case 4: return depth == 8 || depth == 16 ? 2 * depth : 0;
+    case 6: return depth == 8 || depth == 16 ? 4 * depth : 0;
+    default: return 0;
+    }
+}
+
+static gboolean png_text_valid(const guint8 *text, guint32 size)
+{
+    const guint8 *value = memchr(text, 0, size);
+    if (!value || value == text || value - text > 79) return FALSE;
+    gsize key_length = value++ - text;
+    gsize value_length = text + size - value;
+    if (memchr(value, 0, value_length)) return FALSE;
+    if (key_length == 10 && !memcmp(text, "Thumb::URI", key_length))
+        return value_length > 0;
+    if (key_length == 12 && !memcmp(text, "Thumb::MTime", key_length)) {
+        if (!value_length || value_length > 20) return FALSE;
+        for (gsize i = 0; i < value_length; i++)
+            if (!g_ascii_isdigit(value[i])) return FALSE;
+    }
+    return TRUE;
+}
+
+static gboolean png_pixels_valid(const GByteArray *compressed, guint32 width, guint32 height,
+                                 unsigned bits, gboolean interlaced)
+{
+    static const unsigned adam7[][4] = {
+        {0, 0, 8, 8}, {4, 0, 8, 8}, {0, 4, 4, 8}, {2, 0, 4, 4},
+        {0, 2, 2, 4}, {1, 0, 2, 2}, {0, 1, 1, 2}
+    };
+    gsize row_sizes[7] = {0}, row_counts[7] = {0};
+    uLongf expected = 0;
+    unsigned passes = interlaced ? G_N_ELEMENTS(adam7) : 1;
+    for (unsigned pass = 0; pass < passes; pass++) {
+        unsigned x = interlaced ? adam7[pass][0] : 0;
+        unsigned y = interlaced ? adam7[pass][1] : 0;
+        unsigned dx = interlaced ? adam7[pass][2] : 1;
+        unsigned dy = interlaced ? adam7[pass][3] : 1;
+        if (width <= x || height <= y) continue;
+        gsize columns = (width - x + dx - 1) / dx;
+        row_counts[pass] = (height - y + dy - 1) / dy;
+        row_sizes[pass] = 1 + (columns * bits + 7) / 8;
+        expected += row_sizes[pass] * row_counts[pass];
+    }
+
+    // The thumbnail edge cap bounds this allocation even for RGBA16 and Adam7.
+    g_autofree guint8 *decoded = g_malloc(expected);
+    uLongf decoded_size = expected;
+    uLong input_size = compressed->len;
+    if (uncompress2(decoded, &decoded_size, compressed->data, &input_size) != Z_OK ||
+        decoded_size != expected || input_size != compressed->len)
+        return FALSE;
+    gsize offset = 0;
+    for (unsigned pass = 0; pass < passes; pass++) {
+        for (gsize row = 0; row < row_counts[pass]; row++, offset += row_sizes[pass])
+            if (decoded[offset] > 4) return FALSE;
+    }
+    return TRUE;
+}
+
 gboolean image_thumbnail_valid(GBytes *bytes, int edge)
 {
     static const guint8 signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
     gsize length;
     const guint8 *data = g_bytes_get_data(bytes, &length);
-    if (length < 45 || memcmp(data, signature, 8) ||
-        read_be32(data + 8) != 13 || memcmp(data + 12, "IHDR", 4))
+    if (edge < 1 || edge > 1024 || length < 45 || length > 8 * 1024 * 1024 ||
+        memcmp(data, signature, 8) || read_be32(data + 8) != 13 || memcmp(data + 12, "IHDR", 4))
         return FALSE;
     guint32 width = read_be32(data + 16), height = read_be32(data + 20);
-    if (!width || !height || width > (guint32) edge || height > (guint32) edge)
+    unsigned bits = png_pixel_bits(data + 16);
+    gboolean indexed = data[25] == 3;
+    if (!bits || !width || !height || width > (guint32) edge || height > (guint32) edge)
         return FALSE;
-    gboolean has_pixels = FALSE;
+
+    g_autoptr(GByteArray) compressed = g_byte_array_new();
+    gboolean palette = FALSE, has_pixels = FALSE, pixels_ended = FALSE;
     for (gsize offset = 8; length - offset >= 12;) {
         guint32 size = read_be32(data + offset);
         if (size > length - offset - 12) return FALSE;
         const guint8 *type = data + offset + 4;
-        if (crc32(0, type, size + 4) != read_be32(type + 4 + size))
-            return FALSE;
+        const guint8 *payload = type + 4;
+        if (crc32(0, type, size + 4) != read_be32(payload + size)) return FALSE;
+        if (offset == 8) {
+            offset += size + 12;
+            continue;
+        }
         offset += size + 12;
-        if (!memcmp(type, "IDAT", 4)) has_pixels = TRUE;
-        if (!memcmp(type, "IEND", 4)) return has_pixels && size == 0 && offset == length;
+        if (!memcmp(type, "IDAT", 4)) {
+            if (pixels_ended || (indexed && !palette)) return FALSE;
+            g_byte_array_append(compressed, payload, size);
+            has_pixels = TRUE;
+            continue;
+        }
+        pixels_ended = has_pixels;
+        if (!memcmp(type, "IEND", 4))
+            return compressed->len > 0 && size == 0 && offset == length &&
+                png_pixels_valid(compressed, width, height, bits, data[28] == 1);
+        if (!memcmp(type, "PLTE", 4)) {
+            if (palette || has_pixels || !size || size % 3 || size > 768 ||
+                (indexed && size / 3 > (1u << data[24])) || data[25] == 0 || data[25] == 4)
+                return FALSE;
+            palette = TRUE;
+        } else if (g_ascii_isupper(type[0])) {
+            return FALSE;
+        } else if (!memcmp(type, "tEXt", 4) && !png_text_valid(payload, size)) {
+            return FALSE;
+        }
     }
     return FALSE;
 }

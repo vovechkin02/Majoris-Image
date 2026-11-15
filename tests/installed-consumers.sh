@@ -2,13 +2,23 @@
 # Run against an installed framework from outside its build tree.
 set -eu
 source_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-scratch=$(mktemp -d)
-trap 'rm -f "$scratch/builder" "$scratch/headless" "$scratch/demo" "$scratch/files" "$scratch/photos" "$scratch/photo.png" "$scratch/demo-resources.c" "$scratch/thumbnail.png"; rmdir "$scratch/work" 2>/dev/null || :; rmdir "$scratch"' EXIT
-cd "$scratch"
+if [ "$#" -ne 1 ] || [ ! -r "$1" ]; then
+    echo "Usage: $0 /path/to/generated/large.tiff (Photos fixture is required)" >&2
+    exit 2
+fi
+large=$(realpath "$1")
+if [ -z "${IMAGEKIT_TEST_ROOT:-}" ]; then
+    exec python3 "$source_root/tests/run-isolated.py" sh "$0" "$large"
+fi
+cd "$IMAGEKIT_TEST_ROOT"
+scratch=$IMAGEKIT_TEST_ROOT
 unset MAJORIS_IMAGE_WORKER
 
 pkg-config --atleast-version=2.0.0 majoris-image-1
 pkg-config --atleast-version=2.0.0 majoris-image-gtk4-1
+core_libdir=$(pkg-config --variable=libdir majoris-image-1)
+gtk_libdir=$(pkg-config --variable=libdir majoris-image-gtk4-1)
+python3 "$source_root/tests/check-abi.py" "$core_libdir/libmajoris-image.so.2" "$gtk_libdir/libmajoris-image-gtk4.so.2"
 valac --pkg majoris-image-1 "$source_root/tests/benchmark.vala" -o headless
 ./headless open "$source_root/tests/fixtures/rgb16.png"
 if ldd ./headless | grep -E 'libgtk|libgdk-'; then
@@ -16,34 +26,26 @@ if ldd ./headless | grep -E 'libgtk|libgdk-'; then
     exit 1
 fi
 cc "$source_root/examples/builder.c" $(pkg-config --cflags --libs majoris-image-gtk4-1) -o builder
-xvfb-run -a ./builder "$source_root/tests/fixtures/rgb16.png"
-glib-compile-resources --sourcedir="$source_root/examples" --generate-source \
-    --target=demo-resources.c "$source_root/examples/demo.gresource.xml"
-valac --pkg majoris-image-gtk4-1 "$source_root/examples/demo.vala" demo-resources.c -o demo
-xvfb-run -a sh -c 'status=0; timeout 3 ./demo || status=$?; test "$status" -eq 124'
+timeout 25 xvfb-run -a ./builder "$source_root/tests/fixtures/rgb16.png"
+valac --pkg majoris-image-gtk4-1 "$source_root/tests/installed-viewer.vala" -o view-check
+timeout 25 xvfb-run -a ./view-check "$source_root/tests/fixtures/rgb16.png" "$source_root/tests/fixtures/corrupt.bin"
 valac --pkg majoris-image-gtk4-1 "$source_root/examples/files-preview.vala" -o files
 valac --pkg majoris-image-gtk4-1 "$source_root/examples/photos-viewer.vala" -o photos
-xvfb-run -a ./files "$source_root/tests/fixtures/rgb16.png" "$source_root/tests/fixtures/multipart.exr"
-if [ -f "$source_root/tests/fixtures/large.tiff" ]; then
-    fixtures="$source_root/tests/fixtures"
-    set -- ./photos "$fixtures/large.tiff" "$fixtures/multipart.exr" photo.png
-    if [ -f "$fixtures/navigation.jpg" ] && [ -f "$fixtures/fallback.qoi" ]; then
-        set -- "$@" "" "$fixtures/navigation.jpg" "$fixtures/fallback.qoi"
-    fi
-    xvfb-run -a "$@"
-fi
+timeout 60 xvfb-run -a ./files "$source_root/tests/fixtures/rgb16.png" "$source_root/tests/fixtures/multipart.exr"
+timeout 90 xvfb-run -a ./photos "$large" "$source_root/tests/fixtures/multipart.exr" photo.png
+test -s photo.png
 if [ "${MAJORIS_TEST_STRESS:-0}" = 1 ]; then
     mkdir "$scratch/work"
     png="$source_root/tests/fixtures/rgb16.png"
     exr="$source_root/tests/fixtures/multipart.exr"
-    TMPDIR="$scratch/work" MAJORIS_FILES_SWITCH_COUNT=96 xvfb-run -a ./files "$png" "$exr" &
+    TMPDIR="$scratch/work" MAJORIS_FILES_SWITCH_COUNT=96 timeout 120 xvfb-run -a ./files "$png" "$exr" &
     preview_pid=$!
     # Independent processes use the same cache namespace and alternate sources.
     (
         export TMPDIR="$scratch/work"
         for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            ./headless thumbnail "$png"
-            ./headless thumbnail "$exr"
+            timeout 25 ./headless thumbnail "$png"
+            timeout 25 ./headless thumbnail "$exr"
         done
     ) &
     thumbnail_pid=$!
@@ -56,7 +58,7 @@ if [ "${MAJORIS_TEST_STRESS:-0}" = 1 ]; then
     test -z "$(find "$scratch/work" -mindepth 1 -print -quit)"
     echo "Concurrent installed stress passed with 96 selections and 24 thumbnail requests"
 fi
-xvfb-run -a /usr/bin/python3 - <<'PY'
+timeout 25 xvfb-run -a /usr/bin/python3 - <<'PY'
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("ImageKit", "2.0")
@@ -83,10 +85,18 @@ PY
 
 /usr/libexec/majoris-image-thumbnailer "file://$source_root/tests/fixtures/rgb16.png" thumbnail.png 128
 /usr/bin/python3 - <<'PY'
-from pathlib import Path
-png = Path("thumbnail.png").read_bytes()
-assert png.startswith(b"\x89PNG\r\n\x1a\n")
-assert b"Thumb::URI" in png and b"Thumb::MTime" in png
+import gi
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GdkPixbuf
+
+thumbnail = GdkPixbuf.Pixbuf.new_from_file("thumbnail.png")
+assert (thumbnail.get_width(), thumbnail.get_height()) == (24, 16)
+assert thumbnail.get_option("tEXt::Thumb::URI").endswith("/rgb16.png")
+assert thumbnail.get_option("tEXt::Thumb::MTime").isdecimal()
+pixels = thumbnail.get_pixels()
+offset = (thumbnail.get_height() - 1) * thumbnail.get_rowstride()
+assert len(pixels) >= offset + thumbnail.get_width() * thumbnail.get_n_channels()
+assert pixels[:3] != pixels[offset:offset + 3], "The gradient thumbnail became a flat image"
 PY
 test -f /usr/share/thumbnailers/majoris-image.thumbnailer
-echo "Installed headless, Vala GTK, C GtkBuilder, introspection and thumbnail consumers passed"
+echo "Installed headless, Vala GTK, C GtkBuilder, introspection, Photos export and thumbnail consumers passed"

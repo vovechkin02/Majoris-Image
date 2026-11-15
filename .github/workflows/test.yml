@@ -1,0 +1,121 @@
+name: Test and package
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '27 16 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:13
+      options: --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [full, headless, native, sanitizer]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Debian build dependencies
+        run: sh tests/ci-dependencies.sh
+      - name: Build and test
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -eu
+          build=$(mktemp -d)
+          chown nobody:nogroup "$build"
+          case "$VARIANT" in
+            headless) set -- -Dgtk=false -Dglycin=enabled -Dsequence=enabled ;;
+            native) set -- -Dglycin=disabled -Dsequence=disabled ;;
+            sanitizer) set -- -Dgtk=false -Dglycin=disabled -Dsequence=enabled
+              set -- "$@" -Db_sanitize=address,undefined -Db_lundef=false -Dwarning_level=3 ;;
+            full) set -- -Dglycin=enabled -Dsequence=enabled
+              if [ "$GITHUB_EVENT_NAME" = schedule ]; then set -- "$@" -Dextended_tests=true; fi ;;
+          esac
+          runuser -u nobody -- meson setup "$build" "$@" -Dultrahdr=disabled -Dintrospection=enabled
+          if [ "$VARIANT" = sanitizer ]; then
+            ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+              runuser -u nobody -- meson test -C "$build" --print-errorlogs \
+              'OpenEXR regions' 'Imaging references' 'thumbnail PNG decode and validation' \
+              'native parser fuzz smoke' 'worker protocol properties'
+          else
+            runuser -u nobody -- python3 tests/qualify.py "$build" --variant "$VARIANT"
+          fi
+          if [ "$VARIANT" = full ] && [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            runuser -u nobody -- meson test -C "$build" --suite extended --print-errorlogs
+            runuser -u nobody -- meson test -C "$build" --benchmark --verbose --logbase benchmark
+            python3 -c 'import json, sys; print(json.loads(open(sys.argv[1]).readline())["stdout"])' "$build/meson-logs/benchmark.json" > benchmark.json
+          fi
+      - uses: actions/upload-artifact@v4
+        if: matrix.variant == 'full' && github.event_name == 'schedule'
+        with:
+          name: nightly-performance
+          path: benchmark.json
+
+  package:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    container:
+      image: debian:13
+      options: --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh tests/ci-dependencies.sh
+      - name: Build packages and test clean installation
+        run: |
+          set -eu
+          work=$(mktemp -d)
+          mkdir "$work/source"
+          git -c tar.umask=0022 archive --format=tar.gz HEAD > "$work/source.tar.gz"
+          python3 tests/check-release-modes.py "$work/source.tar.gz"
+          tar -xzf "$work/source.tar.gz" -C "$work/source"
+          chown -R nobody:nogroup "$work"
+          (
+            cd "$work/source"
+            runuser -u nobody -- dpkg-buildpackage -us -uc -b
+          )
+          set -- "$work"/libmajoris-image-1_*.deb "$work"/libmajoris-image-gtk4-1_*.deb \
+            "$work"/libmajoris-image-dev_*.deb "$work"/majoris-image-worker_*.deb \
+            "$work"/majoris-image-thumbnailer_*.deb
+          apt-get install -y "$@"
+          fixture=$(find "$work/source" -path '*/tests/large.tiff' -print -quit)
+          test -n "$fixture"
+          runuser -u nobody -- sh tests/installed-consumers.sh "$fixture"
+          apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-1 \
+            majoris-image-thumbnailer libmajoris-image-1 majoris-image-worker
+          test ! -e /usr/libexec/majoris-image-worker
+          apt-get install -y "$@"
+          runuser -u nobody -- sh tests/installed-consumers.sh "$fixture"
+
+
+  fuzz:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    container: debian:13
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh tests/ci-dependencies.sh
+      - name: Run Clang libFuzzer
+        run: |
+          set -eu
+          apt-get install -y --no-install-recommends clang libclang-rt-dev libomp-dev
+          CC=clang CXX=clang++ meson setup fuzz -Dgtk=false -Dglycin=disabled \
+            -Dsequence=enabled -Dlibfuzzer=true -Db_sanitize=address,undefined -Db_lundef=false \
+            -Dc_args=-fsanitize=fuzzer-no-link -Dcpp_args=-fsanitize=fuzzer-no-link
+          meson compile -C fuzz fuzz-imagekit
+          python3 tests/seed-fuzz.py fuzz/corpus
+          mkdir -p fuzz-results
+          ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+            fuzz/tests/fuzz-imagekit -max_len=524288 -max_total_time=90 -timeout=5 \
+            -artifact_prefix=fuzz-results/ fuzz/corpus
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-crashes
+          path: fuzz-results

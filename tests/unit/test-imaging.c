@@ -1,7 +1,10 @@
 #include <math.h>
+#include <string.h>
+#include <unistd.h>
 
 #include <glib/gstdio.h>
 
+#include <jxl/decode.h>
 #include <libheif/heif.h>
 
 #include "bridge.h"
@@ -85,24 +88,179 @@ static void rec2020_primary_reference(void)
     g_assert_cmpfloat_with_epsilon(pixel[3], .5, 1e-6);
 }
 
+static void assert_mif1(const char *path, int width, int height, const float *expected)
+{
+    g_autoptr(GError) error = NULL;
+    g_autofree char *bytes = NULL;
+    gsize length;
+    guint8 header[] = {
+        'M', 'I', 'F', '1', 0, 0, width >> 8, width & 255, 0, 0, height >> 8, height & 255,
+    };
+    gsize pixel_bytes = (gsize)width * height * 4 * sizeof(float);
+
+    g_assert_true(g_file_get_contents(path, &bytes, &length, &error));
+    g_assert_no_error(error);
+    g_assert_cmpuint(length, ==, sizeof header + pixel_bytes);
+    g_assert_cmpmem(bytes, sizeof header, header, sizeof header);
+    g_assert_cmpmem(bytes + sizeof header, pixel_bytes, expected, pixel_bytes);
+}
+
 static void float_buffer_boundaries(void)
 {
-    const float values[] = {NAN, INFINITY, -INFINITY, NAN, -2, 4, .25f, -1, 4, -2, .5f, 2};
-    const float expected[] = {0, 0, 0, 1, -2, 4, .25f, 0, 4, -2, .5f, 1};
+    const float values[] = {
+        NAN,   INFINITY, -INFINITY, NAN, -2, 4, .25f, -1, 4,    -2,   .5f, 2,
+        -0.0f, 3,        -1,        0,   2,  3, 4,    1,  .25f, -.5f, 2,   .625f,
+    };
+    const float expected[] = {
+        0,     0, 0,  1, -2, 4, .25f, 0, 4,    -2,   .5f, 1,
+        -0.0f, 3, -1, 0, 2,  3, 4,    1, .25f, -.5f, 2,   .625f,
+    };
     g_autoptr(GError) error = NULL;
     g_autofree char *dir = g_dir_make_tmp("imagekit-float-XXXXXX", &error);
     g_assert_no_error(error);
     g_autofree char *path = g_build_filename(dir, "float.buffer", NULL);
     g_autoptr(VipsImage) source =
-        vips_image_new_from_memory_copy(values, sizeof values, 3, 1, 4, VIPS_FORMAT_FLOAT);
+        vips_image_new_from_memory_copy(values, sizeof values, 3, 2, 4, VIPS_FORMAT_FLOAT);
     g_assert_true(image_codec_write_pixels(source, path, &error));
     g_assert_no_error(error);
+    assert_mif1(path, 3, 2, expected);
     g_autoptr(VipsImage) decoded = image_codec_read_pixels(path, &error);
     g_assert_no_error(error);
     g_assert_nonnull(decoded);
     size_t length;
     g_autofree float *pixels = vips_image_write_to_memory(decoded, &length);
     g_assert_cmpmem(pixels, length, expected, sizeof expected);
+    g_assert_cmpint(g_unlink(path), ==, 0);
+    g_assert_cmpint(g_rmdir(dir), ==, 0);
+}
+
+static void float_buffer_sequential(gconstpointer data)
+{
+    int width = GPOINTER_TO_INT(data);
+    int height = 35;
+    g_autofree guint8 *rgb = g_new(guint8, width * height * 3);
+    g_autofree float *expected = g_new(float, width *height * 4);
+    g_autoptr(GError) error = NULL;
+    g_autofree char *dir = g_dir_make_tmp("imagekit-sequential-XXXXXX", &error);
+    g_assert_no_error(error);
+    g_autofree char *png = g_build_filename(dir, "source.png", NULL);
+    g_autofree char *path = g_build_filename(dir, "pixels.mif", NULL);
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int pixel = y * width + x;
+            rgb[3 * pixel] = (x + 5 * y) % 251;
+            rgb[3 * pixel + 1] = (2 * x + y) % 253;
+            rgb[3 * pixel + 2] = (7 * x + 3 * y) % 255;
+            for (int c = 0; c < 3; c++) {
+                expected[4 * pixel + c] = rgb[3 * pixel + c] - 32;
+            }
+            expected[4 * pixel + 3] = 1;
+        }
+    }
+    g_autoptr(VipsImage) input =
+        vips_image_new_from_memory(rgb, width * height * 3, width, height, 3, VIPS_FORMAT_UCHAR);
+    g_assert_nonnull(input);
+    g_assert_cmpint(vips_pngsave(input, png, NULL), ==, 0);
+    for (int run = 0; run < 2; run++) {
+        g_autoptr(VipsImage) sequential = NULL;
+        g_autoptr(VipsImage) linear = NULL;
+        g_assert_cmpint(vips_pngload(png, &sequential, "access", VIPS_ACCESS_SEQUENTIAL, NULL), ==,
+                        0);
+        g_assert_cmpint(vips_linear1(sequential, &linear, 1, -32, NULL), ==, 0);
+        g_assert_true(image_codec_write_pixels(linear, path, &error));
+        g_assert_no_error(error);
+        assert_mif1(path, width, height, expected);
+        g_assert_cmpint(g_unlink(path), ==, 0);
+    }
+    g_assert_cmpint(g_unlink(png), ==, 0);
+    g_assert_cmpint(g_rmdir(dir), ==, 0);
+}
+
+static int fail_pixel_generation(VipsRegion *region, void *seq, void *a, void *b, gboolean *stop)
+{
+    (void)region;
+    (void)seq;
+    (void)a;
+    (void)b;
+    (void)stop;
+    vips_error("test", "%s", "injected pixel generation failure");
+    return -1;
+}
+
+static void float_buffer_failures(void)
+{
+    const float values[] = {1, 2, 3};
+    g_autoptr(GError) error = NULL;
+    g_autofree char *dir = g_dir_make_tmp("imagekit-pixel-failures-XXXXXX", &error);
+    g_assert_no_error(error);
+    g_autofree char *path = g_build_filename(dir, "pixels.mif", NULL);
+    g_autoptr(VipsImage) valid =
+        vips_image_new_from_memory(values, sizeof values, 1, 1, 3, VIPS_FORMAT_FLOAT);
+
+    const struct {
+        int width;
+        int height;
+        int bands;
+        VipsBandFormat format;
+    } invalid[] = {
+        {1, 1, 3, VIPS_FORMAT_UCHAR},       {1, 1, 2, VIPS_FORMAT_FLOAT},
+        {0, 1, 3, VIPS_FORMAT_FLOAT},       {16385, 1, 3, VIPS_FORMAT_FLOAT},
+        {4097, 4096, 3, VIPS_FORMAT_FLOAT},
+    };
+    for (gsize i = 0; i < G_N_ELEMENTS(invalid); i++) {
+        g_autoptr(VipsImage) image = vips_image_new();
+        vips_image_init_fields(image, MAX(1, invalid[i].width), invalid[i].height, invalid[i].bands,
+                               invalid[i].format, VIPS_CODING_NONE, VIPS_INTERPRETATION_scRGB, 1,
+                               1);
+        image->Xsize = invalid[i].width;
+        g_assert_false(image_codec_write_pixels(image, path, &error));
+        g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+        g_clear_error(&error);
+        g_assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
+    }
+
+    vips_error("test", "%s", "unrelated vips error");
+    g_assert_false(image_codec_write_pixels(valid, dir, &error));
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+    g_assert_null(strstr(error->message, "unrelated vips error"));
+    g_clear_error(&error);
+    vips_error_clear();
+    g_assert_cmpint(g_chmod(dir, 0500), ==, 0);
+    if (g_access(dir, W_OK) != 0) {
+        g_assert_false(image_codec_write_pixels(valid, path, &error));
+        g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+        g_assert_nonnull(strstr(error->message, "open output"));
+        g_clear_error(&error);
+    }
+    g_assert_cmpint(g_chmod(dir, 0700), ==, 0);
+    if (g_file_test("/dev/full", G_FILE_TEST_EXISTS)) {
+        g_assert_false(image_codec_write_pixels(valid, "/dev/full", &error));
+        g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+        g_assert_nonnull(strstr(error->message, "close output"));
+        g_clear_error(&error);
+        g_autoptr(VipsImage) wide = NULL;
+        g_assert_cmpint(vips_embed(valid, &wide, 0, 0, 1024, 1, NULL), ==, 0);
+        g_assert_false(image_codec_write_pixels(wide, "/dev/full", &error));
+        g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+        g_assert_nonnull(strstr(error->message, "Cannot write"));
+        g_clear_error(&error);
+    }
+
+    g_autoptr(VipsImage) failing = vips_image_new();
+    vips_image_init_fields(failing, 1, 1, 3, VIPS_FORMAT_FLOAT, VIPS_CODING_NONE,
+                           VIPS_INTERPRETATION_scRGB, 1, 1);
+    g_assert_cmpint(vips_image_pipelinev(failing, VIPS_DEMAND_STYLE_THINSTRIP, NULL), ==, 0);
+    g_assert_cmpint(vips_image_generate(failing, NULL, fail_pixel_generation, NULL, NULL, NULL), ==,
+                    0);
+    g_assert_false(image_codec_write_pixels(failing, path, &error));
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+    g_assert_nonnull(strstr(error->message, "injected pixel generation failure"));
+    g_clear_error(&error);
+    g_assert_true(image_codec_write_pixels(valid, path, &error));
+    g_assert_no_error(error);
+    const float expected[] = {1, 2, 3, 1};
+    assert_mif1(path, 1, 1, expected);
     g_assert_cmpint(g_unlink(path), ==, 0);
     g_assert_cmpint(g_rmdir(dir), ==, 0);
 }
@@ -248,6 +406,114 @@ static void hdr_jxl_roundtrip(void)
     g_free(dir);
 }
 
+static void jxl_decoded_reference(gconstpointer data)
+{
+    gboolean lossless = GPOINTER_TO_INT(data);
+    int depth = lossless ? 32 : 16;
+    int bands = lossless ? 4 : 3;
+    const float reference[] = {-.125f, .5f, 2, .375f};
+    float pixels[64 * 32 * 4];
+    for (int i = 0; i < 64 * 32 * bands; i++) {
+        pixels[i] = reference[i % bands];
+    }
+    g_autoptr(VipsImage) input = vips_image_new_from_memory(pixels, 64 * 32 * bands * sizeof(float),
+                                                            64, 32, bands, VIPS_FORMAT_FLOAT);
+    g_assert_nonnull(input);
+    input->Type = VIPS_INTERPRETATION_scRGB;
+    vips_image_set_int(input, "majoris-image-working-linear", 1);
+    g_autoptr(GError) error = NULL;
+    g_autofree char *dir = g_dir_make_tmp("imagekit-jxl-reference-XXXXXX", &error);
+    g_assert_no_error(error);
+    g_autofree char *path = g_build_filename(dir, "pixels.jxl", NULL);
+    g_assert_true(image_codec_jxl_encode(input, path, depth, 90, lossless, &error));
+    g_assert_no_error(error);
+
+    g_autofree char *encoded = NULL;
+    gsize size;
+    g_assert_true(g_file_get_contents(path, &encoded, &size, &error));
+    g_assert_no_error(error);
+    JxlDecoder *decoder = JxlDecoderCreate(NULL);
+    g_assert_nonnull(decoder);
+    g_assert_cmpint(JxlDecoderSubscribeEvents(decoder, JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING |
+                                                           JXL_DEC_FULL_IMAGE),
+                    ==, JXL_DEC_SUCCESS);
+    g_assert_cmpint(JxlDecoderSetInput(decoder, (const guint8 *)encoded, size), ==,
+                    JXL_DEC_SUCCESS);
+    JxlDecoderCloseInput(decoder);
+    g_assert_cmpint(JxlDecoderProcessInput(decoder), ==, JXL_DEC_BASIC_INFO);
+    JxlBasicInfo info;
+    g_assert_cmpint(JxlDecoderGetBasicInfo(decoder, &info), ==, JXL_DEC_SUCCESS);
+    g_assert_cmpuint(info.xsize, ==, 64);
+    g_assert_cmpuint(info.ysize, ==, 32);
+    g_assert_cmpuint(info.bits_per_sample, ==, depth);
+    g_assert_cmpuint(info.exponent_bits_per_sample, ==, depth == 16 ? 5 : 8);
+    g_assert_cmpuint(info.num_color_channels, ==, 3);
+    g_assert_cmpuint(info.alpha_bits, ==, lossless ? depth : 0);
+    g_assert_cmpuint(info.alpha_exponent_bits, ==, lossless ? 8 : 0);
+    g_assert_false(info.alpha_premultiplied);
+    g_assert_true(info.uses_original_profile);
+    g_assert_cmpfloat_with_epsilon(info.intensity_target, 406, .01);
+
+    g_assert_cmpint(JxlDecoderProcessInput(decoder), ==, JXL_DEC_COLOR_ENCODING);
+    JxlColorEncoding color;
+    g_assert_cmpint(
+        JxlDecoderGetColorAsEncodedProfile(decoder, JXL_COLOR_PROFILE_TARGET_ORIGINAL, &color), ==,
+        JXL_DEC_SUCCESS);
+    g_assert_cmpint(color.color_space, ==, JXL_COLOR_SPACE_RGB);
+    g_assert_cmpint(color.white_point, ==, JXL_WHITE_POINT_D65);
+    g_assert_cmpint(color.primaries, ==, JXL_PRIMARIES_SRGB);
+    g_assert_cmpint(color.transfer_function, ==, JXL_TRANSFER_FUNCTION_LINEAR);
+    g_assert_cmpint(JxlDecoderProcessInput(decoder), ==, JXL_DEC_NEED_IMAGE_OUT_BUFFER);
+    JxlPixelFormat format = {bands, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
+    float decoded[64 * 32 * 4];
+    g_assert_cmpint(JxlDecoderSetImageOutBuffer(decoder, &format, decoded, sizeof decoded), ==,
+                    JXL_DEC_SUCCESS);
+    g_assert_cmpint(JxlDecoderProcessInput(decoder), ==, JXL_DEC_FULL_IMAGE);
+    for (int i = 0; i < 64 * 32 * bands; i++) {
+        g_assert_cmpfloat_with_epsilon(decoded[i], reference[i % bands], lossless ? 1e-6 : .025);
+    }
+    g_assert_cmpint(JxlDecoderProcessInput(decoder), ==, JXL_DEC_SUCCESS);
+    JxlDecoderDestroy(decoder);
+    g_assert_cmpint(g_unlink(path), ==, 0);
+    g_assert_cmpint(g_rmdir(dir), ==, 0);
+}
+
+static void jxl_encode_failures(void)
+{
+    const float rejected[] = {NAN, INFINITY, -INFINITY, 65505, -65505};
+    g_autoptr(GError) error = NULL;
+    g_autofree char *dir = g_dir_make_tmp("imagekit-jxl-failures-XXXXXX", &error);
+    g_assert_no_error(error);
+    g_autofree char *path = g_build_filename(dir, "invalid.jxl", NULL);
+    for (gsize i = 0; i < G_N_ELEMENTS(rejected); i++) {
+        float rgba[] = {1, rejected[i], .5f, .375f};
+        g_autoptr(VipsImage) input =
+            vips_image_new_from_memory(rgba, sizeof rgba, 1, 1, 4, VIPS_FORMAT_FLOAT);
+        g_assert_nonnull(input);
+        input->Type = VIPS_INTERPRETATION_scRGB;
+        vips_image_set_int(input, "majoris-image-working-linear", 1);
+        g_assert_false(
+            image_codec_jxl_encode(input, path, isfinite(rejected[i]) ? 16 : 32, 90, TRUE, &error));
+        g_assert_error(error, G_IO_ERROR, G_IO_ERROR_FAILED);
+        g_clear_error(&error);
+        g_assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
+    }
+    g_autoptr(VipsImage) input = constant_image(2, TRUE);
+    g_assert_false(image_codec_jxl_encode(input, path, 0, 90, TRUE, &error));
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_FAILED);
+    g_clear_error(&error);
+    g_assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
+    g_assert_false(image_codec_jxl_encode(input, dir, 32, 90, TRUE, &error));
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_FAILED);
+    g_clear_error(&error);
+    if (g_file_test("/dev/full", G_FILE_TEST_EXISTS)) {
+        g_assert_false(image_codec_jxl_encode(input, "/dev/full", 32, 90, TRUE, &error));
+        g_assert_error(error, G_IO_ERROR, G_IO_ERROR_FAILED);
+        g_clear_error(&error);
+    }
+    g_assert_cmpint(g_rmdir(dir), ==, 0);
+}
+
 static void svg_region_scaling(void)
 {
     GError *error = NULL;
@@ -385,12 +651,22 @@ int main(int argc, char **argv)
     g_test_add_func("/imaging/pq-reference-white", pq_reference);
     g_test_add_func("/imaging/rec2020-primary-reference", rec2020_primary_reference);
     g_test_add_func("/imaging/float-buffer-boundaries", float_buffer_boundaries);
+    g_test_add_data_func("/imaging/float-buffer-sequential-narrow", GINT_TO_POINTER(1),
+                         float_buffer_sequential);
+    g_test_add_data_func("/imaging/float-buffer-sequential-wide", GINT_TO_POINTER(8193),
+                         float_buffer_sequential);
+    g_test_add_func("/imaging/float-buffer-failures", float_buffer_failures);
     g_test_add_func("/imaging/icc-roundtrip", profile_reference);
     g_test_add_func("/imaging/p3-primary-reference", p3_primary_reference);
     g_test_add_func("/imaging/icc-alpha-roundtrip", profile_alpha_reference);
     g_test_add_func("/imaging/exr-roundtrip", exr_roundtrip);
     g_test_add_func("/imaging/hdr-tiff-roundtrip", hdr_tiff_roundtrip);
     g_test_add_func("/imaging/hdr-jxl-roundtrip", hdr_jxl_roundtrip);
+    g_test_add_data_func("/imaging/jxl-rgba-lossless-float", GINT_TO_POINTER(TRUE),
+                         jxl_decoded_reference);
+    g_test_add_data_func("/imaging/jxl-rgb-lossy-half", GINT_TO_POINTER(FALSE),
+                         jxl_decoded_reference);
+    g_test_add_func("/imaging/jxl-encode-failures", jxl_encode_failures);
     g_test_add_func("/imaging/svg-source-region-scaling", svg_region_scaling);
     g_test_add_data_func("/imaging/pq-avif-10bit", GINT_TO_POINTER(16), heif_transfer_reference);
     g_test_add_data_func("/imaging/hlg-avif-10bit", GINT_TO_POINTER(18), heif_transfer_reference);

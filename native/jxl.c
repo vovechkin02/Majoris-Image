@@ -58,7 +58,7 @@ gboolean image_codec_jxl_encode(VipsImage *image, const char *path, int depth, i
         goto fail;
     }
     JxlEncoderFrameSettings *settings = JxlEncoderFrameSettingsCreate(encoder, NULL);
-    if (JxlEncoderSetFrameLossless(settings, lossless) != JXL_ENC_SUCCESS ||
+    if (!settings || JxlEncoderSetFrameLossless(settings, lossless) != JXL_ENC_SUCCESS ||
         JxlEncoderSetFrameDistance(
             settings, lossless ? 0 : JxlEncoderDistanceFromQuality(quality)) != JXL_ENC_SUCCESS) {
         goto fail;
@@ -67,6 +67,8 @@ gboolean image_codec_jxl_encode(VipsImage *image, const char *path, int depth, i
     if (JxlEncoderAddImageFrame(settings, &format, pixels, size) != JXL_ENC_SUCCESS) {
         goto fail;
     }
+    // AddImageFrame copies the caller's pixels before returning.
+    g_clear_pointer(&pixels, g_free);
     JxlEncoderCloseInput(encoder);
     file = fopen(path, "wb");
     if (!file) {

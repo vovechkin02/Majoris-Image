@@ -1,0 +1,1817 @@
+{
+  "build_options": {
+    "b_sanitize": "none",
+    "buildtype": "release",
+    "glycin": "auto",
+    "gtk": true,
+    "introspection": "auto",
+    "sequence": "auto",
+    "ultrahdr": "auto"
+  },
+  "codecs": {
+    "glycin-1": "1.2.1",
+    "lcms2": "2.16",
+    "libavif": "1.2.1",
+    "libheif": "1.23.6",
+    "libjxl": "0.11.2",
+    "libraw": "0.21.4",
+    "libuhdr": "2.0.2",
+    "vips": "8.16.1"
+  },
+  "compilers": {
+    "build": {
+      "c": {
+        "default_suffix": "c",
+        "exelist": [
+          "cc"
+        ],
+        "file_suffixes": [
+          "c"
+        ],
+        "full_version": "cc (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "cc"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "cpp": {
+        "default_suffix": "cpp",
+        "exelist": [
+          "c++"
+        ],
+        "file_suffixes": [
+          "cpp",
+          "cppm",
+          "cc",
+          "cp",
+          "cxx",
+          "c++",
+          "hh",
+          "hp",
+          "hpp",
+          "ipp",
+          "hxx",
+          "h++",
+          "ino",
+          "ixx",
+          "CPP",
+          "C",
+          "HPP",
+          "H"
+        ],
+        "full_version": "c++ (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "c++"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "vala": {
+        "default_suffix": "vala",
+        "exelist": [
+          "valac"
+        ],
+        "file_suffixes": [
+          "vala",
+          "vapi",
+          "gs"
+        ],
+        "full_version": null,
+        "id": "valac",
+        "linker_exelist": [
+          "valac"
+        ],
+        "linker_id": "valac",
+        "version": "0.56.18"
+      }
+    },
+    "host": {
+      "c": {
+        "default_suffix": "c",
+        "exelist": [
+          "cc"
+        ],
+        "file_suffixes": [
+          "c"
+        ],
+        "full_version": "cc (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "cc"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "cpp": {
+        "default_suffix": "cpp",
+        "exelist": [
+          "c++"
+        ],
+        "file_suffixes": [
+          "cpp",
+          "cppm",
+          "cc",
+          "cp",
+          "cxx",
+          "c++",
+          "hh",
+          "hp",
+          "hpp",
+          "ipp",
+          "hxx",
+          "h++",
+          "ino",
+          "ixx",
+          "CPP",
+          "C",
+          "HPP",
+          "H"
+        ],
+        "full_version": "c++ (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "c++"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "vala": {
+        "default_suffix": "vala",
+        "exelist": [
+          "valac"
+        ],
+        "file_suffixes": [
+          "vala",
+          "vapi",
+          "gs"
+        ],
+        "full_version": null,
+        "id": "valac",
+        "linker_exelist": [
+          "valac"
+        ],
+        "linker_id": "valac",
+        "version": "0.56.18"
+      }
+    }
+  },
+  "environment": {
+    "cpu": "x86_64",
+    "system": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.41"
+  },
+  "revision": "9b299d2d0678c1e131cefba02971a2bc8e835740",
+  "version": "2.0.0",
+  "workloads": {
+    "jxl-hdr-lossless": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 140696,
+        "median_seconds": 0.457954,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3432,
+            "operation_cpu_seconds": 0.468834,
+            "operation_cpu_ticks": 468834,
+            "operation_us": 458753,
+            "output_bytes": 31995,
+            "peak_rss_kib": 140740,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 3670352
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3473,
+            "operation_cpu_seconds": 0.467784,
+            "operation_cpu_ticks": 467784,
+            "operation_us": 457954,
+            "output_bytes": 31995,
+            "peak_rss_kib": 140696,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 3670352
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3559,
+            "operation_cpu_seconds": 0.466426,
+            "operation_cpu_ticks": 466426,
+            "operation_us": 456758,
+            "output_bytes": 31995,
+            "peak_rss_kib": 140604,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 3670352
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "jxl",
+        1024,
+        1024,
+        4,
+        32,
+        1,
+        1
+      ],
+      "fixture_sha256": "9307a8ccaf48639f2c20fe36a4edddb922adad3d811364a87978e779870fbd9d",
+      "median_seconds": 0.457954,
+      "output_sha256": [
+        "d36960165aba6beb6452388bd49602f31c2075126d6063451419432132f26540"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 141872,
+        "median_seconds": 0.451759,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3655,
+            "operation_cpu_seconds": 0.455953,
+            "operation_cpu_ticks": 455953,
+            "operation_us": 446306,
+            "output_bytes": 31995,
+            "peak_rss_kib": 141872,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 3670352
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3294,
+            "operation_cpu_seconds": 0.460542,
+            "operation_cpu_ticks": 460542,
+            "operation_us": 451759,
+            "output_bytes": 31995,
+            "peak_rss_kib": 141980,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 3670352
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3521,
+            "operation_cpu_seconds": 0.464532,
+            "operation_cpu_ticks": 464532,
+            "operation_us": 455927,
+            "output_bytes": 31995,
+            "peak_rss_kib": 141864,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 3670352
+          }
+        ]
+      }
+    },
+    "jxl-rgb-16mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 1339760,
+        "median_seconds": 4.804951,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3812,
+            "operation_cpu_seconds": 5.118963,
+            "operation_cpu_ticks": 5118963,
+            "operation_us": 5021187,
+            "output_bytes": 27859,
+            "peak_rss_kib": 1340168,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 12058896
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3694,
+            "operation_cpu_seconds": 4.892041,
+            "operation_cpu_ticks": 4892041,
+            "operation_us": 4804951,
+            "output_bytes": 27859,
+            "peak_rss_kib": 1339760,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 12058896
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3766,
+            "operation_cpu_seconds": 4.780369,
+            "operation_cpu_ticks": 4780369,
+            "operation_us": 4690244,
+            "output_bytes": 27859,
+            "peak_rss_kib": 1339752,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 12058896
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "jxl",
+        4096,
+        4096,
+        3,
+        16,
+        0,
+        1
+      ],
+      "fixture_sha256": "4a5614196df2565ceb36f6bfbafa79385602118046ee0759eddc08d21a1ea737",
+      "median_seconds": 4.804951,
+      "output_sha256": [
+        "9ba0a5a5f6a97a13f740f88130fe4e3bc34325128c41c3b4839e9644bfc16d59"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 1352980,
+        "median_seconds": 4.77727,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3440,
+            "operation_cpu_seconds": 4.866594,
+            "operation_cpu_ticks": 4866594,
+            "operation_us": 4777270,
+            "output_bytes": 27859,
+            "peak_rss_kib": 1352636,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 12058896
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3560,
+            "operation_cpu_seconds": 4.791284,
+            "operation_cpu_ticks": 4791284,
+            "operation_us": 4703775,
+            "output_bytes": 27859,
+            "peak_rss_kib": 1352980,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 12058896
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3288,
+            "operation_cpu_seconds": 4.893197,
+            "operation_cpu_ticks": 4893197,
+            "operation_us": 4808598,
+            "output_bytes": 27859,
+            "peak_rss_kib": 1353064,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 12058896
+          }
+        ]
+      }
+    },
+    "jxl-rgb-4mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 368624,
+        "median_seconds": 1.175969,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3384,
+            "operation_cpu_seconds": 1.2372,
+            "operation_cpu_ticks": 1237200,
+            "operation_us": 1211551,
+            "output_bytes": 7695,
+            "peak_rss_kib": 368696,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 6029584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3489,
+            "operation_cpu_seconds": 1.196444,
+            "operation_cpu_ticks": 1196444,
+            "operation_us": 1172964,
+            "output_bytes": 7695,
+            "peak_rss_kib": 368612,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 6029584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3742,
+            "operation_cpu_seconds": 1.202325,
+            "operation_cpu_ticks": 1202325,
+            "operation_us": 1175969,
+            "output_bytes": 7695,
+            "peak_rss_kib": 368624,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 6029584
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "jxl",
+        2048,
+        2048,
+        3,
+        16,
+        0,
+        1
+      ],
+      "fixture_sha256": "44b6daa1b1d74a3668732a7354f088de17e7d6af4958cf035badbdf1771ae59c",
+      "median_seconds": 1.175969,
+      "output_sha256": [
+        "fad2ad59754395112d29ef5828c4a596a4c66be87f71c501a2b49aa9888ef4b0"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 376972,
+        "median_seconds": 1.166751,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3353,
+            "operation_cpu_seconds": 1.258516,
+            "operation_cpu_ticks": 1258516,
+            "operation_us": 1236160,
+            "output_bytes": 7695,
+            "peak_rss_kib": 377192,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 6029584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3802,
+            "operation_cpu_seconds": 1.178997,
+            "operation_cpu_ticks": 1178997,
+            "operation_us": 1157303,
+            "output_bytes": 7695,
+            "peak_rss_kib": 376960,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 6029584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3453,
+            "operation_cpu_seconds": 1.192988,
+            "operation_cpu_ticks": 1192988,
+            "operation_us": 1166751,
+            "output_bytes": 7695,
+            "peak_rss_kib": 376972,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 6029584
+          }
+        ]
+      }
+    },
+    "jxl-rgba-16mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 1537036,
+        "median_seconds": 6.400707,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3448,
+            "operation_cpu_seconds": 6.707736,
+            "operation_cpu_ticks": 6707736,
+            "operation_us": 6593462,
+            "output_bytes": 180249,
+            "peak_rss_kib": 1537096,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3479,
+            "operation_cpu_seconds": 6.465505,
+            "operation_cpu_ticks": 6465505,
+            "operation_us": 6355030,
+            "output_bytes": 180249,
+            "peak_rss_kib": 1537036,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3421,
+            "operation_cpu_seconds": 6.509425,
+            "operation_cpu_ticks": 6509425,
+            "operation_us": 6400707,
+            "output_bytes": 180249,
+            "peak_rss_kib": 1536964,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "jxl",
+        4096,
+        4096,
+        4,
+        32,
+        0,
+        1
+      ],
+      "fixture_sha256": "04a3f6634564138f5a8a960fe0f9ff58c9f14e789f4617562d32d24bd8ccaf1f",
+      "median_seconds": 6.400707,
+      "output_sha256": [
+        "4caae453aa1f91eba065c8c7ab14795423a7bf0fb6f6d6c23c78b4ea289899bd"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 1552584,
+        "median_seconds": 6.31738,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3708,
+            "operation_cpu_seconds": 6.480854,
+            "operation_cpu_ticks": 6480854,
+            "operation_us": 6372589,
+            "output_bytes": 180249,
+            "peak_rss_kib": 1552584,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3924,
+            "operation_cpu_seconds": 6.404045,
+            "operation_cpu_ticks": 6404045,
+            "operation_us": 6294579,
+            "output_bytes": 180249,
+            "peak_rss_kib": 1552284,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3449,
+            "operation_cpu_seconds": 6.433699,
+            "operation_cpu_ticks": 6433699,
+            "operation_us": 6317380,
+            "output_bytes": 180249,
+            "peak_rss_kib": 1552680,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          }
+        ]
+      }
+    },
+    "jxl-rgba-4mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 418172,
+        "median_seconds": 1.586915,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3577,
+            "operation_cpu_seconds": 1.626691,
+            "operation_cpu_ticks": 1626691,
+            "operation_us": 1592682,
+            "output_bytes": 45813,
+            "peak_rss_kib": 418216,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 7340368
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3991,
+            "operation_cpu_seconds": 1.605249,
+            "operation_cpu_ticks": 1605249,
+            "operation_us": 1577485,
+            "output_bytes": 45813,
+            "peak_rss_kib": 417964,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 7340368
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3624,
+            "operation_cpu_seconds": 1.618065,
+            "operation_cpu_ticks": 1618065,
+            "operation_us": 1586915,
+            "output_bytes": 45813,
+            "peak_rss_kib": 418172,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 7340368
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "jxl",
+        2048,
+        2048,
+        4,
+        32,
+        0,
+        1
+      ],
+      "fixture_sha256": "e74a6970a627ee6431d85472358e9f3de651fbb2b0276d4d91007f491e0c30dd",
+      "median_seconds": 1.586915,
+      "output_sha256": [
+        "d56b9bd389db2a1a325e66fb8a3985aa6aa0825a687568161781858b34f67f21"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 432468,
+        "median_seconds": 1.567727,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3450,
+            "operation_cpu_seconds": 1.582938,
+            "operation_cpu_ticks": 1582938,
+            "operation_us": 1558744,
+            "output_bytes": 45813,
+            "peak_rss_kib": 432608,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 7340368
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 4676,
+            "operation_cpu_seconds": 1.601045,
+            "operation_cpu_ticks": 1601045,
+            "operation_us": 1580909,
+            "output_bytes": 45813,
+            "peak_rss_kib": 432468,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 7340368
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3586,
+            "operation_cpu_seconds": 1.591547,
+            "operation_cpu_ticks": 1591547,
+            "operation_us": 1567727,
+            "output_bytes": 45813,
+            "peak_rss_kib": 432364,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 7340368
+          }
+        ]
+      }
+    },
+    "mif1-3b-16mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 426312,
+        "median_seconds": 0.189324,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 114399,
+            "operation_cpu_seconds": 0.245554,
+            "operation_cpu_ticks": 245554,
+            "operation_us": 189324,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 426492,
+            "vips_bytes_before": 207880360,
+            "vips_highwater_bytes": 213385504
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 97703,
+            "operation_cpu_seconds": 0.237161,
+            "operation_cpu_ticks": 237161,
+            "operation_us": 186108,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 426228,
+            "vips_bytes_before": 211550456,
+            "vips_highwater_bytes": 213385504
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 99131,
+            "operation_cpu_seconds": 0.264403,
+            "operation_cpu_ticks": 264403,
+            "operation_us": 216973,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 426312,
+            "vips_bytes_before": 207093904,
+            "vips_highwater_bytes": 213385504
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        4096,
+        4096,
+        3,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "98f4c04ce2f628b7067958d73f793c38bbc1d2dd160efd2e788e24c9286358de",
+      "median_seconds": 0.189324,
+      "output_sha256": [
+        "7a3a87b9f523abd30dcb64bdf406e74d1a59e7e00c24afcc173b5dd7ac246c0c"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 426372,
+        "median_seconds": 0.162438,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 98655,
+            "operation_cpu_seconds": 0.211944,
+            "operation_cpu_ticks": 211944,
+            "operation_us": 164980,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 426336,
+            "vips_bytes_before": 201326608,
+            "vips_highwater_bytes": 213385504
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 95246,
+            "operation_cpu_seconds": 0.206959,
+            "operation_cpu_ticks": 206959,
+            "operation_us": 160543,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 426464,
+            "vips_bytes_before": 201326608,
+            "vips_highwater_bytes": 213385504
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 96700,
+            "operation_cpu_seconds": 0.2076,
+            "operation_cpu_ticks": 207600,
+            "operation_us": 162438,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 426372,
+            "vips_bytes_before": 201326608,
+            "vips_highwater_bytes": 213385504
+          }
+        ]
+      }
+    },
+    "mif1-3b-1mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 59064,
+        "median_seconds": 0.013521,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 11541,
+            "operation_cpu_seconds": 0.018675,
+            "operation_cpu_ticks": 18675,
+            "operation_us": 12343,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 59056,
+            "vips_bytes_before": 13172800,
+            "vips_highwater_bytes": 15597856
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 10814,
+            "operation_cpu_seconds": 0.020926,
+            "operation_cpu_ticks": 20926,
+            "operation_us": 13521,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 59064,
+            "vips_bytes_before": 13697152,
+            "vips_highwater_bytes": 15597856
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 10735,
+            "operation_cpu_seconds": 0.019578,
+            "operation_cpu_ticks": 19578,
+            "operation_us": 13574,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 59172,
+            "vips_bytes_before": 14287016,
+            "vips_highwater_bytes": 15597856
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        1024,
+        1024,
+        3,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "a1a2d8aa382b459d85133577fbcefd1b252ac9fa96cddcb7fa518db5eda1e5c7",
+      "median_seconds": 0.013521,
+      "output_sha256": [
+        "ff34d57763d22c036cf66456ccdaffadcca651f7ae519d9f8e64054f523089d2"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 59076,
+        "median_seconds": 0.012975,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 11042,
+            "operation_cpu_seconds": 0.017348,
+            "operation_cpu_ticks": 17348,
+            "operation_us": 13233,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 59076,
+            "vips_bytes_before": 12582928,
+            "vips_highwater_bytes": 15597856
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 11421,
+            "operation_cpu_seconds": 0.016711,
+            "operation_cpu_ticks": 16711,
+            "operation_us": 12975,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 59168,
+            "vips_bytes_before": 12582928,
+            "vips_highwater_bytes": 15597856
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 11134,
+            "operation_cpu_seconds": 0.016573,
+            "operation_cpu_ticks": 16573,
+            "operation_us": 12773,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 59036,
+            "vips_bytes_before": 12582928,
+            "vips_highwater_bytes": 15597856
+          }
+        ]
+      }
+    },
+    "mif1-3b-4mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 131468,
+        "median_seconds": 0.046004,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 29322,
+            "operation_cpu_seconds": 0.055673,
+            "operation_cpu_ticks": 55673,
+            "operation_us": 46004,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 131460,
+            "vips_bytes_before": 55312616,
+            "vips_highwater_bytes": 56361248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 28835,
+            "operation_cpu_seconds": 0.06644,
+            "operation_cpu_ticks": 66440,
+            "operation_us": 49240,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 131504,
+            "vips_bytes_before": 55836936,
+            "vips_highwater_bytes": 56361248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 30392,
+            "operation_cpu_seconds": 0.058299,
+            "operation_cpu_ticks": 58299,
+            "operation_us": 45035,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 131468,
+            "vips_bytes_before": 53215376,
+            "vips_highwater_bytes": 56361248
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        2048,
+        2048,
+        3,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "0f83159fea009e2a5f584da402b8b47b7b7794b5a6c9bc925b6e1ea9fff15e40",
+      "median_seconds": 0.046004,
+      "output_sha256": [
+        "ee5aff35be18d1ebeaf43b1c4c20bbe6c5813258f0b43f3f9494830c8a024c29"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 131580,
+        "median_seconds": 0.045482,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 28698,
+            "operation_cpu_seconds": 0.059946,
+            "operation_cpu_ticks": 59946,
+            "operation_us": 46804,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 131320,
+            "vips_bytes_before": 50331664,
+            "vips_highwater_bytes": 56361248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 29253,
+            "operation_cpu_seconds": 0.056637,
+            "operation_cpu_ticks": 56637,
+            "operation_us": 44367,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 131580,
+            "vips_bytes_before": 50331664,
+            "vips_highwater_bytes": 56361248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 29567,
+            "operation_cpu_seconds": 0.058284,
+            "operation_cpu_ticks": 58284,
+            "operation_us": 45482,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 131608,
+            "vips_bytes_before": 50331664,
+            "vips_highwater_bytes": 56361248
+          }
+        ]
+      }
+    },
+    "mif1-3b-8mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 229752,
+        "median_seconds": 0.08691,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 61194,
+            "operation_cpu_seconds": 0.131719,
+            "operation_cpu_ticks": 131719,
+            "operation_us": 102605,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 229752,
+            "vips_bytes_before": 105644160,
+            "vips_highwater_bytes": 112722208
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 57734,
+            "operation_cpu_seconds": 0.109861,
+            "operation_cpu_ticks": 109861,
+            "operation_us": 85421,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 229784,
+            "vips_bytes_before": 105906304,
+            "vips_highwater_bytes": 112722208
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 54755,
+            "operation_cpu_seconds": 0.115638,
+            "operation_cpu_ticks": 115638,
+            "operation_us": 86910,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 229736,
+            "vips_bytes_before": 105906304,
+            "vips_highwater_bytes": 112722208
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        4096,
+        2048,
+        3,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "ebd964ba83e6a6c9b5ba5cb2b67cb23365ed335d5439e1cb8b21a268ed07773b",
+      "median_seconds": 0.08691,
+      "output_sha256": [
+        "6eb961b1e740b4a16412077e458a77c8e713ac4e5903ab5e15714c46f0ae3de8"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 229608,
+        "median_seconds": 0.085307,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 51121,
+            "operation_cpu_seconds": 0.105733,
+            "operation_cpu_ticks": 105733,
+            "operation_us": 82194,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 229672,
+            "vips_bytes_before": 100663312,
+            "vips_highwater_bytes": 112722208
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 50575,
+            "operation_cpu_seconds": 0.108875,
+            "operation_cpu_ticks": 108875,
+            "operation_us": 85307,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 229608,
+            "vips_bytes_before": 100663312,
+            "vips_highwater_bytes": 112722208
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 51181,
+            "operation_cpu_seconds": 0.11279,
+            "operation_cpu_ticks": 112790,
+            "operation_us": 87878,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 229544,
+            "vips_bytes_before": 100663312,
+            "vips_highwater_bytes": 112722208
+          }
+        ]
+      }
+    },
+    "mif1-3b-small": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 33088,
+        "median_seconds": 0.000262,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3963,
+            "operation_cpu_seconds": 0.000321,
+            "operation_cpu_ticks": 321,
+            "operation_us": 262,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33272,
+            "vips_bytes_before": 6544,
+            "vips_highwater_bytes": 50304
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3809,
+            "operation_cpu_seconds": 0.000215,
+            "operation_cpu_ticks": 215,
+            "operation_us": 178,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33012,
+            "vips_bytes_before": 6544,
+            "vips_highwater_bytes": 50304
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3882,
+            "operation_cpu_seconds": 0.000356,
+            "operation_cpu_ticks": 356,
+            "operation_us": 299,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33088,
+            "vips_bytes_before": 6544,
+            "vips_highwater_bytes": 50304
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        32,
+        17,
+        3,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "bc2195afcc8be8e8c6c2e0741b46c8517328a233e96e97ba1900f1d097969f51",
+      "median_seconds": 0.000262,
+      "output_sha256": [
+        "0b45b5e6b6305b311f8dc5b058ffe1904874c0fe3952df25ed77a62559d133ae"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 33088,
+        "median_seconds": 0.000168,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3817,
+            "operation_cpu_seconds": 0.000195,
+            "operation_cpu_ticks": 195,
+            "operation_us": 168,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33088,
+            "vips_bytes_before": 6544,
+            "vips_highwater_bytes": 50304
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3983,
+            "operation_cpu_seconds": 0.000158,
+            "operation_cpu_ticks": 158,
+            "operation_us": 125,
+            "output_bytes": 8716,
+            "peak_rss_kib": 32876,
+            "vips_bytes_before": 6544,
+            "vips_highwater_bytes": 50304
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 4052,
+            "operation_cpu_seconds": 0.000269,
+            "operation_cpu_ticks": 269,
+            "operation_us": 200,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33124,
+            "vips_bytes_before": 6544,
+            "vips_highwater_bytes": 50304
+          }
+        ]
+      }
+    },
+    "mif1-4b-16mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 557500,
+        "median_seconds": 0.210545,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 118563,
+            "operation_cpu_seconds": 0.27685,
+            "operation_cpu_ticks": 276850,
+            "operation_us": 210545,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 557408,
+            "vips_bytes_before": 276562112,
+            "vips_highwater_bytes": 283115872
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 122141,
+            "operation_cpu_seconds": 0.317985,
+            "operation_cpu_ticks": 317985,
+            "operation_us": 254935,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 557500,
+            "vips_bytes_before": 274727080,
+            "vips_highwater_bytes": 283115872
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 119463,
+            "operation_cpu_seconds": 0.257392,
+            "operation_cpu_ticks": 257392,
+            "operation_us": 197371,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 557724,
+            "vips_bytes_before": 274989224,
+            "vips_highwater_bytes": 283115872
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        4096,
+        4096,
+        4,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "d883bc969a2468cf57fc4abe01233657521feb451e9103cf26a1d07a9e12bf10",
+      "median_seconds": 0.210545,
+      "output_sha256": [
+        "1ae3f225510f1285626bfdcfdb1a7cddc5cd6c453567ccdff0471749b0bbde41"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 557524,
+        "median_seconds": 0.193302,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 118578,
+            "operation_cpu_seconds": 0.251503,
+            "operation_cpu_ticks": 251503,
+            "operation_us": 193302,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 557524,
+            "vips_bytes_before": 268435472,
+            "vips_highwater_bytes": 283115872
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 127837,
+            "operation_cpu_seconds": 0.27187,
+            "operation_cpu_ticks": 271870,
+            "operation_us": 214316,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 557336,
+            "vips_bytes_before": 268435472,
+            "vips_highwater_bytes": 283115872
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 118839,
+            "operation_cpu_seconds": 0.255121,
+            "operation_cpu_ticks": 255121,
+            "operation_us": 192204,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 557540,
+            "vips_bytes_before": 268435472,
+            "vips_highwater_bytes": 283115872
+          }
+        ]
+      }
+    },
+    "mif1-4b-1mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 67976,
+        "median_seconds": 0.01508,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 12357,
+            "operation_cpu_seconds": 0.019734,
+            "operation_cpu_ticks": 19734,
+            "operation_us": 13646,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 68172,
+            "vips_bytes_before": 17629272,
+            "vips_highwater_bytes": 20447584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 12460,
+            "operation_cpu_seconds": 0.021081,
+            "operation_cpu_ticks": 21081,
+            "operation_us": 15124,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 67976,
+            "vips_bytes_before": 17236024,
+            "vips_highwater_bytes": 20447584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 12926,
+            "operation_cpu_seconds": 0.021807,
+            "operation_cpu_ticks": 21807,
+            "operation_us": 15080,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 67868,
+            "vips_bytes_before": 18022544,
+            "vips_highwater_bytes": 20447584
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        1024,
+        1024,
+        4,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "25050c41f3b606f57da371969f4e16e9561e05750ed79b3c261c7042e8c34ac4",
+      "median_seconds": 0.01508,
+      "output_sha256": [
+        "b8f35f3c560430fa5464cd8b1bc7c0e9514f2e4127c60c46b4662410311dc7e5"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 67976,
+        "median_seconds": 0.015398,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 12297,
+            "operation_cpu_seconds": 0.020215,
+            "operation_cpu_ticks": 20215,
+            "operation_us": 15398,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 67988,
+            "vips_bytes_before": 16777232,
+            "vips_highwater_bytes": 20447584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 12160,
+            "operation_cpu_seconds": 0.019837,
+            "operation_cpu_ticks": 19837,
+            "operation_us": 14872,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 67876,
+            "vips_bytes_before": 16777232,
+            "vips_highwater_bytes": 20447584
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 12339,
+            "operation_cpu_seconds": 0.020386,
+            "operation_cpu_ticks": 20386,
+            "operation_us": 15472,
+            "output_bytes": 16777228,
+            "peak_rss_kib": 67976,
+            "vips_bytes_before": 16777232,
+            "vips_highwater_bytes": 20447584
+          }
+        ]
+      }
+    },
+    "mif1-4b-4mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 164160,
+        "median_seconds": 0.054003,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 34425,
+            "operation_cpu_seconds": 0.066275,
+            "operation_cpu_ticks": 66275,
+            "operation_us": 48216,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 164016,
+            "vips_bytes_before": 70385848,
+            "vips_highwater_bytes": 74449248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 34120,
+            "operation_cpu_seconds": 0.071508,
+            "operation_cpu_ticks": 71508,
+            "operation_us": 54353,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 164160,
+            "vips_bytes_before": 73531704,
+            "vips_highwater_bytes": 74449248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 33911,
+            "operation_cpu_seconds": 0.071007,
+            "operation_cpu_ticks": 71007,
+            "operation_us": 54003,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 164248,
+            "vips_bytes_before": 70254744,
+            "vips_highwater_bytes": 74449248
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        2048,
+        2048,
+        4,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "3fe0ec29b3b434559a1ff96bbc78655f5496c77065b04448e9e0602d8c3a242f",
+      "median_seconds": 0.054003,
+      "output_sha256": [
+        "bed8819fd2363ff54a8036a1fe92c0e91bb3a49378819bcd2945d001ca1b1304"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 164232,
+        "median_seconds": 0.054644,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 34948,
+            "operation_cpu_seconds": 0.071997,
+            "operation_cpu_ticks": 71997,
+            "operation_us": 54929,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 164284,
+            "vips_bytes_before": 67108880,
+            "vips_highwater_bytes": 74449248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 40542,
+            "operation_cpu_seconds": 0.073067,
+            "operation_cpu_ticks": 73067,
+            "operation_us": 54644,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 164232,
+            "vips_bytes_before": 67108880,
+            "vips_highwater_bytes": 74449248
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 34064,
+            "operation_cpu_seconds": 0.067879,
+            "operation_cpu_ticks": 67879,
+            "operation_us": 52314,
+            "output_bytes": 67108876,
+            "peak_rss_kib": 164228,
+            "vips_bytes_before": 67108880,
+            "vips_highwater_bytes": 74449248
+          }
+        ]
+      }
+    },
+    "mif1-4b-8mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 295368,
+        "median_seconds": 0.102811,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 62509,
+            "operation_cpu_seconds": 0.136432,
+            "operation_cpu_ticks": 136432,
+            "operation_us": 104568,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 295388,
+            "vips_bytes_before": 147849536,
+            "vips_highwater_bytes": 148898144
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 64762,
+            "operation_cpu_seconds": 0.133196,
+            "operation_cpu_ticks": 133196,
+            "operation_us": 102811,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 295040,
+            "vips_bytes_before": 143130832,
+            "vips_highwater_bytes": 148898144
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 63738,
+            "operation_cpu_seconds": 0.134577,
+            "operation_cpu_ticks": 134577,
+            "operation_us": 100571,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 295368,
+            "vips_bytes_before": 146538800,
+            "vips_highwater_bytes": 148898144
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        4096,
+        2048,
+        4,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "0a2cf2b68216a0b6ad14f94e832a62210f8198d8dfb96082fa758d958fb7b908",
+      "median_seconds": 0.102811,
+      "output_sha256": [
+        "55e0714b78bc42a3c5cf7d268fa0d9e517e48e1ea69d38f2338cce44b752606f"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 295380,
+        "median_seconds": 0.09848,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 62309,
+            "operation_cpu_seconds": 0.131341,
+            "operation_cpu_ticks": 131341,
+            "operation_us": 100624,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 295380,
+            "vips_bytes_before": 134217744,
+            "vips_highwater_bytes": 148898144
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 62907,
+            "operation_cpu_seconds": 0.128251,
+            "operation_cpu_ticks": 128251,
+            "operation_us": 98480,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 295380,
+            "vips_bytes_before": 134217744,
+            "vips_highwater_bytes": 148898144
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 63317,
+            "operation_cpu_seconds": 0.127717,
+            "operation_cpu_ticks": 127717,
+            "operation_us": 97919,
+            "output_bytes": 134217740,
+            "peak_rss_kib": 295356,
+            "vips_bytes_before": 134217744,
+            "vips_highwater_bytes": 148898144
+          }
+        ]
+      }
+    },
+    "mif1-4b-small": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 33124,
+        "median_seconds": 0.000244,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3873,
+            "operation_cpu_seconds": 0.023305,
+            "operation_cpu_ticks": 23305,
+            "operation_us": 23236,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33120,
+            "vips_bytes_before": 8720,
+            "vips_highwater_bytes": 61232
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 4600,
+            "operation_cpu_seconds": 0.000245,
+            "operation_cpu_ticks": 245,
+            "operation_us": 200,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33156,
+            "vips_bytes_before": 8720,
+            "vips_highwater_bytes": 60824
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3826,
+            "operation_cpu_seconds": 0.000295,
+            "operation_cpu_ticks": 295,
+            "operation_us": 244,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33124,
+            "vips_bytes_before": 8720,
+            "vips_highwater_bytes": 61232
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        32,
+        17,
+        4,
+        32,
+        0,
+        0
+      ],
+      "fixture_sha256": "7d08c4d86153a929e63c255f59337132100385facf843ddd11bffcd15be5ba1f",
+      "median_seconds": 0.000244,
+      "output_sha256": [
+        "5973da0e0c649ec184fd8269b8e8b937911ec0ac672bf2d546940fc1a947dfc6"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 33116,
+        "median_seconds": 0.00015,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3775,
+            "operation_cpu_seconds": 0.000257,
+            "operation_cpu_ticks": 257,
+            "operation_us": 206,
+            "output_bytes": 8716,
+            "peak_rss_kib": 32868,
+            "vips_bytes_before": 8720,
+            "vips_highwater_bytes": 61232
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3895,
+            "operation_cpu_seconds": 0.000147,
+            "operation_cpu_ticks": 147,
+            "operation_us": 114,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33188,
+            "vips_bytes_before": 8720,
+            "vips_highwater_bytes": 61232
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3958,
+            "operation_cpu_seconds": 0.000196,
+            "operation_cpu_ticks": 196,
+            "operation_us": 150,
+            "output_bytes": 8716,
+            "peak_rss_kib": 33116,
+            "vips_bytes_before": 8720,
+            "vips_highwater_bytes": 61232
+          }
+        ]
+      }
+    },
+    "mif1-lazy-16mp": {
+      "cold": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 308824,
+        "median_seconds": 0.256667,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3383,
+            "operation_cpu_seconds": 0.379438,
+            "operation_cpu_ticks": 379438,
+            "operation_us": 259319,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 308824,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3414,
+            "operation_cpu_seconds": 0.377175,
+            "operation_cpu_ticks": 377175,
+            "operation_us": 256587,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 308852,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3473,
+            "operation_cpu_seconds": 0.376718,
+            "operation_cpu_ticks": 376718,
+            "operation_us": 256667,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 308636,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          }
+        ]
+      },
+      "failed": 0,
+      "fixture": [
+        "coordinate-ramp-v1",
+        "mif1",
+        4096,
+        4096,
+        4,
+        32,
+        0,
+        1
+      ],
+      "fixture_sha256": "481f48e5f7b3bfe802651099a10f89ab2ee8b5514eecd3c4153c8fe3f112757e",
+      "median_seconds": 0.256667,
+      "output_sha256": [
+        "1ae3f225510f1285626bfdcfdb1a7cddc5cd6c453567ccdff0471749b0bbde41"
+      ],
+      "successful": 6,
+      "warm": {
+        "count": 3,
+        "errors": [],
+        "median_peak_rss_kib": 309668,
+        "median_seconds": 0.257992,
+        "p95_seconds": null,
+        "samples": [
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3403,
+            "operation_cpu_seconds": 0.376955,
+            "operation_cpu_ticks": 376955,
+            "operation_us": 256175,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 309668,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3376,
+            "operation_cpu_seconds": 0.388603,
+            "operation_cpu_ticks": 388603,
+            "operation_us": 262209,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 309800,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          },
+          {
+            "cpu_ticks_per_second": 1000000,
+            "fixture_us": 3495,
+            "operation_cpu_seconds": 0.379116,
+            "operation_cpu_ticks": 379116,
+            "operation_us": 257992,
+            "output_bytes": 268435468,
+            "peak_rss_kib": 309176,
+            "vips_bytes_before": 0,
+            "vips_highwater_bytes": 14680400
+          }
+        ]
+      }
+    }
+  }
+}

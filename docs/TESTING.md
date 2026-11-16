@@ -113,7 +113,7 @@ argument to reproduce it.
 ## Benchmarks
 
 Run `meson test -C build --benchmark --verbose` for the registered
-`performance` workloads. Each uses five samples, reports median, P95, range,
+`performance` workloads. Public API workloads use five samples, report median, P95, range,
 CPU time, sampled host and worker RSS, sandbox launches, concurrency, and
 temporary disk usage. Polling can miss short-lived workers, which are still
 counted by their launch records. A missing RSS sample is reported as
@@ -126,6 +126,23 @@ For a standalone baseline, pass the built benchmark and worker to
 `MODE=FIXTURE` arguments. Pass `--baseline previous.json` to compare workloads
 with the same fixture hash. Cross-machine timings do not gate functional tests.
 For scheduled comparisons use the same runner and build settings.
+
+The native benchmark calls the production MIF1 writer and JPEG XL encoder.
+It uses five samples each for the first and second operation in separate
+processes. JSON reports operation timing and CPU time, fixture time, process
+peak RSS, libvips tracked memory, output size and digest, and failure counts.
+It reports native P95 when at least 20 samples complete per phase.
+
+```sh
+meson compile -C build majoris-image-native-benchmark
+VIPS_CONCURRENCY=2 python3 tests/benchmarks/run_benchmarks.py --native \
+  --build build --executable build/tests/benchmarks/majoris-image-native-benchmark \
+  --output result.json mif1-lazy-16mp jxl-rgba-16mp
+```
+
+Use `--baseline previous.json` to check matching fixtures and compare timings.
+A MIF1 digest mismatch fails the comparison. `--references NEW_DIRECTORY`
+retains the first cold output from each workload for direct comparison.
 
 ## Installed tests and release qualification
 

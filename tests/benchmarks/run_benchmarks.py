@@ -1,4 +1,4 @@
-"""Measure repeatable public API workloads and emit a JSON baseline."""
+"""Measure repeatable public API and native workloads and emit a JSON baseline."""
 
 import argparse
 import hashlib
@@ -14,6 +14,80 @@ import tempfile
 import time
 from collections.abc import Iterator
 from pathlib import Path
+
+NATIVE_WORKLOADS = {
+    **{
+        f"mif1-{bands}b-{size}": ("mif1", width, height, bands, 32, 0, 0)
+        for bands in (3, 4)
+        for size, width, height in (
+            ("small", 32, 17),
+            ("1mp", 1024, 1024),
+            ("4mp", 2048, 2048),
+            ("8mp", 4096, 2048),
+            ("16mp", 4096, 4096),
+        )
+    },
+    "mif1-lazy-16mp": ("mif1", 4096, 4096, 4, 32, 0, 1),
+    "jxl-rgb-4mp": ("jxl", 2048, 2048, 3, 16, 0, 1),
+    "jxl-rgb-16mp": ("jxl", 4096, 4096, 3, 16, 0, 1),
+    "jxl-rgba-4mp": ("jxl", 2048, 2048, 4, 32, 0, 1),
+    "jxl-rgba-16mp": ("jxl", 4096, 4096, 4, 32, 0, 1),
+    "jxl-hdr-lossless": ("jxl", 1024, 1024, 4, 32, 1, 1),
+}
+
+
+def measure_native(
+    executable: Path, workload: str, root: Path, count: int, references: Path | None
+) -> dict:
+    fixture = ("coordinate-ramp-v1", *NATIVE_WORKLOADS[workload])
+    digest = hashlib.sha256(json.dumps(fixture).encode()).hexdigest()
+    path = root / "native-output"
+    stats = {"fixture": fixture, "fixture_sha256": digest, "successful": 0, "failed": 0}
+    hashes = set()
+    for phase, warm in (("cold", 0), ("warm", 1)):
+        samples = []
+        errors = []
+        for _ in range(count):
+            command = [executable, *map(str, fixture[1:]), str(warm), path]
+            try:
+                result = subprocess.run(
+                    command, capture_output=True, text=True, check=True, timeout=180
+                )
+            except subprocess.CalledProcessError as failure:
+                errors.append(failure.stderr.strip() or str(failure))
+                continue
+            except subprocess.TimeoutExpired as failure:
+                errors.append(str(failure))
+                continue
+            sample = json.loads(result.stdout)
+            sample["operation_cpu_seconds"] = (
+                sample["operation_cpu_ticks"] / sample["cpu_ticks_per_second"]
+            )
+            samples.append(sample)
+            with path.open("rb") as output:
+                hashes.add(hashlib.file_digest(output, "sha256").hexdigest())
+            if references and phase == "cold" and len(samples) == 1:
+                shutil.copyfile(path, references / f"{workload}.output")
+        durations = sorted(sample["operation_us"] / 1e6 for sample in samples)
+        stats[phase] = {
+            "count": len(samples),
+            "errors": errors,
+            "samples": samples,
+            "median_seconds": statistics.median(durations) if durations else None,
+            "p95_seconds": durations[math.ceil(len(durations) * 0.95) - 1]
+            if len(durations) >= 20
+            else None,
+            "median_peak_rss_kib": statistics.median(
+                sample["peak_rss_kib"] for sample in samples
+            )
+            if samples
+            else None,
+        }
+        stats["successful"] += len(samples)
+        stats["failed"] += len(errors)
+    stats["median_seconds"] = stats["cold"]["median_seconds"]
+    stats["output_sha256"] = sorted(hashes)
+    return stats
 
 
 def descendants(pid: int) -> Iterator[int]:
@@ -125,6 +199,7 @@ def codec_versions() -> dict[str, str]:
         "vips",
         "lcms2",
         "libheif",
+        "libjxl",
         "libavif",
         "libraw",
         "libuhdr",
@@ -145,15 +220,28 @@ def codec_versions() -> dict[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", type=Path, required=True)
-    parser.add_argument("--worker", type=Path, required=True)
+    parser.add_argument("--worker", type=Path)
     parser.add_argument("--executable", type=Path, required=True)
+    parser.add_argument("--native", action="store_true")
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--references", type=Path, help="Save native reference outputs")
     parser.add_argument("workload", nargs="+", metavar="MODE=FIXTURE")
     args = parser.parse_args()
     if args.samples < 3 or args.samples > 30:
         parser.error("--samples must be between 3 and 30")
+    if args.native:
+        unknown = set(args.workload) - NATIVE_WORKLOADS.keys()
+        if unknown:
+            parser.error(f"Unknown native workloads: {', '.join(sorted(unknown))}")
+        if args.references:
+            args.references.mkdir()
+    elif not args.worker:
+        parser.error("--worker is required for public API workloads")
+    elif args.references:
+        parser.error("--references requires --native")
+    source_root = Path(__file__).resolve().parents[2]
     info = args.build / "meson-info"
     project = json.loads((info / "intro-projectinfo.json").read_text())
     options = json.loads((info / "intro-buildoptions.json").read_text())
@@ -161,6 +249,7 @@ def main() -> int:
         "version": project["version"],
         "revision": subprocess.run(
             ["git", "rev-parse", "HEAD"],
+            cwd=source_root,
             capture_output=True,
             text=True,
             timeout=5,
@@ -187,7 +276,32 @@ def main() -> int:
         "workloads": {},
     }
     old = json.loads(args.baseline.read_text()) if args.baseline else {}
+    if args.native:
+        with args.executable.open("rb") as executable:
+            result["native_executable_sha256"] = hashlib.file_digest(
+                executable, "sha256"
+            ).hexdigest()
     with tempfile.TemporaryDirectory(prefix="imagekit-benchmark-") as temporary:
+        if args.native:
+            for workload in args.workload:
+                stats = measure_native(
+                    args.executable.resolve(),
+                    workload,
+                    Path(temporary),
+                    args.samples,
+                    args.references,
+                )
+                base = old.get("workloads", {}).get(workload)
+                if base and base.get("fixture_sha256") == stats["fixture_sha256"]:
+                    stats["baseline_output_matches"] = (
+                        base["output_sha256"] == stats["output_sha256"]
+                    )
+                    if base["median_seconds"] and stats["median_seconds"]:
+                        stats["baseline_median_ratio"] = (
+                            stats["median_seconds"] / base["median_seconds"]
+                        )
+                result["workloads"][workload] = stats
+            return emit_result(result, args.output)
         root = Path(temporary)
         # Count actual sandbox invocations while preserving Bubblewrap's arguments.
         wrapper = root / "bwrap"
@@ -230,11 +344,24 @@ def main() -> int:
             if base and base.get("fixture_sha256") == digest:
                 stats["baseline_median_ratio"] = median / base["median_seconds"]
             result["workloads"][mode] = stats
+    return emit_result(result, args.output)
+
+
+def emit_result(result: dict, output: Path | None) -> int:
     encoded = json.dumps(result, indent=2, sort_keys=True) + "\n"
-    if args.output:
-        args.output.write_text(encoded)
+    if output:
+        output.write_text(encoded)
     print(encoded, end="")
-    return 0
+    return int(
+        any(
+            stats.get("failed", 0)
+            or (
+                name.startswith("mif1-")
+                and stats.get("baseline_output_matches") is False
+            )
+            for name, stats in result["workloads"].items()
+        )
+    )
 
 
 if __name__ == "__main__":

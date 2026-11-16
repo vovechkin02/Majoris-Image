@@ -53,6 +53,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     var multipart = new ImageSource (File.new_for_path (Path.build_filename (directory, "multipart.exr")));
     var exr = yield registry.open (multipart);
     assert (exr.hdr && exr.bit_depth == 32 && exr.page_count >= 2);
+    yield verify_jxl_export (registry, multipart, exr.preview);
     var exr_stream = yield multipart.file.read_async ();
     var staged = yield ImageSource.from_stream (exr_stream);
     yield exr_stream.close_async ();
@@ -159,6 +160,36 @@ async void verify_headless_core_api (string directory, string large_path) throws
     } finally {
         FileUtils.unlink (target.get_path ());
         DirUtils.remove (temp);
+    }
+}
+
+private async void verify_jxl_export (DecoderRegistry registry, ImageSource source,
+                                      PixelBuffer reference) throws Error {
+    string directory = DirUtils.make_tmp ("majoris-jxl-export-XXXXXX");
+    string path = Path.build_filename (directory, "export.jxl");
+    var target = File.new_for_path (path);
+    try {
+        var options = new ExportOptions ();
+        options.format = "jxl";
+        options.hdr = true;
+        options.bit_depth = 32;
+        options.lossless = true;
+        yield new EncoderRegistry ().encode (source, target, options);
+        var decoded = yield registry.open (new ImageSource (target));
+        assert (decoded.width == reference.width && decoded.height == reference.height);
+        assert (decoded.has_alpha);
+        for (int channel = 0; channel < 4; channel++) {
+            float expected = sample (reference, 16, 8, channel);
+            float actual = sample (decoded.preview, 16, 8, channel);
+            if (!(Math.fabs (actual - expected) < 0.001)) {
+                throw new IOError.INVALID_DATA (
+                    "JPEG XL channel %d differs from source (%g vs %g)".printf (
+                    channel, actual, expected));
+            }
+        }
+    } finally {
+        FileUtils.unlink (path);
+        DirUtils.remove (directory);
     }
 }
 

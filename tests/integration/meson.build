@@ -1,15 +1,15 @@
 decoder_test = executable('test-decoders', 'test-decoder-selection.vala', dependencies: core_api)
 headless = executable('test-headless', 'test-core-api.vala', dependencies: core_api)
 test('Headless Core API', python, suite: 'integration',
-    args: isolated + [headless, fixture_dir, fixtures[0]], depends: [worker, fixtures],
+    args: isolated + [headless, fixture_dir, large_tiff_fixture], depends: [worker, fixtures],
   env: worker_env, timeout: 90)
 test('Decoder selection and composited APNG frames', python, suite: 'integration',
-    args: isolated + [decoder_test, extra_formats[0], extra_formats[1], get_option('glycin').enabled() ? 'enabled' : 'optional', worker_fault.full_path(),
+    args: isolated + [decoder_test, fallback_qoi_fixture, partial_apng_fixture, get_option('glycin').enabled() ? 'enabled' : 'optional', worker_fault.full_path(),
     fixture_dir / 'avif-sequence.avif', avif_sequence.found() ? 'avif' : 'optional',
     heif_sequence ? fixture_dir / 'heic-sequence.heic' : '', fixture_dir / 'avif-hdr-sequence.avif', thumbnail_registration],
   depends: [worker, worker_fault, extra_formats, fixtures], env: worker_env)
 test('Desktop thumbnail registration and output', python, suite: 'integration',
-  args: isolated + [python, files('thumbnail_registration.py'), thumbnailer, thumbnail_registration, fixture_dir, fixture_build_dir,
+  args: isolated + [python.full_path(), files('thumbnail_registration.py'), thumbnailer, thumbnail_registration, fixture_dir, fixture_build_dir,
     thumbnail_mime_generator, meson.project_source_root() / 'src/thumbnail/majoris-image.thumbnailer.in',
     glycin.found() ? 'glycin' : 'native'],
   depends: [worker, thumbnailer, thumbnail_registration, fixtures, extra_formats], env: worker_env, timeout: 30)
@@ -34,7 +34,7 @@ if get_option('gtk')
     foreach scale : ['1', '2']
       input_env = environment({'GDK_BACKEND': 'x11', 'GDK_SCALE': scale, 'GTK_A11Y': 'test'})
       test('GTK input and accessibility at scale ' + scale, python, suite: 'integration',
-        args: isolated + [xvfb, '-a', '-s', '-screen 0 1920x1200x24', interaction], env: input_env, timeout: 30)
+        args: isolated + [xvfb.full_path(), '-a', '-s', '-screen 0 1920x1200x24', interaction], env: input_env, timeout: 30)
     endforeach
   endif
   tile_source = configure_file(input: '../../src/gtk/tile-cache.vala',
@@ -42,9 +42,9 @@ if get_option('gtk')
   tile_test = executable('test-tile-coverage', ['test-tile-coverage.vala', tile_source],
     dependencies: [gtk_api, gee, math], include_directories: include_directories('../../src/gtk'))
   test('Viewport tile coverage and cancellation', python, suite: 'integration',
-    args: isolated + [tile_test, fixtures[0], fixture_dir / 'multipart.exr'], depends: [worker, fixtures], env: worker_env, timeout: 45)
+    args: isolated + [tile_test, large_tiff_fixture, fixture_dir / 'multipart.exr'], depends: [worker, fixtures], env: worker_env, timeout: 45)
   viewer_test = executable('test-image-view', 'test-image-view.vala', dependencies: gtk_api)
-  viewer_args = [fixture_dir, fixtures[8], fixtures[1], fixtures[2]]
+  viewer_args = [fixture_dir, still_webp_fixture, animated_gif_fixture, animated_webp_fixture]
   if avif_sequence.found()
     viewer_args += [fixture_dir / 'avif-sequence.avif', fixture_dir / 'avif-hdr-sequence.avif']
   endif
@@ -52,7 +52,7 @@ if get_option('gtk')
     viewer_args += [fixture_dir / 'heic-sequence.heic']
   endif
   if glycin.found()
-    viewer_args += [extra_formats[1], extra_formats[26]]
+    viewer_args += [partial_apng_fixture, wide_apng_fixture]
   endif
   workflow_sequences = []
   if avif_sequence.found()
@@ -66,11 +66,11 @@ if get_option('gtk')
     raw_preview_fixture = get_option('raw_fixtures') / '350D.CR2'
   endif
   files_args = [fixture_dir / 'rgb16.png', fixture_dir / 'multipart.exr',
-    raw_preview_fixture, fixtures[0], fixtures[4]] + workflow_sequences
-  photos_args = [fixtures[0], fixture_dir / 'multipart.exr', '@TEST_ROOT@/photos-export.png',
-    raw_preview_fixture, fixtures[4], fixtures[9]] + workflow_sequences
-  photos_args += [extra_formats[0]]
-  display = xvfb.found() ? [xvfb, '-a'] : []
+    raw_preview_fixture, large_tiff_fixture, profiled_png_fixture] + workflow_sequences
+  photos_args = [large_tiff_fixture, fixture_dir / 'multipart.exr', '@TEST_ROOT@/photos-export.png',
+    raw_preview_fixture, profiled_png_fixture, navigation_jpeg_fixture] + workflow_sequences
+  photos_args += [fallback_qoi_fixture]
+  display = xvfb.found() ? [xvfb.full_path(), '-a'] : []
   test('Files public preview workflow', python, suite: 'integration',
     args: isolated + display + [files_preview] + files_args,
     depends: [worker, fixtures, files_preview], env: worker_env, timeout: 90)
@@ -99,7 +99,7 @@ if get_option('gtk')
       args: isolated + ['--repeat', '3'] + display + [viewer_test] + viewer_args,
       depends: [worker, fixtures, extra_formats], env: worker_env, timeout: 160)
     test('Complete 8K tile coverage', python, suite: 'extended',
-      args: isolated + [tile_test, fixtures[0], fixture_dir / 'multipart.exr', '--complete'],
+      args: isolated + [tile_test, large_tiff_fixture, fixture_dir / 'multipart.exr', '--complete'],
       depends: [worker, fixtures], env: worker_env, timeout: 180)
   endif
 endif

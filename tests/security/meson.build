@@ -23,5 +23,5 @@ test('Worker timeout, cancellation, crash and response validation', python, suit
 publish_gate = shared_module('cache-publish-gate', 'cache-publish-gate.c',
   dependencies: meson.get_compiler('c').find_library('dl'))
 test('Cross-process thumbnail publication', python, suite: 'security',
-  args: isolated + [python, files('cache_processes.py'), thumbnailer, fixture_dir / 'rgb16.png', publish_gate],
+  args: isolated + [python.full_path(), files('cache_processes.py'), thumbnailer, fixture_dir / 'rgb16.png', publish_gate],
   depends: [worker, thumbnailer, publish_gate], env: worker_env, timeout: 40)

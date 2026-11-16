@@ -3,6 +3,8 @@ native_vala_flags = [
   '--vapidir=' + meson.project_source_root() / 'vapi',
   '--pkg=image-native', '--pkg=image-vips',
 ]
+# The private archive contains the Vala entry point. link_whole below pulls it
+# and the worker-only contract into the executable; the archive is never installed.
 worker_code = static_library('majoris-image-worker-code',
   'main.vala', 'image-inspector.vala', 'metadata-reader.vala', 'float-ops.vala',
   'tone-mapper.vala', 'image-processor.vala', 'tone-operations.vala',

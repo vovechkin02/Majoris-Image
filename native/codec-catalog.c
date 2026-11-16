@@ -1,4 +1,5 @@
 #include "bridge.h"
+#include "capability-flags.h"
 #include <json-glib/json-glib.h>
 #include <libraw/libraw.h>
 #include <libheif/heif.h>
@@ -14,16 +15,16 @@ static const struct NativeLoader {
     unsigned capabilities;
     const char *desktop_baseline;
 } loaders[] = {
-    {"jpegload", "image/jpeg", 1 | 64 | 256, "image/jpeg"},
-    {"pngload", "image/png;image/apng", 1 | 8 | 64 | 256, "image/png"},
-    {"tiffload", "image/tiff", 1 | 4 | 8 | 16 | 32 | 64 | 256, "image/tiff"},
-    {"webpload", "image/webp", 1 | 2 | 64 | 256},
-    {"gifload", "image/gif", 1 | 2 | 64 | 256},
-    {"jp2kload", "image/jp2", 1 | 8 | 64 | 256},
-    {"jxlload", "image/jxl", 1 | 8 | 16 | 64 | 256},
-    {"svgload", "image/svg+xml;image/svg+xml-compressed", 1 | 32 | 64 | 1024},
-    {"radload", "image/vnd.radiance", 1 | 8 | 16 | 64},
-    {"ppmload", "image/x-portable-anymap;image/x-portable-bitmap;image/x-portable-graymap;image/x-portable-pixmap", 1 | 8 | 64},
+    {"jpegload", "image/jpeg", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA, "image/jpeg"},
+    {"pngload", "image/png;image/apng", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA, "image/png"},
+    {"tiffload", "image/tiff", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_MULTI_IMAGE | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_REGION | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA, "image/tiff"},
+    {"webpload", "image/webp", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA},
+    {"gifload", "image/gif", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA},
+    {"jp2kload", "image/jp2", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA},
+    {"jxlload", "image/jxl", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA},
+    {"svgload", "image/svg+xml;image/svg+xml-compressed", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_REGION | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_VECTOR},
+    {"radload", "image/vnd.radiance", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL},
+    {"ppmload", "image/x-portable-anymap;image/x-portable-bitmap;image/x-portable-graymap;image/x-portable-pixmap", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL},
 };
 
 // The package descriptor must be reproducible on hosts with different plugins.
@@ -48,7 +49,7 @@ static void add_formats(JsonBuilder *builder, const char *mimes, unsigned capabi
     json_builder_set_member_name(builder, "capability-flags");
     json_builder_add_int_value(builder, capabilities);
     json_builder_set_member_name(builder, "thumbnail");
-    json_builder_add_boolean_value(builder, (capabilities & 64) != 0);
+    json_builder_add_boolean_value(builder, (capabilities & IMAGE_CAPABILITY_THUMBNAIL) != 0);
     // Flags are decoder potential. Inspect the individual file to negotiate.
     json_builder_set_member_name(builder, "conditional");
     json_builder_add_boolean_value(builder, TRUE);
@@ -107,27 +108,27 @@ char *image_codec_catalog_json(void)
     ctx.encoder = TRUE;
     vips_type_map_all(VIPS_TYPE_FOREIGN_SAVE, collect_operation, &ctx);
 
-    add_backend(builder, "openexr-native", "image/x-exr", 1 | 4 | 8 | 16 | 32 | 64 | 256);
+    add_backend(builder, "openexr-native", "image/x-exr", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_MULTI_IMAGE | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_REGION | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA);
     if (libraw_cameraCount() > 0)
         add_backend(builder, "libraw",
             "image/x-adobe-dng;image/x-canon-cr2;image/x-canon-cr3;image/x-canon-crw;"
             "image/x-nikon-nef;image/x-nikon-nrw;image/x-sony-arw;image/x-sony-sr2;"
             "image/x-fuji-raf;image/x-panasonic-rw2;image/x-olympus-orf;"
             "image/x-pentax-pef;image/x-samsung-srw;image/x-minolta-mrw",
-            1 | 8 | 64 | 128 | 256);
+            IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_EMBEDDED_PREVIEW | IMAGE_CAPABILITY_METADATA);
     if (vips_type_find("VipsOperation", "heifload")) {
         if (heif_have_decoder_for_format(heif_compression_AV1))
-            add_backend(builder, "heifload-avif", "image/avif", 1 | 4 | 8 | 16 | 64 | 256);
+            add_backend(builder, "heifload-avif", "image/avif", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_MULTI_IMAGE | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA);
         if (heif_have_decoder_for_format(heif_compression_HEVC))
-            add_backend(builder, "heifload-hevc", "image/heif;image/heic", 1 | 4 | 8 | 16 | 64 | 256);
+            add_backend(builder, "heifload-hevc", "image/heif;image/heic", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_MULTI_IMAGE | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA);
     }
 #ifdef IMAGE_CODEC_AVIF_SEQUENCE
     if (avifCodecName(AVIF_CODEC_CHOICE_AUTO, AVIF_CODEC_FLAG_CAN_DECODE))
-        add_backend(builder, "libavif-sequence", "image/avif-sequence", 1 | 2 | 8 | 16 | 64 | 256);
+        add_backend(builder, "libavif-sequence", "image/avif-sequence", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA);
 #endif
 #ifdef IMAGE_CODEC_HEIF_SEQUENCE
     if (heif_have_decoder_for_format(heif_compression_HEVC))
-        add_backend(builder, "libheif-sequence", "image/heif-sequence;image/heic-sequence", 1 | 2 | 8 | 16 | 64 | 256);
+        add_backend(builder, "libheif-sequence", "image/heif-sequence;image/heic-sequence", IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA);
 #endif
     json_builder_end_array(builder);
     g_autoptr(JsonNode) root = json_builder_get_root(builder);

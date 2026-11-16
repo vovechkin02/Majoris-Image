@@ -3,7 +3,7 @@ core_sources = files(
   'decoder-backend.vala', 'decoder-registry.vala', 'glycin-fallback.vala', 'encoder-registry.vala',
   'render-options.vala', 'export-options.vala', 'thumbnail-service.vala', 'preload-manager.vala',
   'job-scheduler.vala', 'worker-request.vala', 'worker-client.vala', 'worker-failure.vala',
-  'worker-path.c', 'thumbnail-png.c',
+  'worker-path.c', 'thumbnail-png.c', 'capability-contract.c',
 )
 core_dependencies = [gio, gee, json, math, dependency('zlib')]
 core_vala_args = ['--shared-library=libmajoris-image.so.2', '--hide-internal']

@@ -14,6 +14,13 @@ if get_option('tests')
       'profiled.png', 'profiled.tiff', 'adobe.png', 'gray-profile.png', 'still.webp',
       'navigation.jpg'],
     command: [fixture_maker, '@OUTPUT@'])
+  large_tiff_fixture = fixtures[0]
+  animated_gif_fixture = fixtures[1]
+  animated_webp_fixture = fixtures[2]
+  profiled_png_fixture = fixtures[4]
+  still_webp_fixture = fixtures[8]
+  navigation_jpeg_fixture = fixtures[9]
+
   extra_formats = custom_target('legacy and APNG fixtures',
     input: 'support/make_formats.py',
     depend_files: files('fixtures/heic-sequence.heic'),
@@ -24,7 +31,11 @@ if get_option('tests')
       'invalid-profile.png', 'srgb.png', 'cicp.png',
       'infinite.heic', 'offset.heic', 'invalid-timing.heic', 'rate.heic', 'composition.heic',
       'trimmed.heic', 'linear.qoi', 'partial-repeat.heic', 'wide.apng'],
-    command: [python, '@INPUT@', fixtures[4], '@OUTPUT@'])
+    command: [python, '@INPUT@', profiled_png_fixture, '@OUTPUT@'])
+  fallback_qoi_fixture = extra_formats[0]
+  partial_apng_fixture = extra_formats[1]
+  wide_apng_fixture = extra_formats[26]
+
 
   worker_env = environment({'MAJORIS_IMAGE_WORKER': worker.full_path(),
     'G_DEBUG': 'fatal-criticals'})

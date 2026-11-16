@@ -88,6 +88,11 @@ namespace ImageKit {
         private bool disposed;
         private TileCache tiles = new TileCache ();
         private double custom_zoom = 1;
+        private FitMode applied_fit_mode = FitMode.CONTAIN;
+        private double applied_zoom = 1;
+        private uint transform_revision;
+        private int transform_width;
+        private int transform_height;
         private double pan_x;
         private double pan_y;
         private double start_x;
@@ -121,11 +126,15 @@ namespace ImageKit {
                 update_accessible_description ();
                 update_state (Gtk.AccessibleState.BUSY, state == ViewState.LOADING, -1);
             });
-            notify["fit-mode"].connect (() => update_transform ());
+            notify["fit-mode"].connect (() => {
+                if (applied_fit_mode != fit_mode) {
+                    update_transform ();
+                }
+            });
             notify["nearest-neighbor"].connect (() => queue_draw ());
             tiles.changed.connect (() => queue_draw ());
             notify["presentation-policy"].connect (update_presentation);
-            notify["scale-factor"].connect (update_presentation);
+            notify["scale-factor"].connect (update_output_scale);
             map.connect (() => {
                 watch_output ();
                 update_presentation ();
@@ -301,8 +310,9 @@ namespace ImageKit {
             if (fit_mode == FitMode.CUSTOM) {
                 fit_mode = FitMode.CONTAIN;
             }
+            uint revision = transform_revision;
             thaw_notify ();
-            if (is_current (request)) {
+            if (is_current (request) && transform_revision == revision) {
                 update_transform ();
             }
             return request;
@@ -403,9 +413,17 @@ namespace ImageKit {
             if (watched_surface != null) {
                 entered_monitor = watched_surface.enter_monitor.connect ((monitor) => update_presentation ());
                 left_monitor = watched_surface.leave_monitor.connect ((monitor) => update_presentation ());
-                surface_scale_changed = watched_surface.notify["scale"].connect (update_presentation);
+                surface_scale_changed =
+                    watched_surface.notify["scale"].connect (update_output_scale);
                 monitors = watched_surface.get_display ().get_monitors ();
                 monitors_changed = monitors.items_changed.connect (() => update_presentation ());
+            }
+        }
+
+        private void update_output_scale () {
+            update_presentation ();
+            if (!disposed && fit_mode == FitMode.ACTUAL && zoom != applied_zoom) {
+                update_transform ();
             }
         }
 
@@ -711,27 +729,48 @@ namespace ImageKit {
         }
 
         private void update_transform () {
-            if (get_width () < 1 || get_height () < 1) {
-                notify_property ("zoom");
-                queue_draw ();
-                return;
-            }
+            transform_revision++;
+            applied_fit_mode = fit_mode;
+            transform_width = get_width ();
+            transform_height = get_height ();
             double scale = zoom;
-            int rotated_width;
-            int rotated_height;
-            rotated_image_size (out rotated_width, out rotated_height);
-            double max_x = double.max (0, (rotated_width * scale - get_width ()) / 2);
-            double max_y = double.max (0, (rotated_height * scale - get_height ()) / 2);
-            pan_x = pan_x.clamp (-max_x, max_x);
-            pan_y = pan_y.clamp (-max_y, max_y);
-            notify_property ("zoom");
+            bool allocated = transform_width > 0 && transform_height > 0;
+            if (allocated) {
+                int rotated_width;
+                int rotated_height;
+                rotated_image_size (out rotated_width, out rotated_height);
+                double max_x = double.max (0, (rotated_width * scale - transform_width) / 2);
+                double max_y = double.max (0, (rotated_height * scale - transform_height) / 2);
+                pan_x = pan_x.clamp (-max_x, max_x);
+                pan_y = pan_y.clamp (-max_y, max_y);
+            }
+            if (scale != applied_zoom) {
+                applied_zoom = scale;
+                notify_property ("zoom");
+            }
             queue_draw ();
-            transformed ();
+            if (allocated) {
+                transformed ();
+            }
+        }
+
+        private void apply_fit_mode (FitMode mode) {
+            uint revision = transform_revision;
+            if (fit_mode != mode) {
+                fit_mode = mode;
+            }
+            // A direct property assignment normally updates through notify.
+            // Apply immediately when notifications are frozen or mode is unchanged.
+            if (transform_revision == revision) {
+                update_transform ();
+            }
         }
 
         protected override void size_allocate (int width, int height, int baseline) {
             base.size_allocate (width, height, baseline);
-            update_transform ();
+            if (transform_width != get_width () || transform_height != get_height ()) {
+                update_transform ();
+            }
         }
 
         private double bounded_zoom (double value) {
@@ -753,14 +792,17 @@ namespace ImageKit {
                 return;
             }
             double next = bounded_zoom (value);
+            if (fit_mode == FitMode.CUSTOM && applied_fit_mode == FitMode.CUSTOM &&
+                next == custom_zoom) {
+                return;
+            }
             double anchor_x = x >= 0 ? x - get_width () / 2.0 : 0;
             double anchor_y = y >= 0 ? y - get_height () / 2.0 : 0;
             double ratio = next / zoom;
             pan_x = anchor_x - (anchor_x - pan_x) * ratio;
             pan_y = anchor_y - (anchor_y - pan_y) * ratio;
             custom_zoom = next;
-            fit_mode = FitMode.CUSTOM;
-            update_transform ();
+            apply_fit_mode (FitMode.CUSTOM);
         }
 
         public void zoom_in () {
@@ -772,14 +814,19 @@ namespace ImageKit {
         }
 
         public void fit_to_view () {
+            if (fit_mode == FitMode.CONTAIN && applied_fit_mode == FitMode.CONTAIN &&
+                pan_x == 0 && pan_y == 0) {
+                return;
+            }
             pan_x = pan_y = 0;
-            fit_mode = FitMode.CONTAIN;
-            update_transform ();
+            apply_fit_mode (FitMode.CONTAIN);
         }
 
         public void actual_size () {
-            fit_mode = FitMode.ACTUAL;
-            update_transform ();
+            if (fit_mode != FitMode.ACTUAL || applied_fit_mode != FitMode.ACTUAL ||
+                zoom != applied_zoom) {
+                apply_fit_mode (FitMode.ACTUAL);
+            }
         }
 
         public void pan_by (double x, double y) {
@@ -820,9 +867,14 @@ namespace ImageKit {
         }
 
         public void reset_view () {
+            if (turns == 0 && !flipped_x && !flipped_y) {
+                fit_to_view ();
+                return;
+            }
             turns = 0;
             flipped_x = flipped_y = false;
-            fit_to_view ();
+            pan_x = pan_y = 0;
+            apply_fit_mode (FitMode.CONTAIN);
         }
 
         private Graphene.Rect bounds (double x, double y, double width, double height) {

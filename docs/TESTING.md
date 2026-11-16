@@ -112,6 +112,21 @@ argument to reproduce it.
 
 ## Benchmarks
 
+Run the GTK benchmarks separately from the regular tests:
+
+```sh
+meson test -C build --benchmark --verbose \
+  'GTK tile planning and progressive rendering' \
+  'GTK ImageView snapshots and progressive presentation'
+```
+
+The first benchmark exercises the production tile-cache source with the generated
+BigTIFF at HD, 4K, 5K, shifted 8K, and ultrawide sizes. It times repeated cache
+calls separately from tile decoding and reports the host process peak RSS. The
+second benchmark requires Xvfb and exercises snapshot construction and progressive
+presentation with one and two mapped viewers at scale 1. For the baseline,
+methodology, and verification results, see [GTK viewport optimization](gtk-viewport-optimization.md).
+
 Run `meson test -C build --benchmark --verbose` for the registered
 `performance` workloads. Public API workloads use five samples, report median, P95, range,
 CPU time, sampled host and worker RSS, sandbox launches, concurrency, and

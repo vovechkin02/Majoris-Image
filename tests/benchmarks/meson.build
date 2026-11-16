@@ -90,3 +90,44 @@ benchmark(
     'jxl-hdr-lossless',
   ],
 )
+
+if get_option('gtk')
+  benchmark(
+    'GTK tile planning and progressive rendering',
+    python,
+    suite: 'performance',
+    timeout: 900,
+    args: isolated + [tile_test, '--benchmark', large_tiff_fixture],
+    depends: [worker, fixtures],
+    env: worker_env,
+  )
+  if xvfb.found()
+    image_view_benchmark = executable(
+      'majoris-image-view-benchmark',
+      'benchmark-image-view.vala',
+      dependencies: gtk_api,
+    )
+    benchmark(
+      'GTK ImageView snapshots and progressive presentation',
+      python,
+      suite: 'performance',
+      timeout: 300,
+      args: isolated + [
+        xvfb.full_path(),
+        '-a',
+        '-s',
+        '-screen 0 1920x1200x24',
+        image_view_benchmark,
+        large_tiff_fixture,
+      ],
+      depends: [worker, fixtures],
+      env: {
+        'MAJORIS_IMAGE_WORKER': worker.full_path(),
+        'G_DEBUG': 'fatal-criticals',
+        'GDK_BACKEND': 'x11',
+        'GDK_SCALE': '1',
+        'GSK_RENDERER': 'cairo',
+      },
+    )
+  endif
+endif

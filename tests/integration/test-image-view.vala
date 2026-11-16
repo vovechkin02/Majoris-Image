@@ -3,6 +3,88 @@ using ImageKit;
 [CCode (cname = "g_object_run_dispose", cheader_filename = "glib-object.h")]
 private extern void force_dispose (Object object);
 
+private void verify_transform_notifications (ImageView view) {
+    int transforms = 0;
+    int zoom_changes = 0;
+    double observed_zoom = 0;
+    FitMode observed_mode = FitMode.CONTAIN;
+    ulong transform_handler = view.transformed.connect (() => {
+        transforms++;
+        observed_zoom = view.zoom;
+        observed_mode = view.fit_mode;
+    });
+    ulong zoom_handler = view.notify["zoom"].connect (() => {
+        zoom_changes++;
+    });
+    view.fit_mode = FitMode.WIDTH;
+    assert (transforms == 1 && observed_mode == FitMode.WIDTH);
+    assert (observed_zoom == (double) view.get_width () / view.image_width);
+    int fitted_zoom_changes = zoom_changes;
+    view.zoom_to (2.5, view.get_width () / 3.0, view.get_height () / 3.0);
+    assert (transforms == 2 && observed_mode == FitMode.CUSTOM && observed_zoom == 2.5);
+    assert (zoom_changes == fitted_zoom_changes + 1);
+    view.zoom_to (3.5);
+    assert (transforms == 3 && observed_zoom == 3.5 && zoom_changes == fitted_zoom_changes + 2);
+    view.zoom_to (3.5, 1, 1);
+    assert (transforms == 3 && zoom_changes == fitted_zoom_changes + 2);
+    view.freeze_notify ();
+    view.actual_size ();
+    assert (transforms == 4 && observed_mode == FitMode.ACTUAL && observed_zoom == view.zoom);
+    view.thaw_notify ();
+    view.actual_size ();
+    assert (transforms == 4 && zoom_changes == fitted_zoom_changes + 3);
+    view.rotate_clockwise ();
+    view.flip_horizontal ();
+    assert (transforms == 6 && zoom_changes == fitted_zoom_changes + 3);
+    view.reset_view ();
+    assert (transforms == 7 && observed_mode == FitMode.CONTAIN && observed_zoom == view.zoom);
+    view.fit_to_view ();
+    assert (transforms == 7);
+    view.disconnect (zoom_handler);
+    view.disconnect (transform_handler);
+}
+
+private Gsk.RenderNode snapshot_image (ImageView view) {
+    var snapshot = new Gtk.Snapshot ();
+    view.get_parent ().snapshot_child (view, snapshot);
+    var node = snapshot.to_node ();
+    assert (node != null);
+    return node;
+}
+
+private async void verify_transparent_tile_replacement (ImageView view) throws Error {
+    // At integer zoom the SDR preview and full-resolution EXR tile sample
+    // the same pixels. The fixture includes partially transparent pixels.
+    view.zoom_to (2);
+    var preview = snapshot_image (view);
+    var reference = preview.serialize ();
+    Gsk.RenderNode tiled = preview;
+    yield wait_for ("transparent EXR tile replacing the preview", () => {
+        tiled = snapshot_image (view);
+        return tiled.serialize ().compare (reference) != 0;
+    });
+    var renderer = view.get_native ().get_renderer ();
+    var bounds = preview.get_bounds ();
+    var before = new Gdk.TextureDownloader (renderer.render_texture (preview, bounds));
+    var after = new Gdk.TextureDownloader (renderer.render_texture (tiled, bounds));
+    before.set_format (Gdk.MemoryFormat.R8G8B8A8);
+    after.set_format (Gdk.MemoryFormat.R8G8B8A8);
+    size_t before_stride;
+    size_t after_stride;
+    var before_pixels = before.download_bytes (out before_stride);
+    var after_pixels = after.download_bytes (out after_stride);
+    assert (before_stride == after_stride && before_pixels.compare (after_pixels) == 0);
+    unowned uint8[] pixels = before_pixels.get_data ();
+    bool translucent = false;
+    for (int offset = 3; offset < pixels.length; offset += 4) {
+        if (pixels[offset] > 0 && pixels[offset] < 255) {
+            translucent = true;
+            break;
+        }
+    }
+    assert (translucent);
+}
+
 async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other,
     string fixture_dir, string webp_path, string[] animations) throws Error {
     var png = File.new_for_path (Path.build_filename (fixture_dir, "rgb16.png"));
@@ -23,6 +105,17 @@ async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other
     yield view.load_file (File.new_for_path (webp_path));
     assert (view.document.mime_type == "image/webp" && !view.animated && !view.playing);
     view.visible = true;
+    yield wait_for ("mapped transform test viewport",
+        () => view.get_mapped () && view.get_width () > 0 && view.get_height () > 0);
+    verify_transform_notifications (view);
+    var window = (Gtk.Window) view.get_root ();
+    int old_width = view.get_width ();
+    view.fit_mode = FitMode.WIDTH;
+    double old_zoom = view.zoom;
+    window.set_default_size (800, 600);
+    yield wait_for ("resized transform test viewport", () => view.get_width () > old_width);
+    assert (view.zoom > old_zoom && view.zoom == (double) view.get_width () / view.image_width);
+    view.fit_to_view ();
 
     bool obsolete_finished = false;
     view.load_file.begin (png, null, null, (obj, result) => {
@@ -95,6 +188,7 @@ async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other
     var hdr = view.document;
     assert (hdr.hdr && !hdr.tone_mapped);
     assert (view.presentation_status == PresentationStatus.SDR_TONE_MAPPED);
+    yield verify_transparent_tile_replacement (view);
     var active_hdr = view.document;
     view.zoom_to (2.5);
     view.pan_by (14, 10);

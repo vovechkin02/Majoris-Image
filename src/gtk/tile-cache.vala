@@ -117,6 +117,12 @@ namespace ImageKit {
         private const int64 WARM_BYTES = 256 * 1024 * 1024;
         private Gee.HashMap<string, ImageTile> tiles = new Gee.HashMap<string, ImageTile> ();
         private Gee.ArrayQueue<ImageTile> pending = new Gee.ArrayQueue<ImageTile> ();
+        // Eviction protects the current plan's tiles. Drop the plan before
+        // evicting against replacement geometry or clearing the cache.
+        private Gee.List<ImageTile>? planned_visible;
+        private Gee.ArrayList<ImageTile> planned_prefetch = new Gee.ArrayList<ImageTile> ();
+        private TileBounds planned_bounds;
+        private double planned_zoom;
         private ImageDocument? document;
         private bool tone_map;
         private uint active;
@@ -133,6 +139,8 @@ namespace ImageKit {
             }
             generation++;
             this.tone_map = tone_map;
+            planned_visible = null;
+            planned_prefetch.clear ();
             foreach (var tile in tiles.values) {
                 tile.request?.cancel ();
             }
@@ -144,12 +152,27 @@ namespace ImageKit {
         }
 
         public Gee.List<ImageTile> visible (TileBounds bounds, double zoom) {
+            // Source geometry is fixed for the lifetime of the document.
+            // reset() drops the plan when the source or tone mapping changes.
+            if (planned_visible == null || planned_zoom != zoom ||
+                planned_bounds.left != bounds.left || planned_bounds.top != bounds.top ||
+                planned_bounds.right != bounds.right || planned_bounds.bottom != bounds.bottom) {
+                plan_viewport (bounds, zoom);
+            }
+            return planned_visible;
+        }
+
+        private void plan_viewport (TileBounds bounds, double zoom) {
             var visible = new Gee.ArrayList<ImageTile> ();
+            planned_visible = null;
+            planned_prefetch.clear ();
+            planned_bounds = bounds;
+            planned_zoom = zoom;
             if (document == null) {
-                return visible;
+                planned_visible = visible.read_only_view;
+                return;
             }
             var plan = TileCoverage.plan (bounds, document.width, document.height, zoom, document.vector);
-            pending.clear ();
             var keep = new Gee.HashSet<ImageTile> ();
             int64 visible_bytes = 0;
             if (plan.count > 0) {
@@ -162,30 +185,28 @@ namespace ImageKit {
                     }
                 }
                 visible.sort ((a, b) => {
-                    double first = distance (a, plan), second = distance (b, plan);
+                    double first = distance (a, plan);
+                    double second = distance (b, plan);
                     return first < second ? -1 : first > second ? 1 : 0;
                 });
-                foreach (var tile in visible) {
-                    queue_tile (tile);
-                }
 
                 // Prefetch neighbors nearest the visible center after the visible work.
                 var center = visible[0];
-                bool visible_waiting = !pending.is_empty;
                 int64 next_x = ((int64) plan.end_x + plan.extent - 1) / plan.extent * plan.extent;
                 int64 next_y = ((int64) plan.end_y + plan.extent - 1) / plan.extent * plan.extent;
                 if (next_x < document.width) {
-                    visible_bytes = prefetch ((int) next_x, center.y, plan, keep, visible_bytes,
-                        visible_waiting);
+                    visible_bytes = plan_prefetch ((int) next_x, center.y, plan, keep,
+                        visible_bytes);
                 }
                 if (next_y < document.height) {
-                    visible_bytes = prefetch (center.x, (int) next_y, plan, keep, visible_bytes,
-                        visible_waiting);
+                    visible_bytes = plan_prefetch (center.x, (int) next_y, plan, keep,
+                        visible_bytes);
                 }
             }
+            planned_visible = visible.read_only_view;
+            rebuild_pending (true);
             evict (keep, int64.max (WARM_BYTES, visible_bytes));
             pump ();
-            return visible;
         }
 
         private static double distance (ImageTile tile, TileCoverage coverage) {
@@ -194,8 +215,8 @@ namespace ImageKit {
             return dx * dx + dy * dy;
         }
 
-        private int64 prefetch (int x, int y, TileCoverage plan, Gee.HashSet<ImageTile> keep,
-            int64 used, bool visible_waiting) {
+        private int64 plan_prefetch (int x, int y, TileCoverage plan, Gee.HashSet<ImageTile> keep,
+            int64 used) {
             if (keep.size >= TileCoverage.MAX_SLOTS) {
                 return used;
             }
@@ -203,11 +224,8 @@ namespace ImageKit {
             if (used + tile.charge > TileCoverage.MAX_BYTES) {
                 return used;
             }
-            if (visible_waiting) {
-                tile.request?.cancel ();
-            }
             keep.add (tile);
-            queue_tile (tile);
+            planned_prefetch.add (tile);
             return used + tile.charge;
         }
 
@@ -239,6 +257,20 @@ namespace ImageKit {
         private void queue_tile (ImageTile tile) {
             if (tile.texture == null && tile.request == null && !tile.failed) {
                 pending.offer (tile);
+            }
+        }
+
+        private void rebuild_pending (bool viewport_changed) {
+            pending.clear ();
+            foreach (var tile in planned_visible) {
+                queue_tile (tile);
+            }
+            bool visible_waiting = !pending.is_empty;
+            foreach (var tile in planned_prefetch) {
+                if (viewport_changed && visible_waiting) {
+                    tile.request?.cancel ();
+                }
+                queue_tile (tile);
             }
         }
 
@@ -295,6 +327,13 @@ namespace ImageKit {
             } finally {
                 tile.request = null;
                 active--;
+                // A canceled tile can become wanted again before its old
+                // callback releases the slot. Restore its current priority.
+                if (stop.is_cancelled () && request_generation == generation &&
+                    tiles[tile.key] == tile && planned_visible != null &&
+                    (planned_visible.contains (tile) || planned_prefetch.contains (tile))) {
+                    rebuild_pending (false);
+                }
                 pump ();
                 if (request_generation == generation) {
                     changed ();

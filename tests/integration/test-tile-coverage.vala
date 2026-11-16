@@ -96,6 +96,112 @@ private async void delay () {
     yield;
 }
 
+private const int PLAN_SAMPLES = 7;
+private const int PLAN_ITERATIONS = 1000;
+
+private async void benchmark_viewport (ImageDocument document, int width, int height) throws Error {
+    var cache = new TileCache ();
+    cache.reset (document);
+    TileBounds bounds = { 511, 511, 511 + width, 511 + height };
+    int64 first = 0;
+    int64 complete = 0;
+    int redraws = 0;
+    int64 redraw_time = 0;
+    int64 started = get_monotonic_time ();
+    ulong changed = cache.changed.connect (() => {
+        int64 redraw_started = get_monotonic_time ();
+        var visible = cache.visible (bounds, 1);
+        redraw_time += get_monotonic_time () - redraw_started;
+        redraws++;
+        if (first == 0 && visible.any_match (tile => tile.texture != null)) {
+            first = get_monotonic_time () - started;
+        }
+        if (complete == 0 && visible.all_match (tile => tile.texture != null)) {
+            complete = get_monotonic_time () - started;
+        }
+    });
+    var visible = cache.visible (bounds, 1);
+    int tile_count = visible.size;
+    int64 deadline = started + 120 * TimeSpan.SECOND;
+    while (complete == 0 && get_monotonic_time () < deadline) {
+        yield delay ();
+    }
+    cache.disconnect (changed);
+    if (complete == 0) {
+        cache.reset (null);
+        throw new IOError.TIMED_OUT ("Incomplete %dx%d benchmark viewport", width, height);
+    }
+    // Release the caller's reference before cycling through other viewport plans.
+    visible = null;
+    stdout.printf ("%dx%d: %d tiles, first %s us, complete %s us, %d redraws at %.2f us each\n",
+        width, height, tile_count, first.to_string (), complete.to_string (), redraws,
+        (double) redraw_time / redraws);
+
+    string[] workloads = { "unchanged", "small pan", "large pan", "zoom", "reset" };
+    foreach (string workload in workloads) {
+        var samples = new Gee.ArrayList<int64?> ();
+        for (int sample = 0; sample < PLAN_SAMPLES; sample++) {
+            int64 start = get_monotonic_time ();
+            for (int iteration = 0; iteration < PLAN_ITERATIONS; iteration++) {
+                TileBounds request = bounds;
+                double zoom = 1;
+                int offset = iteration % 2;
+                switch (workload) {
+                    case "small pan":
+                        request.left += offset;
+                        request.right += offset;
+                        break;
+                    case "large pan":
+                        request.left += offset * 8192;
+                        request.right += offset * 8192;
+                        break;
+                    case "zoom":
+                        zoom -= offset * 0.55;
+                        break;
+                    case "reset":
+                        cache.reset (null);
+                        cache.reset (document);
+                        break;
+                }
+                cache.visible (request, zoom);
+            }
+            samples.add (get_monotonic_time () - start);
+        }
+        samples.sort ((a, b) => a < b ? -1 : a > b ? 1 : 0);
+        stdout.printf ("  %s: median %.3f us per call (range %.3f–%.3f)\n", workload,
+            (double) samples[PLAN_SAMPLES / 2] / PLAN_ITERATIONS,
+            (double) samples[0] / PLAN_ITERATIONS,
+            (double) samples[PLAN_SAMPLES - 1] / PLAN_ITERATIONS);
+    }
+    cache.reset (null);
+}
+
+private async void benchmark_tile_cache (string path) throws Error {
+    var document = yield new DecoderRegistry ().open (new ImageSource (File.new_for_path (path)));
+    int[] widths = { 1920, 3840, 5120, 7680, 7680 };
+    int[] heights = { 1080, 2160, 2880, 4320, 2160 };
+    for (int i = 0; i < widths.length; i++) {
+        yield benchmark_viewport (document, widths[i], heights[i]);
+    }
+    string memory;
+    FileUtils.get_contents ("/proc/self/status", out memory);
+    foreach (string line in memory.split ("\n")) {
+        if (line.has_prefix ("VmHWM:")) {
+            stdout.printf ("%s\n", line);
+        }
+    }
+}
+
+private async void run_tile_coverage (string[] args) throws Error {
+    if (args[1] == "--benchmark") {
+        yield benchmark_tile_cache (args[2]);
+        return;
+    }
+    verify_tile_geometry ();
+    yield verify_tile_cache_coverage_and_cancellation (args[1], args[2],
+        args.length > 3 && args[3] == "--complete");
+}
+
 private async void verify_tile_cache_coverage_and_cancellation (string path, string exr_path,
     bool complete) throws Error {
     var document = yield new DecoderRegistry ().open (new ImageSource (File.new_for_path (path)));
@@ -105,6 +211,7 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
     assert (first.size == 9 && first[0].x == 512 && first[0].y == 512);
     var canceled = first[0].request;
     assert (canceled != null && first[1].request != null && first[2].request == null);
+    assert (cache.visible ({ 0, 0, 1536, 1536 }, 1) == first);
 
     // Reset and immediately submit new geometry. Old worker callbacks still
     // hold their slots. They must neither publish a texture nor lose work.
@@ -118,6 +225,12 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
     }
     assert (visible.all_match (tile => tile.texture != null));
     assert (first.all_match (tile => tile.texture == null));
+    assert (cache.visible (revised, 1) == visible);
+
+    // Both requests cover the same grid, but cross its center-priority boundary.
+    var left = cache.visible ({ 513, 512, 1534, 1024 }, 1);
+    var right = cache.visible ({ 514, 512, 1535, 1024 }, 1);
+    assert (left != right && left[0].x == 512 && right[0].x == 1024);
 
     var retained = visible[0].texture;
     for (int i = 0; i < 20; i++) {
@@ -126,6 +239,27 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
         var restored = cache.visible (revised, 1);
         assert (restored[0].texture == retained);
     }
+
+    TileBounds returning_bounds = { 2048, 0, 3072, 512 };
+    var departing = cache.visible (returning_bounds, 1);
+    // Wait for an admitted request, even if earlier pans still occupy slots.
+    for (int attempt = 0; attempt < 500 && departing[0].request == null &&
+        departing[0].texture == null; attempt++) {
+        yield delay ();
+    }
+    var interrupted = departing[0].request;
+    assert (interrupted != null);
+    cache.visible (revised, 1);
+    assert (interrupted.is_cancelled ());
+    var returning = cache.visible (returning_bounds, 1);
+    assert (returning[0] == departing[0] && returning[0].request == interrupted);
+    for (int attempt = 0; attempt < 500 && !returning.all_match (tile => tile.texture != null);
+        attempt++) {
+        yield delay ();
+    }
+    assert (returning.all_match (tile => tile.texture != null));
+    assert (cache.visible (returning_bounds, 1) == returning);
+
     cache.reset (null);
     var hdr = yield new DecoderRegistry ().open (new ImageSource (File.new_for_path (exr_path)));
     assert (hdr.hdr && hdr.has_alpha && hdr.supports_regions);
@@ -147,6 +281,24 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
         assert (base_pixels[i] == tile_pixels[i]);
     }
     cache.reset (null);
+
+    cache.reset (document);
+    TileBounds failure_bounds = { 0, 0, 2048, 512 };
+    var with_failure = cache.visible (failure_bounds, 1);
+    var rejected = with_failure[2];
+    assert (with_failure.size == 4 && rejected.request == null);
+    // Force a queued region to fail validation while later work is still waiting.
+    rejected.decode_width = 0;
+    int64 failure_deadline = get_monotonic_time () + 5 * TimeSpan.SECOND;
+    while (!with_failure.all_match (tile => tile.texture != null || tile.failed) &&
+        get_monotonic_time () < failure_deadline) {
+        yield delay ();
+    }
+    assert (rejected.failed && rejected.request == null && rejected.texture == null);
+    assert (with_failure.all_match (tile => tile == rejected || tile.texture != null));
+    assert (cache.visible (failure_bounds, 1) == with_failure && rejected.request == null);
+    cache.reset (null);
+
     if (complete) {
         cache.reset (document);
         var eight_k = cache.visible ({511, 511, 8191, 4831}, 1);
@@ -204,6 +356,15 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
         stdout.printf ("All 160 shifted 8K tiles rendered and retained\n");
         cache.reset (null);
     }
+    cache.reset (document);
+    TileBounds evicted_bounds = { 511, 511, 8191, 4831 };
+    var evicted = cache.visible (evicted_bounds, 1);
+    // Two disjoint 8K plans cannot coexist under the visible budget or slot cap.
+    cache.visible ({ 8703, 511, 16383, 4831 }, 1);
+    var rebuilt = cache.visible (evicted_bounds, 1);
+    assert (rebuilt.size == evicted.size && rebuilt[0] != evicted[0]);
+    assert (cache.visible (evicted_bounds, 1) == rebuilt);
+    cache.reset (null);
     // Drain the two canceled jobs before leaving the test main loop.
     for (int i = 0; i < 30; i++) {
         yield delay ();
@@ -211,13 +372,11 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
 }
 
 int main (string[] args) {
-    verify_tile_geometry ();
     var loop = new MainLoop ();
     int status = 0;
-    verify_tile_cache_coverage_and_cancellation.begin (args[1], args[2], args.length > 3 &&
-        args[3] == "--complete", (object, response) => {
+    run_tile_coverage.begin (args, (object, response) => {
         try {
-            verify_tile_cache_coverage_and_cancellation.end (response);
+            run_tile_coverage.end (response);
         } catch (Error error) {
             stderr.printf ("%s\n", error.message);
             status = 1;

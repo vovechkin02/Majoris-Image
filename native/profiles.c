@@ -60,6 +60,7 @@ static cmsHPROFILE make_profile(const char *name)
     }
     return result;
 }
+
 static VipsImage *export_profile(VipsImage *linear, const char *path, int depth)
 {
     g_autoptr(VipsImage) color = NULL;
@@ -154,6 +155,7 @@ fail:
     vips_error_clear();
     return NULL;
 }
+
 gboolean image_codec_encoder_available(const char *extension)
 {
     if (!strcmp(extension, "exr") || !strcmp(extension, "uhdr")) {

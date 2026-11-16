@@ -215,6 +215,7 @@ int generate(VipsRegion *output, void *, void *, void *context, gboolean *)
         return -1;
     }
 }
+
 void destroy(void *context)
 {
     delete static_cast<Source *>(context);
@@ -224,6 +225,7 @@ std::string window_string(const ExrMath::Box2i &window)
     return std::to_string(window.min.x) + ", " + std::to_string(window.min.y) + " — " +
            std::to_string(window.max.x) + ", " + std::to_string(window.max.y);
 }
+
 void profile(VipsImage *image, const Exr::Header &header)
 {
     if (Exr::hasChromaticities(header)) {

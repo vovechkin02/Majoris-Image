@@ -5,8 +5,11 @@
 #include "bridge.h"
 
 typedef struct {
-    int transfer, primaries;
-    double divisor, alpha, luminance_scale;
+    int transfer;
+    int primaries;
+    double divisor;
+    double alpha;
+    double luminance_scale;
     cmsHTRANSFORM transform;
 } LinearContext;
 static void free_context(void *data)
@@ -17,6 +20,7 @@ static void free_context(void *data)
     }
     g_free(ctx);
 }
+
 static cmsHTRANSFORM float_profile_transform(VipsImage *image)
 {
     const void *data;
@@ -30,7 +34,8 @@ static cmsHTRANSFORM float_profile_transform(VipsImage *image)
     }
     cmsCIExyY white = {.3127, .3290, 1};
     cmsCIExyYTRIPLE primaries = {{.64, .33, 1}, {.30, .60, 1}, {.15, .06, 1}};
-    cmsToneCurve *curve = cmsBuildGamma(NULL, 1), *curves[] = {curve, curve, curve};
+    cmsToneCurve *curve = cmsBuildGamma(NULL, 1);
+    cmsToneCurve *curves[] = {curve, curve, curve};
     cmsHPROFILE destination = cmsCreateRGBProfile(&white, &primaries, curves);
     cmsFreeToneCurve(curve);
     cmsUInt32Number format = image->Bands == 4 ? TYPE_RGBA_FLT : TYPE_RGB_FLT;
@@ -45,6 +50,7 @@ static cmsHTRANSFORM float_profile_transform(VipsImage *image)
     }
     return transform;
 }
+
 static int linear_generate(VipsRegion *out, void *sequence, void *a, void *b, gboolean *stop)
 {
     (void)a;
@@ -113,14 +119,18 @@ static int linear_generate(VipsRegion *out, void *sequence, void *a, void *b, gb
     }
     return 0;
 }
+
 VipsImage *image_codec_to_linear(VipsImage *image, GError **error)
 {
     if (vips_image_get_typeof(image, "majoris-image-working-linear")) {
         return g_object_ref(image);
     }
-    VipsImage *rgb = NULL, *floating = NULL, *out = NULL;
+    VipsImage *rgb = NULL;
+    VipsImage *floating = NULL;
+    VipsImage *out = NULL;
     cmsHTRANSFORM transform = NULL;
-    int transfer = 0, primaries = 1;
+    int transfer = 0;
+    int primaries = 1;
     gboolean encoded = vips_image_get_typeof(image, "majoris-image-transfer") != 0;
     double max = image->BandFmt == VIPS_FORMAT_USHORT  ? 65535.0
                  : image->BandFmt == VIPS_FORMAT_UCHAR ? 255.0

@@ -16,7 +16,8 @@ VipsImage *image_codec_svg_region(const char *path, double x, double y, double w
     if (!handle) {
         return NULL;
     }
-    double logical_width = width * source_width, logical_height = height * source_height;
+    double logical_width = width * source_width;
+    double logical_height = height * source_height;
     double scale = size / MAX(logical_width, logical_height);
     int w = MAX(1, (int)ceil(logical_width * scale)), h = MAX(1, (int)ceil(logical_height * scale));
     cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);

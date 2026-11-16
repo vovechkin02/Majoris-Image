@@ -8,6 +8,7 @@ static void string_member(JsonBuilder *b, const char *name, const char *value)
     json_builder_set_member_name(b, name);
     json_builder_add_string_value(b, value ? value : "");
 }
+
 static void int_member(JsonBuilder *b, const char *name, int value)
 {
     json_builder_set_member_name(b, name);
@@ -73,6 +74,7 @@ char *image_codec_raw_info(const char *source)
     }
     return text;
 }
+
 gboolean image_codec_raw_preview(const char *source, const char *target, GError **error)
 {
     libraw_data_t *raw = libraw_init(0);

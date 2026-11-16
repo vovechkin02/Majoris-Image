@@ -64,6 +64,7 @@ static void create_exr_fixture(const char *path, float white = 203)
         }
     }
 }
+
 static double sample_pixel_channel(VipsImage *image, int x, int y, int channel)
 {
     double *pixel = nullptr;
@@ -74,6 +75,7 @@ static double sample_pixel_channel(VipsImage *image, int x, int y, int channel)
     g_free(pixel);
     return value;
 }
+
 static void test_exr_region_decoding()
 {
     GError *error = nullptr;
@@ -116,6 +118,7 @@ static void test_exr_region_decoding()
     g_free(path);
     g_free(dir);
 }
+
 int main(int argc, char **argv)
 {
     if (argc == 3 && !strcmp(argv[1], "--fixture")) {

@@ -687,7 +687,8 @@ static VipsImage *load_heif(const char *path, int frame, int known_count, GError
         goto done;
     }
     gboolean blank = frames->len && edited.sample < 0;
-    int bands = alpha || blank ? 4 : 3, component = depth > 8 ? 2 : 1;
+    int bands = alpha || blank ? 4 : 3;
+    int component = depth > 8 ? 2 : 1;
     size_t row = (size_t)w * bands * component;
     guint8 *packed = g_try_malloc_n(row, h);
     if (!packed) {

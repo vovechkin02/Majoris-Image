@@ -74,7 +74,8 @@ gboolean image_codec_jxl_encode(VipsImage *image, const char *path, int depth, i
     }
     JxlEncoderStatus status;
     do {
-        guint8 buffer[65536], *next = buffer;
+        guint8 buffer[65536];
+        guint8 *next = buffer;
         size_t available = sizeof(buffer);
         status = JxlEncoderProcessOutput(encoder, &next, &available);
         if (status == JXL_ENC_ERROR ||

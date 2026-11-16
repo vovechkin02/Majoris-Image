@@ -15,6 +15,7 @@ static gboolean ultra_error(uhdr_error_info_t status, GError **error)
                 status.has_detail ? status.detail : "Codec operation failed");
     return TRUE;
 }
+
 static uhdr_codec_private_t *open_ultra(const char *path, GMappedFile **mapping, GError **error)
 {
     *mapping = g_mapped_file_new(path, FALSE, error);
@@ -39,6 +40,7 @@ static uhdr_codec_private_t *open_ultra(const char *path, GMappedFile **mapping,
     }
     return decoder;
 }
+
 gboolean image_codec_ultra_probe(const char *path)
 {
     // Do not map and copy huge native/TIFF/EXR intermediates into a JPEG/HEIF
@@ -68,10 +70,12 @@ gboolean image_codec_ultra_probe(const char *path)
     g_clear_error(&error);
     return result;
 }
+
 VipsImage *image_codec_ultra_decode(const char *path, gboolean sdr, GError **error)
 {
     GMappedFile *mapping = NULL;
-    VipsImage *image = NULL, *linear = NULL;
+    VipsImage *image = NULL;
+    VipsImage *linear = NULL;
     uhdr_codec_private_t *decoder = open_ultra(path, &mapping, error);
     if (!decoder) {
         goto done;
@@ -166,6 +170,7 @@ done:
     }
     return linear;
 }
+
 gboolean image_codec_ultra_encode(VipsImage *image, const char *path, int format, int quality,
                                   GError **error)
 {

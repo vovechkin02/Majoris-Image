@@ -22,6 +22,7 @@ static VipsImage *constant_image(float value, gboolean alpha)
     image->Type = VIPS_INTERPRETATION_scRGB;
     return image;
 }
+
 static double sample(VipsImage *image, int band)
 {
     double *pixel = NULL;
@@ -32,6 +33,7 @@ static double sample(VipsImage *image, int band)
     g_free(pixel);
     return value;
 }
+
 static void linear_reference(void)
 {
     GError *error = NULL;
@@ -47,6 +49,7 @@ static void linear_reference(void)
     g_object_unref(linear);
     g_object_unref(input);
 }
+
 static void pq_reference(void)
 {
     GError *error = NULL;
@@ -59,6 +62,7 @@ static void pq_reference(void)
     g_object_unref(linear);
     g_object_unref(input);
 }
+
 static void rec2020_primary_reference(void)
 {
     const float red[] = {1, 0, 0, .5f};
@@ -120,6 +124,7 @@ static void profile_reference(void)
     }
     g_object_unref(input);
 }
+
 static void profile_alpha_reference(void)
 {
     g_autoptr(GError) error = NULL;
@@ -168,6 +173,7 @@ static void p3_primary_reference(void)
     g_object_unref(profiled);
     g_object_unref(gray);
 }
+
 static void exr_roundtrip(void)
 {
     GError *error = NULL;
@@ -192,6 +198,7 @@ static void exr_roundtrip(void)
     g_free(path);
     g_free(dir);
 }
+
 static void hdr_tiff_roundtrip(void)
 {
     GError *error = NULL;
@@ -217,6 +224,7 @@ static void hdr_tiff_roundtrip(void)
     g_free(path);
     g_free(dir);
 }
+
 static void hdr_jxl_roundtrip(void)
 {
     GError *error = NULL;
@@ -239,6 +247,7 @@ static void hdr_jxl_roundtrip(void)
     g_free(path);
     g_free(dir);
 }
+
 static void svg_region_scaling(void)
 {
     GError *error = NULL;
@@ -265,6 +274,7 @@ static void svg_region_scaling(void)
     g_free(path);
     g_free(dir);
 }
+
 static void heif_transfer_reference(gconstpointer parameter)
 {
     int transfer = GPOINTER_TO_INT(parameter);
@@ -334,6 +344,7 @@ static void heif_transfer_reference(gconstpointer parameter)
     g_free(path);
     g_free(dir);
 }
+
 static void gainmap_roundtrip(gconstpointer data)
 {
     int format = GPOINTER_TO_INT(data);
@@ -363,6 +374,7 @@ static void gainmap_roundtrip(gconstpointer data)
     g_free(path);
     g_free(dir);
 }
+
 int main(int argc, char **argv)
 {
     g_test_init(&argc, &argv, NULL);

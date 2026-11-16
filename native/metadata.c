@@ -35,7 +35,8 @@ char *image_codec_image_details(VipsImage *image)
             json_object_set_string_member(info, "profile-error", "Invalid ICC profile");
         }
     }
-    int transfer = 0, primaries = 0;
+    int transfer = 0;
+    int primaries = 0;
     if (vips_image_get_typeof(image, "majoris-image-transfer")) {
         vips_image_get_int(image, "majoris-image-transfer", &transfer);
     }
@@ -70,7 +71,8 @@ char *image_codec_image_details(VipsImage *image)
 
 int image_codec_frame_duration(VipsImage *image, int page)
 {
-    int *delays = NULL, count = 0;
+    int *delays = NULL;
+    int count = 0;
     if (vips_image_get_typeof(image, "delay") &&
         !vips_image_get_array_int(image, "delay", &delays, &count) && page >= 0 && page < count) {
         return MAX(delays[page], 0);

@@ -124,7 +124,9 @@ gboolean image_thumbnail_valid(GBytes *bytes, int edge)
     }
 
     g_autoptr(GByteArray) compressed = g_byte_array_new();
-    gboolean palette = FALSE, has_pixels = FALSE, pixels_ended = FALSE;
+    gboolean palette = FALSE;
+    gboolean has_pixels = FALSE;
+    gboolean pixels_ended = FALSE;
     for (gsize offset = 8; length - offset >= 12;) {
         guint32 size = read_be32(data + offset);
         if (size > length - offset - 12) {

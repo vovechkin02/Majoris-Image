@@ -43,7 +43,7 @@ for the target system. Use a Linux filesystem for Debian packaging so the
 executable mode on `debian/rules` and regular modes on debhelper files are
 preserved.
 
-Run `sh tests/installed-consumers.sh /absolute/build/tests/large.tiff` with the installed development package,
+Run `python3 tests/release/installed_consumers.py /absolute/build/tests/large.tiff` with the installed development package,
 Vala, a C compiler, Xvfb and Python GObject bindings to verify independent
 consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
@@ -62,7 +62,7 @@ executable mode. From a committed release tree, use:
 
 ```sh
 git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-2.0.0/ HEAD > majoris-image-2.0.0.tar.gz
-python3 tests/check-release-modes.py majoris-image-2.0.0.tar.gz
+python3 tests/release/check_release_modes.py majoris-image-2.0.0.tar.gz
 ```
 
 The check verifies both executable scripts in Git and after tar extraction.

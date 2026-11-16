@@ -3,14 +3,22 @@
 import argparse
 import configparser
 import os
-from pathlib import Path
 import struct
 import subprocess
 import tempfile
+from pathlib import Path
 
-def main():
+
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    for field in ("thumbnailer", "registration", "source_fixtures", "generated", "generator", "template"):
+    for field in (
+        "thumbnailer",
+        "registration",
+        "source_fixtures",
+        "generated",
+        "generator",
+        "template",
+    ):
         parser.add_argument(field, type=Path)
     parser.add_argument("mode", choices=("native", "glycin"))
     args = parser.parse_args()
@@ -51,9 +59,15 @@ def main():
             "[loader:image/x-majoris-no-executable]\nExec=/missing/decoder\n"
         )
         clean_env = dict(os.environ, XDG_DATA_HOME=tmp, XDG_DATA_DIRS=tmp)
+
         def run_generator(name, selected, env):
             target = root / name
-            subprocess.run([generator, template, target, desktop["TryExec"], selected], env=env, check=True, timeout=10)
+            subprocess.run(
+                [generator, template, target, desktop["TryExec"], selected],
+                env=env,
+                check=True,
+                timeout=10,
+            )
             result = configparser.ConfigParser(interpolation=None)
             result.read(target)
             return set(result["Thumbnailer Entry"]["MimeType"].rstrip(";").split(";"))
@@ -62,7 +76,9 @@ def main():
         glycin = run_generator("simulated.thumbnailer", "glycin", clean_env)
         assert glycin - native == {"image/x-majoris-test"}
         assert set(mimes) <= native
-        assert run_generator("baseline.thumbnailer", "baseline", clean_env) == set(mimes)
+        assert run_generator("baseline.thumbnailer", "baseline", clean_env) == set(
+            mimes
+        )
         available = run_generator("default.thumbnailer", "system", os.environ)
         assert available == run_generator("explicit.thumbnailer", mode, os.environ)
         system_without = run_generator("without.thumbnailer", "system", clean_env)
@@ -71,14 +87,26 @@ def main():
         assert "image/x-canon-cr2" in native
         empty_plugins = root / "no-plugins"
         empty_plugins.mkdir()
-        reduced = run_generator("reduced.thumbnailer", "native",
-                                dict(clean_env, LIBHEIF_PLUGIN_PATH=str(empty_plugins)))
-        assert reduced <= native and {"image/png", "image/tiff", "image/x-exr"} <= reduced
+        reduced = run_generator(
+            "reduced.thumbnailer",
+            "native",
+            dict(clean_env, LIBHEIF_PLUGIN_PATH=str(empty_plugins)),
+        )
+        assert (
+            reduced <= native and {"image/png", "image/tiff", "image/x-exr"} <= reduced
+        )
 
         out = Path(tmp) / "out.png"
         failed = subprocess.run(
-            [str(thumbnailer), (source_fixtures / "corrupt.bin").as_uri(), str(out), "48"],
-            env=dict(os.environ, XDG_CACHE_HOME=tmp), capture_output=True, timeout=10,
+            [
+                str(thumbnailer),
+                (source_fixtures / "corrupt.bin").as_uri(),
+                str(out),
+                "48",
+            ],
+            env=dict(os.environ, XDG_CACHE_HOME=tmp),
+            capture_output=True,
+            timeout=10,
         )
         assert failed.returncode != 0 and not out.exists()
         for mime, fixture, size in cases:
@@ -90,7 +118,9 @@ def main():
                 continue
             subprocess.run(
                 [str(thumbnailer), fixture.as_uri(), str(out), "48"],
-                env=dict(os.environ, XDG_CACHE_HOME=tmp), check=True, timeout=10,
+                env=dict(os.environ, XDG_CACHE_HOME=tmp),
+                check=True,
+                timeout=10,
             )
             png = out.read_bytes()
             assert png.startswith(b"\x89PNG\r\n\x1a\n") and b"Thumb::URI" in png
@@ -101,7 +131,8 @@ def main():
             if mime in ("image/qoi", "image/x-exr"):
                 assert png[25] == 6  # RGB with alpha
             print(f"{mime}: {width}x{height} SDR thumbnail")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -18,8 +18,8 @@ jobs:
           : "${IMAGEKIT_RAW_FIXTURES:?Configure the protected runner RAW fixture directory}"
           meson setup release-build -Dextended_tests=true -Dglycin=enabled -Dsequence=enabled \
             -Dultrahdr=enabled -Dintrospection=enabled -Draw_fixtures="$IMAGEKIT_RAW_FIXTURES"
-          sh tests/qualify-debian.sh release-build
-          python3 tests/qualify.py release-build --installed
+          sh tests/release/qualify-debian.sh release-build
+          python3 tests/release/qualify.py release-build --installed
       - uses: actions/upload-artifact@v4
         if: always()
         with:

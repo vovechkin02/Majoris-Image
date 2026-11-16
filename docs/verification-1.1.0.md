@@ -6,9 +6,9 @@ See [1.1.1 verification](verification-1.1.1.md) for the current release.
 | --- | --- | --- |
 | Decoder selection and color | Discover compatible Glycin 1 loaders in XDG data roots. Negotiate by content, installed MIME and requested capabilities. Probe ICC, CICP and source precision in the native sandbox. Use linear-light area filtering, alpha-weighted accumulation and re-decode for larger crops. General rendering uses the same fallback. | `native/glycin-discovery.{c,h}`, `src/core/{decoder-registry,glycin-fallback,image-document,render-options}.vala`, `src/core/glycin-pixels.c`, `src/worker/{metadata-reader,image-processor,main}.vala`, `native/{metadata,pixels}.c` |
 | Timed images | Read AVIF tracks with libavif and compatible visual tracks with libheif. Preserve effective sample depth, ICC or supported CICP, alpha, frame timings and loop count. The same widget scheduler handles native and Glycin frames. | `native/sequences.c`, `native/color.c`, `src/worker/image-inspector.vala`, `src/core/{image-document,worker-request,worker-client,worker-failure}.vala`, `src/gtk/image-view.vala` |
-| Thumbnail registration | Share decoder discovery between the registry and the desktop generator. Test actual sample PNG output, runtime catalog agreement, disabled Glycin and simulated loader and plugin availability. | `native/codec-catalog.c`, `src/core/decoder-registry.vala`, `src/thumbnail/{meson.build,mime-registration.c}`, `tests/thumbnail-registration.py` |
-| HDR presentation | Select the presentation policy through a dedicated backend using realized renderer and mapped surface state. Preserve the HDR document. Use color-managed SDR for GTK 4.18 previews, animation and tiles. Test policy decisions with simulated output states and the visible widget in Xvfb. | `src/gtk/{presentation.vala,image-view.vala,image-texture.c,image-texture.h}`, `tests/{presentation,viewer}.vala` |
-| Independent consumers | Exercise bounded Files selections from streams, concurrent thumbnails, metadata, cancel/remap and error handling. Exercise Photos regions from a 200 MP TIFF, zoom, pan, HDR page navigation and export. The C example opens asynchronously through GtkBuilder and requests metadata, a full-quality region and a thumbnail. | `examples/{files-preview.vala,photos-viewer.vala,builder.c,meson.build}`, `tests/installed-consumers.sh`, `debian/libmajoris-image-dev.examples` |
+| Thumbnail registration | Share decoder discovery between the registry and the desktop generator. Test actual sample PNG output, runtime catalog agreement, disabled Glycin and simulated loader and plugin availability. | `native/codec-catalog.c`, `src/core/decoder-registry.vala`, `src/thumbnail/{meson.build,mime-registration.c}`, `tests/integration/thumbnail_registration.py` |
+| HDR presentation | Select the presentation policy through a dedicated backend using realized renderer and mapped surface state. Preserve the HDR document. Use color-managed SDR for GTK 4.18 previews, animation and tiles. Test policy decisions with simulated output states and the visible widget in Xvfb. | `src/gtk/{presentation.vala,image-view.vala,image-texture.c,image-texture.h}`, `tests/unit/presentation.vala`, `tests/integration/viewer.vala` |
+| Independent consumers | Exercise bounded Files selections from streams, concurrent thumbnails, metadata, cancel/remap and error handling. Exercise Photos regions from a 200 MP TIFF, zoom, pan, HDR page navigation and export. The C example opens asynchronously through GtkBuilder and requests metadata, a full-quality region and a thumbnail. | `examples/{files-preview.vala,photos-viewer.vala,builder.c,meson.build}`, `tests/release/installed_consumers.py`, `debian/libmajoris-image-dev.examples` |
 
 Public additions include `COLOR_MANAGED`, probe and document color diagnostics,
 microsecond frame timestamps and durations, `DecodeOptions.allow_regions`,
@@ -20,8 +20,7 @@ A dynamic symbol comparison used the 1.0.1 Debian packages as the baseline.
 Build and bridge changes are in `meson.build`, `meson.options`,
 `native/{bridge.h,meson.build}`, `vapi/{image-native,image-vips}.vapi`,
 `src/{core,gtk}/meson.build`, and `debian/{control,rules,changelog}`.
-Test and fixture changes are in `tests/{decoders.vala,make-fixtures.c,
-make-formats.py,make-heif-sequence.c,meson.build,worker-fault.c}` and
+Test and fixture changes are in `tests/integration/decoders.vala`, `tests/support/make-fixtures.c`, `tests/support/make_formats.py`, `tests/support/make-heif-sequence.c`, `tests/meson.build`, `tests/security/worker-fault.c` and
 `tests/fixtures/`. The [ABI 1 guide](api-2.md) describes format availability,
 processing limits, integration examples and the physical HDR procedure.
 [Verification for 1.0.1](verification-1.0.1.md) records the prior release.
@@ -64,8 +63,8 @@ and `build-packages/1.1.0/majoris-gainmap`.
 
 The stock profile was installed, removed and reinstalled in an isolated
 Debian 13.7 filesystem using Debian's runtime packages. The unprivileged
-runner executed `sh tests/installed-consumers.sh` against the installed
-libraries after each installation. It ran the C and Vala GTK examples,
+runner checked the installed libraries after each installation. It ran the
+C and Vala GTK examples,
 both independent workflows, the headless Vala program, Python introspection,
 and the desktop thumbnailer. The installed tests used generated fixture
 files and public development interfaces.

@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Debian build dependencies
-        run: sh tests/ci-dependencies.sh
+        run: sh tests/support/ci-dependencies.sh
       - name: Build and test
         env:
           VARIANT: ${{ matrix.variant }}
@@ -45,7 +45,7 @@ jobs:
               'OpenEXR regions' 'Imaging references' 'thumbnail PNG decode and validation' \
               'native parser fuzz smoke' 'worker protocol properties'
           else
-            runuser -u nobody -- python3 tests/qualify.py "$build" --variant "$VARIANT"
+            runuser -u nobody -- python3 tests/release/qualify.py "$build" --variant "$VARIANT"
           fi
           if [ "$VARIANT" = full ] && [ "$GITHUB_EVENT_NAME" = schedule ]; then
             runuser -u nobody -- meson test -C "$build" --suite extended --print-errorlogs
@@ -66,14 +66,14 @@ jobs:
       options: --security-opt seccomp=unconfined --security-opt apparmor=unconfined
     steps:
       - uses: actions/checkout@v4
-      - run: sh tests/ci-dependencies.sh
+      - run: sh tests/support/ci-dependencies.sh
       - name: Build packages and test clean installation
         run: |
           set -eu
           work=$(mktemp -d)
           mkdir "$work/source"
           git -c tar.umask=0022 archive --format=tar.gz HEAD > "$work/source.tar.gz"
-          python3 tests/check-release-modes.py "$work/source.tar.gz"
+          python3 tests/release/check_release_modes.py "$work/source.tar.gz"
           tar -xzf "$work/source.tar.gz" -C "$work/source"
           chown -R nobody:nogroup "$work"
           (
@@ -86,12 +86,12 @@ jobs:
           apt-get install -y "$@"
           fixture=$(find "$work/source" -path '*/tests/large.tiff' -print -quit)
           test -n "$fixture"
-          runuser -u nobody -- sh tests/installed-consumers.sh "$fixture"
+          runuser -u nobody -- python3 tests/release/installed_consumers.py "$fixture"
           apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-1 \
             majoris-image-thumbnailer libmajoris-image-1 majoris-image-worker
           test ! -e /usr/libexec/majoris-image-worker
           apt-get install -y "$@"
-          runuser -u nobody -- sh tests/installed-consumers.sh "$fixture"
+          runuser -u nobody -- python3 tests/release/installed_consumers.py "$fixture"
 
 
   fuzz:
@@ -100,7 +100,7 @@ jobs:
     container: debian:13
     steps:
       - uses: actions/checkout@v4
-      - run: sh tests/ci-dependencies.sh
+      - run: sh tests/support/ci-dependencies.sh
       - name: Run Clang libFuzzer
         run: |
           set -eu
@@ -109,10 +109,10 @@ jobs:
             -Dsequence=enabled -Dlibfuzzer=true -Db_sanitize=address,undefined -Db_lundef=false \
             -Dc_args=-fsanitize=fuzzer-no-link -Dcpp_args=-fsanitize=fuzzer-no-link
           meson compile -C fuzz fuzz-imagekit
-          python3 tests/seed-fuzz.py fuzz/corpus
+          python3 tests/security/seed_fuzz.py fuzz/corpus
           mkdir -p fuzz-results
           ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-            fuzz/tests/fuzz-imagekit -max_len=524288 -max_total_time=90 -timeout=5 \
+            fuzz/tests/security/fuzz-imagekit -max_len=524288 -max_total_time=90 -timeout=5 \
             -artifact_prefix=fuzz-results/ fuzz/corpus
       - uses: actions/upload-artifact@v4
         if: failure()

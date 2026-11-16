@@ -2,13 +2,15 @@
 
 import argparse
 import os
-from pathlib import Path
 import shutil
 import struct
 import subprocess
 import tempfile
 import time
 import zlib
+from contextlib import ExitStack
+from pathlib import Path
+
 
 def pixel_payload(png):
     payload = []
@@ -29,14 +31,20 @@ def corrupt_idat(png):
         size, kind = struct.unpack_from(">I4s", png, offset)
         if kind == b"IDAT" and size:
             corrupted[offset + 8] = 0
-            crc = zlib.crc32(corrupted[offset + 4:offset + 8 + size])
+            crc = zlib.crc32(corrupted[offset + 4 : offset + 8 + size])
             struct.pack_into(">I", corrupted, offset + 8 + size, crc)
             return corrupted
         offset += size + 12
     raise AssertionError("Thumbnail contains no nonempty IDAT chunk")
 
 
-def main():
+def stop_process(process: subprocess.Popen) -> None:
+    if process.poll() is None:
+        process.kill()
+    process.communicate(timeout=10)
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("thumbnailer", type=Path)
     parser.add_argument("fixture", type=Path)
@@ -47,7 +55,10 @@ def main():
     real_bwrap = shutil.which("bwrap")
     if real_bwrap is None:
         parser.error("Bubblewrap is required to exercise cache publication")
-    with tempfile.TemporaryDirectory(prefix="majoris-cache-test-") as tmp:
+    with (
+        tempfile.TemporaryDirectory(prefix="majoris-cache-test-") as tmp,
+        ExitStack() as children,
+    ):
         root = Path(tmp)
         log = root / "starts"
         bwrap = root / "bwrap"
@@ -58,8 +69,12 @@ def main():
             f"os.execv({real_bwrap!r}, [{real_bwrap!r}] + sys.argv[1:])\n"
         )
         bwrap.chmod(0o700)
-        env = dict(os.environ, XDG_CACHE_HOME=str(root / "cache"),
-                   CACHE_TEST_LOG=str(log), PATH=f"{root}:{os.environ['PATH']}")
+        env = dict(
+            os.environ,
+            XDG_CACHE_HOME=str(root / "cache"),
+            CACHE_TEST_LOG=str(log),
+            PATH=f"{root}:{os.environ['PATH']}",
+        )
         source = root / "source.png"
         shutil.copyfile(fixture, source)
 
@@ -67,22 +82,25 @@ def main():
             return len(log.read_text().splitlines()) if log.exists() else 0
 
         def launch(name, edge=64, delay=0, **overrides):
-            return subprocess.Popen(
+            process = subprocess.Popen(
                 [thumbnailer, source.as_uri(), str(root / (name + ".png")), str(edge)],
-                env=dict(env, CACHE_TEST_DELAY=str(delay), **overrides), stderr=subprocess.PIPE,
+                env=dict(env, CACHE_TEST_DELAY=str(delay), **overrides),
+                stderr=subprocess.PIPE,
             )
+            children.callback(stop_process, process)
+            return process
 
         def wait_for_starts(target):
             end = time.monotonic() + 5
             while count() < target and time.monotonic() < end:
-                time.sleep(.02)
+                time.sleep(0.02)
             assert count() == target
 
         def finish(proc, succeeds=True):
             _, err = proc.communicate(timeout=10)
             assert (proc.returncode == 0) == succeeds, err.decode(errors="replace")
 
-        first = launch("one", delay=.5)
+        first = launch("one", delay=0.5)
         wait_for_starts(1)
         waiters = [launch(f"waiter{i}") for i in range(8)]
         finish(first)
@@ -94,22 +112,26 @@ def main():
         assert all((root / f"waiter{i}.png").read_bytes() == output for i in range(8))
 
         cache = root / "cache" / "majoris-image" / "thumbnails-v2"
-        published, = cache.glob("*.png")
+        (published,) = cache.glob("*.png")
         published.write_bytes(corrupt_idat(output))
         pending = published.with_suffix(".png.pending")
         pending.write_bytes(b"interrupted publication")
         finish(launch("repaired"))
-        assert count() == 2, "The CRC-valid undecodable cache entry was returned instead of repaired"
+        assert count() == 2, (
+            "The CRC-valid undecodable cache entry was returned instead of repaired"
+        )
         assert not pending.exists()
         repaired = (root / "repaired.png").read_bytes()
         assert b"Thumb::URI" in repaired
         # The embedded ICC profile can have a different creation timestamp.
-        assert repaired[16:29] == output[16:29] and pixel_payload(repaired) == pixel_payload(output)
+        assert repaired[16:29] == output[16:29] and pixel_payload(
+            repaired
+        ) == pixel_payload(output)
 
         locked = launch("locked", 88, delay=1)
         wait_for_starts(3)
         waiting = launch("canceled-waiter", 88)
-        time.sleep(.15)
+        time.sleep(0.15)
         waiting.terminate()
         finish(waiting, False)
         finish(locked)
@@ -121,9 +143,11 @@ def main():
         producer.kill()
         finish(producer, False)
         finish(next_producer)
-        assert count() == 5 and (root / "recovered.png").read_bytes().startswith(b"\x89PNG")
+        assert count() == 5 and (root / "recovered.png").read_bytes().startswith(
+            b"\x89PNG"
+        )
 
-        changing = launch("changed", 66, delay=.6)
+        changing = launch("changed", 66, delay=0.6)
         wait_for_starts(6)
         os.utime(source, ns=(time.time_ns(), time.time_ns() + 50000000))
         finish(changing, False)
@@ -140,22 +164,37 @@ def main():
         assert all(p.suffix in {".png", ".lock"} for p in cache.iterdir())
 
         marker = root / "publication-started"
-        producer = launch("mid-publication", 127, LD_PRELOAD=str(args.publication_gate.resolve()),
-                          IMAGEKIT_PUBLICATION_GATE=str(marker))
+        producer = launch(
+            "mid-publication",
+            127,
+            LD_PRELOAD=str(args.publication_gate.resolve()),
+            IMAGEKIT_PUBLICATION_GATE=str(marker),
+        )
         deadline = time.monotonic() + 5
-        while not marker.exists() and producer.poll() is None and time.monotonic() < deadline:
-            time.sleep(.02)
-        assert marker.is_file() and producer.poll() is None, "Producer never reached pending-file fsync"
-        pending, = cache.glob("*.png.pending")
+        while (
+            not marker.exists()
+            and producer.poll() is None
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.02)
+        assert marker.is_file() and producer.poll() is None, (
+            "Producer never reached pending-file fsync"
+        )
+        (pending,) = cache.glob("*.png.pending")
         assert pixel_payload(pending.read_bytes()) == pixel_payload(output)
-        assert not pending.with_suffix("").exists(), "Pending thumbnail was published before rename"
+        assert not pending.with_suffix("").exists(), (
+            "Pending thumbnail was published before rename"
+        )
         producer.kill()
         finish(producer, False)
         finish(launch("recovered-publication", 127))
         assert not pending.exists()
-        assert pixel_payload((root / "recovered-publication.png").read_bytes()) == pixel_payload(output)
+        assert pixel_payload(
+            (root / "recovered-publication.png").read_bytes()
+        ) == pixel_payload(output)
         assert not (root / "mid-publication.png").exists()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

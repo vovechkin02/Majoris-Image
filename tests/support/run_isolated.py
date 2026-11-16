@@ -2,34 +2,25 @@
 
 import argparse
 import os
-from pathlib import Path
 import shutil
 import signal
 import subprocess
 import tempfile
+from pathlib import Path
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repeat", type=int, default=1)
-    parser.add_argument("command", nargs=argparse.REMAINDER)
-    args = parser.parse_args()
-    if not args.command:
-        parser.error("a test command is required")
-    if args.repeat < 1:
-        parser.error("--repeat must be positive")
-    for _ in range(args.repeat):
-        status = run(args.command)
-        if status:
-            return status
-    return 0
-
-
-def run(arguments):
+def run(arguments: list[str]) -> int:
     root = Path(tempfile.mkdtemp(prefix="imagekit-test-"))
     env = dict(os.environ, IMAGEKIT_TEST_ROOT=str(root))
-    for name in ("HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
-                 "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "TMPDIR"):
+    for name in (
+        "HOME",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "XDG_RUNTIME_DIR",
+        "TMPDIR",
+    ):
         directory = root / name.lower()
         directory.mkdir(mode=0o700)
         env[name] = str(directory)
@@ -70,6 +61,22 @@ def run(arguments):
             print(f"Retained test artifacts at {root}")
         else:
             shutil.rmtree(root)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    if not args.command:
+        parser.error("a test command is required")
+    if args.repeat < 1:
+        parser.error("--repeat must be positive")
+    for _ in range(args.repeat):
+        status = run(args.command)
+        if status:
+            return status
+    return 0
 
 
 if __name__ == "__main__":

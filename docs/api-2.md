@@ -343,7 +343,7 @@ valac --pkg majoris-image-gtk4-1 photos-viewer.vala -o photos-viewer
 ./photos-viewer large.tiff multipart.exr exported.png [camera.raw]
 ```
 
-Run `sh tests/installed-consumers.sh /absolute/build/tests/large.tiff` with
+Run `python3 tests/release/installed_consumers.py /absolute/build/tests/large.tiff` with
 the five installed packages, Xvfb,
 Vala and Python GI. For the Photos workflow, place the generated
 `build/tests/large.tiff` in the external fixture directory beside the other
@@ -425,8 +425,8 @@ For repeatable local measurements, build the benchmark and use a local image:
 
 ```sh
 export MAJORIS_IMAGE_WORKER="$PWD/build/src/worker/majoris-image-worker"
-/usr/bin/time -v build/tests/majoris-image-benchmark open tests/fixtures/rgb16.png
-/usr/bin/time -v build/tests/majoris-image-benchmark tile build/tests/large.tiff
+/usr/bin/time -v build/tests/benchmarks/majoris-image-benchmark open tests/fixtures/rgb16.png
+/usr/bin/time -v build/tests/benchmarks/majoris-image-benchmark tile build/tests/large.tiff
 ```
 
 Benchmark modes are `open`, `full` (up to a 4096-pixel edge), `tile`,

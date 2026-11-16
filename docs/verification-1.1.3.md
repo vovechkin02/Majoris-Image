@@ -4,12 +4,12 @@ See [1.1.4 verification](verification-1.1.4.md) for the current release.
 
 | Area | Change | Main files |
 | --- | --- | --- |
-| Wheel input | Per-view default, Ctrl-only and disabled modes. Parent controllers receive unhandled events, including horizontal scrolling and attempts to zoom at a limit. Pointer anchoring uses the same transform as pinch and keyboard zoom. | `src/gtk/image-view.vala`, `tests/widget-interaction.c` |
-| Animation | Playback starts only for confirmed multi-frame documents. GIF, WebP, AVIF, HEIF and APNG use indexed document frames, the common presentation policy and one-frame prefetch. Glycin composites APNG from frame zero. With an unavailable backend or incompatible color requirement, the widget presents a still image and a diagnostic. | `src/core/{image-document,glycin-fallback}.vala`, `src/gtk/image-view.vala`, `tests/{viewer.vala,make-fixtures.c,make-formats.py}` |
-| External textures | The original texture and its GDK color state stay intact. The view distinguishes sRGB, linear sRGB, Rec. 2100 PQ, linear Rec. 2100 and other states. It uses an unverified presentation status where the external state cannot establish SDR. | `src/gtk/{image-view.vala,presentation.vala,image-texture.c}`, `tests/{image-texture.c,widget-interaction.c}` |
-| Accessibility | GTK image role, loading busy state, application-provided per-image description, and standard persistent GTK labels. Keyboard actions respect interaction permissions, with focus styling left to GTK. | `src/gtk/image-view.vala`, `tests/widget-interaction.c`, `examples/{builder.c,demo.ui}` |
-| HDR readiness | The internal factory takes prepared straight-alpha float32 samples and their explicit color state. It checks dimensions, stride and size. The current preview, tile and animation path continues to provide linear sRGB. | `src/gtk/{image-texture.c,image-texture.h,presentation.vala}`, `tests/image-texture.c` |
-| Consumer integration | Files embeds a Ctrl+wheel view in a scrolling pane. Photos uses default wheel zoom. The examples exercise image replacement, descriptions, rotation, external textures, wide-gamut content, animation and the existing public workflow. Installed C, Vala and Python GI checks cover the public interfaces. | `examples/{files-preview.vala,photos-viewer.vala,builder.c,demo.ui}`, `tests/{meson.build,installed-consumers.sh,viewer.vala}` |
+| Wheel input | Per-view default, Ctrl-only and disabled modes. Parent controllers receive unhandled events, including horizontal scrolling and attempts to zoom at a limit. Pointer anchoring uses the same transform as pinch and keyboard zoom. | `src/gtk/image-view.vala`, `tests/integration/widget-interaction.c` |
+| Animation | Playback starts only for confirmed multi-frame documents. GIF, WebP, AVIF, HEIF and APNG use indexed document frames, the common presentation policy and one-frame prefetch. Glycin composites APNG from frame zero. With an unavailable backend or incompatible color requirement, the widget presents a still image and a diagnostic. | `src/core/{image-document,glycin-fallback}.vala`, `src/gtk/image-view.vala`, `tests/integration/viewer.vala`, `tests/support/make-fixtures.c`, `tests/support/make_formats.py` |
+| External textures | The original texture and its GDK color state stay intact. The view distinguishes sRGB, linear sRGB, Rec. 2100 PQ, linear Rec. 2100 and other states. It uses an unverified presentation status where the external state cannot establish SDR. | `src/gtk/{image-view.vala,presentation.vala,image-texture.c}`, `tests/unit/image-texture.c`, `tests/integration/widget-interaction.c` |
+| Accessibility | GTK image role, loading busy state, application-provided per-image description, and standard persistent GTK labels. Keyboard actions respect interaction permissions, with focus styling left to GTK. | `src/gtk/image-view.vala`, `tests/integration/widget-interaction.c`, `examples/{builder.c,demo.ui}` |
+| HDR readiness | The internal factory takes prepared straight-alpha float32 samples and their explicit color state. It checks dimensions, stride and size. The current preview, tile and animation path continues to provide linear sRGB. | `src/gtk/{image-texture.c,image-texture.h,presentation.vala}`, `tests/unit/image-texture.c` |
+| Consumer integration | Files embeds a Ctrl+wheel view in a scrolling pane. Photos uses default wheel zoom. The examples exercise image replacement, descriptions, rotation, external textures, wide-gamut content, animation and the existing public workflow. Installed C, Vala and Python GI checks cover the public interfaces. | `examples/{files-preview.vala,photos-viewer.vala,builder.c,demo.ui}`, `tests/meson.build`, `tests/release/installed_consumers.py`, `tests/integration/viewer.vala` |
 
 Public additions are `ScrollZoomMode`, `ImageView.scroll_zoom_mode`,
 `ImageView.accessible_description` and
@@ -65,9 +65,8 @@ The GTK package records its GTK 4.16 minimum and has no Glycin GTK bridge
 runtime dependency.
 
 The stock packages passed installation, removal and reinstallation in
-isolated Debian 13.7. The unprivileged installed check ran
-`sh tests/installed-consumers.sh`, compiling C and Vala against the installed
-public interfaces and checking the new enum, properties and image role in
+isolated Debian 13.7. The unprivileged installed check compiled C and Vala
+against the installed public interfaces and checked the new enum, properties and image role in
 Python GI. The synthetic input test was also compiled outside the source
 build with `pkg-config --cflags --libs majoris-image-gtk4-1 gtk4-x11 xtst x11`.
 Both `GDK_SCALE=1` and `GDK_SCALE=2` passed under Xvfb.

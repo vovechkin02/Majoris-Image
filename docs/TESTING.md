@@ -4,6 +4,13 @@ The [baseline inventory](test-inventory-2.0.0.md) records the original tests,
 dependencies, fixtures, and assertion gaps. See the
 [qualification report](verification-test-quality.md) for observed results.
 
+Test sources live under `tests/unit/`, `tests/integration/`, and
+`tests/security/`. Shared runners and fixture generators are in
+`tests/support/`, performance workloads are in `tests/benchmarks/`, and
+package and installed checks are in `tests/release/`. Meson suite membership
+is independent of the source directory. Shared fixture targets still write to
+`build/tests/`, including the `large.tiff` used by installed qualification.
+
 ## Development and extended suites
 
 Build on Linux with the dependencies listed in `debian/control`. Install
@@ -16,11 +23,11 @@ build variants.
 ```sh
 meson setup build -Dglycin=enabled -Dsequence=enabled -Dintrospection=enabled
 meson test -C build --suite unit --suite integration --suite security --print-errorlogs
-python3 tests/qualify.py build --variant full
+python3 tests/release/qualify.py build --variant full
 meson setup headless -Dgtk=false -Dglycin=enabled
-python3 tests/qualify.py headless --variant headless
+python3 tests/release/qualify.py headless --variant headless
 meson setup native -Dglycin=disabled -Dsequence=disabled
-python3 tests/qualify.py native --variant native
+python3 tests/release/qualify.py native --variant native
 ```
 
 The `unit`, `integration`, and `security` suites run by default. The headless
@@ -93,9 +100,9 @@ CC=clang CXX=clang++ meson setup fuzz -Dgtk=false -Dglycin=disabled \
   -Dsequence=enabled -Dlibfuzzer=true -Db_sanitize=address,undefined -Db_lundef=false \
   -Dc_args=-fsanitize=fuzzer-no-link -Dcpp_args=-fsanitize=fuzzer-no-link
 meson compile -C fuzz fuzz-imagekit
-python3 tests/seed-fuzz.py fuzz/corpus
+python3 tests/security/seed_fuzz.py fuzz/corpus
 ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-  fuzz/tests/fuzz-imagekit -max_len=524288 -max_total_time=90 -timeout=5 fuzz/corpus
+  fuzz/tests/security/fuzz-imagekit -max_len=524288 -max_total_time=90 -timeout=5 fuzz/corpus
 ```
 
 Use a disposable working directory for libFuzzer so its crash inputs are
@@ -114,7 +121,7 @@ counts. CPU time includes waited child processes. The warm result measures
 repeated verified preload-cache hits separately from setup.
 
 For a standalone baseline, pass the built benchmark and worker to
-`tests/run-benchmarks.py`, `--output result.json`, and one or more
+`tests/benchmarks/run_benchmarks.py`, `--output result.json`, and one or more
 `MODE=FIXTURE` arguments. Pass `--baseline previous.json` to compare workloads
 with the same fixture hash. Cross-machine timings do not gate functional tests.
 For scheduled comparisons use the same runner and build settings.
@@ -129,7 +136,7 @@ installation, removal, and reinstallation. Run the following from the
 package-test environment with the generated fixture available.
 
 ```sh
-sh tests/installed-consumers.sh /absolute/build/tests/large.tiff
+python3 tests/release/installed_consumers.py /absolute/build/tests/large.tiff
 ```
 
 The fixture argument is required. The workflow compiles its C and Vala
@@ -142,7 +149,7 @@ Set `MAJORIS_TEST_STRESS=1` to include the concurrent installed workloads.
 Full qualification requires a GTK build with `-Dextended_tests=true`,
 `-Dintrospection=enabled`, `-Dglycin=enabled`, `-Dsequence=enabled`,
 `-Dultrahdr=enabled`, and the manifest-pinned RAW directory. With the release
-packages installed, run `python3 tests/qualify.py build --installed`.
+packages installed, run `python3 tests/release/qualify.py build --installed`.
 The runner checks that required tests exist and actually passed, including the
 complete 8K test. The protected release CI runner provides the RAW inputs and
 vendor runtime. Per-commit CI covers full, headless, native-only, sanitizer,
@@ -150,5 +157,5 @@ and Debian-installed variants. Nightly CI adds extended rendering,
 benchmarks, and prolonged fuzzing.
 
 Before producing a release source archive, use
-`python3 tests/check-release-modes.py archive.tar.gz` on a POSIX host to verify
+`python3 tests/release/check_release_modes.py archive.tar.gz` on a POSIX host to verify
 the executable bits in Git, the archive, and its extracted scripts.

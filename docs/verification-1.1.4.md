@@ -2,10 +2,10 @@
 
 | Area | Changes | Main files |
 | --- | --- | --- |
-| Tiled viewport | The planner covers the full clipped rectangle, orders visible work by distance from its center, and admits two jobs per view. It accounts for alignment and tile overlap before allocating. Large viewports receive up to 704 MiB of tile-cache reservations. The planner coarsens the sampling level when necessary to retain complete coverage. Unused textures are evicted before visible work, and canceled requests occupy their slots until completion. | `src/gtk/{tile-cache,image-view}.vala`, `tests/tile-coverage.vala` |
-| Preloading | Ordinary and background opening use one decoder-selection implementation. A manager can share a custom registry with its foreground consumer. Native decoding, metadata probes and Glycin fallback all use background admission for preloads. Entries retain the source stamp, decode options and preview-memory bounds. | `src/core/{preload-manager,decoder-registry,glycin-fallback,worker-client,job-scheduler}.vala`, `tests/{headless,decoders,raw-samples,scheduler}.vala` |
-| Integration | Photos-style navigation opens JPEG, preloads TIFF and installed QOI, reuses cached documents, and tests a different preview size. Existing HDR, RAW, tile, image-switching and Files-style consumer tests continue running. | `examples/photos-viewer.vala`, `tests/{meson.build,make-fixtures.c,installed-consumers.sh}` |
-| Source distribution | The repository index records mode 100755 for Debian rules and the installed-consumer script. The release checker verifies both entries in the tarball and extracts them to check the resulting mode on Linux. | `debian/rules`, `tests/{installed-consumers.sh,check-release-modes.py}`, `README.md` |
+| Tiled viewport | The planner covers the full clipped rectangle, orders visible work by distance from its center, and admits two jobs per view. It accounts for alignment and tile overlap before allocating. Large viewports receive up to 704 MiB of tile-cache reservations. The planner coarsens the sampling level when necessary to retain complete coverage. Unused textures are evicted before visible work, and canceled requests occupy their slots until completion. | `src/gtk/{tile-cache,image-view}.vala`, `tests/integration/tile-coverage.vala` |
+| Preloading | Ordinary and background opening use one decoder-selection implementation. A manager can share a custom registry with its foreground consumer. Native decoding, metadata probes and Glycin fallback all use background admission for preloads. Entries retain the source stamp, decode options and preview-memory bounds. | `src/core/{preload-manager,decoder-registry,glycin-fallback,worker-client,job-scheduler}.vala`, `tests/integration/headless.vala`, `tests/integration/decoders.vala`, `tests/integration/raw-samples.vala`, `tests/unit/scheduler.vala` |
+| Integration | Photos-style navigation opens JPEG, preloads TIFF and installed QOI, reuses cached documents, and tests a different preview size. Existing HDR, RAW, tile, image-switching and Files-style consumer tests continue running. | `examples/photos-viewer.vala`, `tests/meson.build`, `tests/support/make-fixtures.c`, `tests/release/installed_consumers.py` |
+| Source distribution | The repository index records mode 100755 for Debian rules and the installed-consumer script. The release checker verifies both entries in the tarball and extracts them to check the resulting mode on Linux. | `debian/rules`, `tests/release/installed_consumers.py`, `tests/release/check_release_modes.py`, `README.md` |
 
 The additive API is `PreloadManager.with_registry(DecoderRegistry)`. The
 default constructor, existing APIs and SONAMEs remain available. See the
@@ -45,12 +45,11 @@ The complete tile test ran from the full build directory with
 `MAJORIS_IMAGE_WORKER` set to its built worker:
 
 ```sh
-/usr/bin/time -v tests/test-tile-coverage tests/large.tiff "$source/tests/fixtures/multipart.exr" --complete
+/usr/bin/time -v tests/integration/test-tile-coverage tests/large.tiff "$source/tests/fixtures/multipart.exr" --complete
 ```
 
 The Git source snapshot was exported with `git -c tar.umask=0022 archive`.
-`python3 tests/check-release-modes.py build-packages/1.1.4/majoris-image-1.1.4.tar.gz`
-verified both scripts. A deliberately corrupted archive with mode 0644
+The release mode checker verified both executable entries. A deliberately corrupted archive with mode 0644
 for `debian/rules` failed the checker. Both binary package builds started
 from Linux tar extractions with both scripts at 0755, without a permission
 repair step.
@@ -59,7 +58,7 @@ An exported-symbol comparison against the 1.1.3 packages with
 `nm -D --defined-only` found every previous symbol in both libraries
 and the new registry-aware constructor. Stock installation, removal
 and reinstallation passed in isolated Debian 13.7. Both package profiles
-passed `sh tests/installed-consumers.sh` with independent Vala and C
+passed the installed-consumer checks with independent Vala and C
 builds, Python introspection, GtkBuilder and mixed JPEG/QOI/TIFF
 navigation. The installed Majoris profile also exported and reopened
 an 8×8 JPEG gain map with the vendor `libuhdr2` runtime.

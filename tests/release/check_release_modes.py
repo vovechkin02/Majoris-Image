@@ -1,25 +1,28 @@
 """Check the Git index and an extracted POSIX source tarball."""
+
 import argparse
 import os
-from pathlib import Path, PurePosixPath
 import stat
 import subprocess
 import tarfile
 import tempfile
+from pathlib import Path, PurePosixPath
 
-REQUIRED = ("debian/rules", "tests/installed-consumers.sh")
+REQUIRED = ("debian/rules", "tests/release/installed_consumers.py")
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
     options = parser.parse_args()
     if os.name != "posix":
         parser.error("run this check on a POSIX filesystem")
 
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     tracked = subprocess.check_output(
-        ["git", "-C", root, "ls-files", "--stage", "--", *REQUIRED], text=True
+        ["git", "-C", root, "ls-files", "--stage", "--", *REQUIRED],
+        text=True,
+        timeout=15,
     )
     modes = {}
     for line in tracked.splitlines():
@@ -28,14 +31,18 @@ def main():
         if stage == "0":
             modes[path] = mode
 
-    with tarfile.open(options.archive, "r:*") as archive, tempfile.TemporaryDirectory() as temp:
+    with (
+        tarfile.open(options.archive, "r:*") as archive,
+        tempfile.TemporaryDirectory() as temp,
+    ):
         for path in REQUIRED:
             if modes.get(path) != "100755":
                 raise SystemExit(f"{path}: Git must track mode 100755")
             parts = PurePosixPath(path).parts
             matches = [
-                member for member in archive.getmembers()
-                if PurePosixPath(member.name).parts[-len(parts):] == parts
+                member
+                for member in archive.getmembers()
+                if PurePosixPath(member.name).parts[-len(parts) :] == parts
             ]
             if len(matches) != 1 or not matches[0].isfile():
                 raise SystemExit(f"{path}: expected one archive file")
@@ -47,7 +54,8 @@ def main():
             if stat.S_IMODE(extracted.stat().st_mode) != 0o755:
                 raise SystemExit(f"{entry.name}: executable mode lost on extraction")
             print(f"{path}: Git 100755, archive and extraction 0755")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

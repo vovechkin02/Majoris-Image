@@ -22,7 +22,7 @@ backend is disabled.
 It covers 10-bit BT.2020 PQ frames and the SDR tone-mapping path.
 
 `heic-sequence.heic` is a generated CC0 fixture from
-`tests/make-heif-sequence.c` and the libheif x265 encoder. It contains two
+`tests/support/make-heif-sequence.c` and the libheif x265 encoder. It contains two
 solid-color HEVC images at 70 ms and 160 ms with two presentations.
 
 `heic-multitrack.heic` adds a blue video track before the red/green image

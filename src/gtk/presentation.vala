@@ -73,20 +73,9 @@ namespace ImageKit {
             return decision;
         }
 
-        internal static async PixelBuffer pixels (ImageDocument document, PresentationDecision decision,
+        internal static async PixelBuffer render_pixels (ImageDocument document, PresentationDecision decision,
                                                    Cancellable stop) throws Error {
             return yield document.render_preview (decision.tone_map, stop);
-        }
-    }
-
-    internal class AnimationFrame : Object {
-        public Gdk.Texture texture;
-        public int64 interval;
-        public ImageDocument? source;
-        public PresentationDecision decision;
-        public AnimationFrame (Gdk.Texture texture, int64 interval) {
-            this.texture = texture;
-            this.interval = interval;
         }
     }
 }

@@ -1,6 +1,7 @@
 fuzz_native = executable(
   'fuzz-native-smoke',
   'fuzz-native.c',
+  c_args: native_c_args,
   dependencies: [native_api, core_api, test_zlib],
 )
 test(
@@ -32,7 +33,7 @@ if get_option('libfuzzer')
     'fuzz-imagekit',
     'fuzz-native.c',
     dependencies: [native_api, core_api, test_zlib],
-    c_args: ['-DIMAGEKIT_LIBFUZZER', '-fsanitize=fuzzer'],
+    c_args: native_c_args + ['-DIMAGEKIT_LIBFUZZER', '-fsanitize=fuzzer'],
     link_args: ['-fsanitize=fuzzer'],
   )
 endif

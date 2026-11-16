@@ -209,5 +209,25 @@ namespace ImageKit {
             }
             return output;
         }
+
+        internal static void update_probe_metadata (string source, DecodeOptions options,
+                                                    int hdr_hint, ImageProbe probe,
+                                                    Vips.Image? prepared) throws Error {
+            var metadata = read (source, options.page, hdr_hint, probe, prepared);
+            metadata.set_int_member ("source-bit-depth", probe.source_bit_depth);
+            metadata.set_int_member ("effective-bit-depth", probe.depth);
+            metadata.set_int_member ("pixel-buffer-bit-depth", 32);
+            metadata.set_boolean_member ("alpha", probe.has_alpha);
+            metadata.set_boolean_member ("embedded-preview", probe.raw && options.raw_preview_only);
+            if (probe.raw && !options.raw_preview_only) {
+                metadata.set_int_member ("raw-quality", options.raw_quality);
+                metadata.set_boolean_member ("camera-white-balance", options.camera_white_balance);
+            }
+            var node = new Json.Node (Json.NodeType.OBJECT);
+            node.set_object (metadata);
+            var generator = new Json.Generator ();
+            generator.set_root (node);
+            probe.metadata = generator.to_data (null);
+        }
     }
 }

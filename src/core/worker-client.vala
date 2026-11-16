@@ -10,7 +10,7 @@ namespace ImageKit {
             this.timeout_seconds = timeout_seconds.clamp (1, 120);
         }
 
-        private string executable () {
+        private string resolve_executable () {
             return backend ?? Environment.get_variable ("MAJORIS_IMAGE_WORKER") ?? installed_worker ();
         }
 
@@ -104,7 +104,7 @@ namespace ImageKit {
                     "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", "/etc",
                     "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache", "--ro-bind-try",
                         "/etc/fonts", "/etc/fonts",
-                    "--ro-bind", executable (), "/worker", "--bind", job, "/job", "--chdir", "/job",
+                    "--ro-bind", resolve_executable (), "/worker", "--bind", job, "/job", "--chdir", "/job",
                         "--clearenv",
                     "--setenv", "PATH", "/usr/bin", "--setenv", "HOME", "/tmp",
                     "--setenv", "OMP_NUM_THREADS", "2", "--setenv", "OMP_THREAD_LIMIT", "2" };

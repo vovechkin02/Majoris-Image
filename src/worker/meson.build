@@ -5,31 +5,27 @@ native_vala_flags = [
   '--pkg=image-vips',
 ]
 worker_sources = files(
-  'main.vala',
-  'image-inspector.vala',
-  'metadata-reader.vala',
-  'float-ops.vala',
-  'tone-mapper.vala',
-  'image-processor.vala',
-  'tone-operations.vala',
-  'color-operations.vala',
+  'color-adjustments.vala',
   'export-engine.vala',
+  'float-ops.vala',
+  'image-inspector.vala',
+  'image-processor.vala',
+  'metadata-reader.vala',
+  'tone-adjustments.vala',
+  'tone-mapper.vala',
+  'worker-dispatcher.vala',
 )
 
-# The private archive contains the Vala entry point. link_whole below pulls it
-# and the worker-only contract into the executable; the archive is never installed.
-worker_code = static_library(
-  'majoris-image-worker-code',
+worker = executable(
+  'majoris-image-worker',
+  'main.vala',
   worker_sources,
   worker_contract,
   dependencies: [gio, json, gexiv],
-  vala_args: native_vala_flags,
+  # Link the codec archive without passing its C-only packages to valac.
+  link_with: native_bridge,
   include_directories: include_directories('../../native'),
-)
-worker = executable(
-  'majoris-image-worker',
-  link_whole: worker_code,
-  dependencies: [native_api, gexiv],
+  vala_args: native_vala_flags,
   install: true,
   install_dir: get_option('libexecdir'),
 )

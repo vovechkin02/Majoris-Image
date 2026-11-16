@@ -59,8 +59,8 @@ native_sources = files(
   'bridge.c',
   'codec-catalog.c',
   'color.c',
+  'exr-encoder.cpp',
   'exr-source.cpp',
-  'exr.cpp',
   'jxl.c',
   'metadata.c',
   'pixels.c',
@@ -69,6 +69,9 @@ native_sources = files(
   'sequences.c',
   'svg.c',
 )
+if heif_sequence
+  native_sources += files('sequence-timeline.c')
+endif
 native_sources += uhdr.found() ? files('ultra.c') : files('ultra-unavailable.c')
 
 native_bridge = static_library(

@@ -60,10 +60,10 @@ namespace ImageKit {
 
         public static ImageProbe inspect (string path, int hdr_hint = -1, int page = 0) throws Error {
             Vips.Image? prepared;
-            return inspect_with_pixels (path, hdr_hint, page, out prepared);
+            return inspect_and_prepare_pixels (path, hdr_hint, page, out prepared);
         }
 
-        internal static ImageProbe inspect_with_pixels (string path, int hdr_hint, int page,
+        internal static ImageProbe inspect_and_prepare_pixels (string path, int hdr_hint, int page,
                                                         out Vips.Image? prepared,
                                                             int sequence_frames = 0) throws Error {
             prepared = null;
@@ -282,6 +282,38 @@ namespace ImageKit {
             probe.source_bit_depth = probe.depth;
             probe.has_alpha = image.has_alpha ();
             return probe;
+        }
+
+        internal static Vips.Image open_pixels (string source, ImageProbe probe, DecodeOptions options) throws Error {
+            if (probe.raw) {
+                if (options.raw_preview_only) {
+                    ImageNative.raw_preview (source, "/job/embedded-preview.jpg");
+                    source = "/job/embedded-preview.jpg";
+                } else {
+                    ImageNative.develop_raw_options (source, "/job/developed.tif",
+                                                     options.raw_quality, options.camera_white_balance);
+                    source = "/job/developed.tif";
+                }
+            }
+            if (probe.gain_map) {
+                return ImageNative.ultra_decode (source, false);
+            }
+            if (probe.loader == "openexr-native") {
+                return ImageNative.exr_image (source, options.page);
+            }
+            var image = options.page == 0 ? Vips.Image.from_file (source, "fail_on", 2, null) :
+                Vips.Image.from_file (source, "page", options.page, "n", 1, "fail_on", 2, null);
+            if (image == null) {
+                throw new ImageError.CORRUPT ("%s", Vips.error_buffer ());
+            }
+            if (probe.loader.contains ("heif")) {
+                ImageNative.annotate_heif (image, source);
+            }
+            if (probe.raw && !options.raw_preview_only) {
+                image.set_int ("majoris-image-transfer", 8);
+                image.set_int ("majoris-image-primaries", 1);
+            }
+            return image;
         }
     }
 }

@@ -73,6 +73,7 @@ namespace ImageKit {
 
         public signal void transformed ();
 
+        private AnimationController animation;
         private Gdk.Texture? texture;
         private PresentationDecision presented;
         private ImageDocument? frame_source;
@@ -85,7 +86,6 @@ namespace ImageKit {
         private Cancellable pending = new Cancellable ();
         private uint generation;
         private bool disposed;
-        private bool playback_requested;
         private TileCache tiles = new TileCache ();
         private double custom_zoom = 1;
         private double pan_x;
@@ -98,15 +98,6 @@ namespace ImageKit {
         private int turns;
         private bool flipped_x;
         private bool flipped_y;
-        private uint animation_timer;
-        private bool frame_pending;
-        private uint playback_generation;
-        private Cancellable playback = new Cancellable ();
-        private int64 frame_delay;
-        private int64 frames_presented;
-        private AnimationFrame? prefetched;
-        private bool advance_due;
-        private bool manual_advance;
         private weak Gdk.Surface? watched_surface;
         private ulong entered_monitor;
         private ulong left_monitor;
@@ -120,6 +111,7 @@ namespace ImageKit {
         }
 
         construct {
+            animation = new AnimationController (this);
             hexpand = true;
             vexpand = true;
             focusable = true;
@@ -138,14 +130,12 @@ namespace ImageKit {
                 watch_output ();
                 update_presentation ();
                 update_transform ();
-                if (playback_requested) {
-                    play ();
-                }
+                animation.resume_if_requested ();
             });
             unmap.connect (() => {
                 watch_output (false);
                 tiles.reset (null);
-                suspend_playback ();
+                animation.suspend ();
                 update_presentation ();
             });
 
@@ -274,13 +264,7 @@ namespace ImageKit {
             frame_source = null;
             pending.cancel ();
             pending = new Cancellable ();
-            pause ();
-            playback_generation++;
-            playback.cancel ();
-            playback = new Cancellable ();
-            frame_pending = advance_due = manual_advance = false;
-            prefetched = null;
-            frames_presented = 0;
+            animation.reset ();
             animated = false;
             current_frame = frame_duration_ms = 0;
             tiles.reset (null);
@@ -371,7 +355,7 @@ namespace ImageKit {
             }
         }
 
-        private bool is_current (uint request) {
+        internal bool is_current (uint request) {
             return !disposed && request == generation;
         }
 
@@ -392,7 +376,7 @@ namespace ImageKit {
             }
             while (is_current (request)) {
                 var decision = Presentation.inspect (this, presentation_policy, value.hdr);
-                var pixels = yield Presentation.pixels (value, decision, stop);
+                var pixels = yield Presentation.render_pixels (value, decision, stop);
                 stop.set_error_if_cancelled ();
                 var latest = Presentation.inspect (this, presentation_policy, value.hdr);
                 if (decision.tone_map != latest.tone_map) {
@@ -456,27 +440,19 @@ namespace ImageKit {
             cancel_presentation ();
             if (presented.tone_map == decision.tone_map) {
                 publish_presentation (decision);
-                if (advance_due) {
-                    advance_when_ready ();
-                } else {
-                    schedule_frame ();
-                }
+                animation.resume_after_presentation ();
                 return;
             }
             tiles.reset (null);
             presentation_pending = true;
-            prefetched = null;
-            if (animation_timer != 0) {
-                Source.remove (animation_timer);
-                animation_timer = 0;
-            }
+            animation.hold_for_presentation ();
             refresh_presentation.begin (source, decision, presentation_generation, presentation_work);
         }
 
         private async void refresh_presentation (ImageDocument source, PresentationDecision decision,
                                                   uint request, Cancellable stop) {
             try {
-                var pixels = yield Presentation.pixels (source, decision, stop);
+                var pixels = yield Presentation.render_pixels (source, decision, stop);
                 if (disposed || stop.is_cancelled () || request != presentation_generation) {
                     return;
                 }
@@ -490,11 +466,7 @@ namespace ImageKit {
             } finally {
                 if (!disposed && request == presentation_generation) {
                     presentation_pending = false;
-                    if (advance_due) {
-                        advance_when_ready ();
-                    } else {
-                        schedule_frame ();
-                    }
+                    animation.resume_after_presentation ();
                 }
             }
         }
@@ -524,8 +496,7 @@ namespace ImageKit {
             animated = can_play (value) && animation_error == "";
             current_frame = value.frame;
             frame_duration_ms = value.frame_duration_ms;
-            frame_delay = value.frame_duration_us;
-            frames_presented = value.frame + 1;
+            animation.set_initial_frame (value);
             publish_presentation (decision);
             state = value.raw_state == RawState.RAW_PREVIEW_AVAILABLE ? ViewState.PREVIEW_READY
                 : ViewState.READY;
@@ -647,146 +618,46 @@ namespace ImageKit {
         }
 
         public void play () {
-            if (disposed || !animated) {
-                return;
-            }
-            playback_requested = true;
-            if (playing || !get_mapped ()) {
-                return;
-            }
-            playing = true;
-            if (playback_finished ()) {
-                uint request = generation;
-                seek_frame.begin (0, null, (object, reply) => {
-                    try {
-                        seek_frame.end (reply);
-                    } catch (Error error) {
-                        if (is_current (request) && !(error is IOError.CANCELLED)) {
-                            warning = error.message;
-                        }
-                    }
-                });
-            } else {
-                schedule_frame ();
-            }
-        }
-
-        private void suspend_playback () {
-            if (animation_timer != 0) {
-                Source.remove (animation_timer);
-                animation_timer = 0;
-            }
-            advance_due = manual_advance = false;
-            playing = false;
+            animation.play ();
         }
 
         public void pause () {
-            playback_requested = false;
-            suspend_playback ();
+            animation.pause ();
         }
 
         public void step_frame () {
-            pause ();
-            if (!animated) {
-                return;
-            }
-            manual_advance = advance_due = true;
-            advance_when_ready ();
+            animation.step_frame ();
         }
 
         /** Seek within the active timed sequence. Older frame requests are canceled. */
         public async void seek_frame (int frame, Cancellable? cancel = null) throws Error {
-            var source = document;
-            if (disposed || source == null || !animated || frame < 0 || frame >= source.frame_count) {
-                throw new IOError.INVALID_ARGUMENT ("Frame is outside the active sequence");
-            }
-            if (animation_timer != 0) {
-                Source.remove (animation_timer);
-                animation_timer = 0;
-            }
-            playback_generation++;
-            playback.cancel ();
-            playback = new Cancellable ();
-            var stop = playback;
-            ulong handler = cancel != null ? cancel.connect (() => stop.cancel ()) : 0;
-            prefetched = null;
-            advance_due = manual_advance = false;
-            frame_pending = true;
-            uint request = generation, seek = playback_generation;
-            try {
-                var loaded = yield load_frame (source, frame, stop);
-                stop.set_error_if_cancelled ();
-                if (is_current (request) && seek == playback_generation) {
-                    show_frame (loaded, frame, frame + 1);
-                }
-            } finally {
-                if (handler != 0) {
-                    cancel.disconnect (handler);
-                }
-                if (is_current (request) && seek == playback_generation) {
-                    frame_pending = false;
-                    schedule_frame ();
-                }
-            }
+            yield animation.seek_frame (frame, cancel);
         }
 
-        private bool playback_finished () {
-            return document != null && document.frame_count > 1 && document.loop_count > 0 &&
-                frames_presented >= (int64) document.frame_count * document.loop_count;
+        internal bool is_disposed () {
+            return disposed;
         }
 
-        private void schedule_frame () {
-            if (disposed || !playing || !get_mapped () || presentation_pending ||
-                animation_timer != 0 || advance_due) {
-                return;
-            }
-            animation_timer = Timeout.add ((uint) (frame_delay / 1000).clamp (10, uint.MAX), () => {
-                animation_timer = 0;
-                if (playback_finished ()) {
-                    pause ();
-                } else {
-                    advance_due = true;
-                    advance_when_ready ();
-                }
-                return Source.REMOVE;
-            });
-            if (!playback_finished () && document != null &&
-                document.preview.bytes.get_size () <= 64 * 1024 * 1024) {
-                prefetch.begin ();
-            }
+        internal uint get_document_generation () {
+            return generation;
         }
 
-        private int next_frame_index () {
-            return document != null && document.frame_count > 1 ?
-                (current_frame + 1) % document.frame_count : (int) ((frames_presented + 1) % int.MAX);
+        internal bool is_presentation_pending () {
+            return presentation_pending;
         }
 
-        private void advance_when_ready () {
-            if (presentation_pending || !advance_due || (!manual_advance && (!playing || !get_mapped ()))) {
-                return;
-            }
-            if (prefetched == null) {
-                prefetch.begin ();
-                return;
-            }
-            var loaded = prefetched;
-            prefetched = null;
-            if (loaded.source != null && loaded.source.hdr &&
-                loaded.decision.tone_map != Presentation.inspect (this, presentation_policy, true).tone_map) {
-                prefetch.begin ();
-                return;
-            }
-            advance_due = manual_advance = false;
-            show_frame (loaded, next_frame_index (), frames_presented + 1);
-            schedule_frame ();
+        internal void update_playing (bool value) {
+            playing = value;
         }
 
-        private void show_frame (AnimationFrame loaded, int index, int64 presented) {
+        internal void report_animation_error (Error error) {
+            warning = error.message;
+        }
+
+        internal void show_animation_frame (AnimationFrame loaded, int index) {
             freeze_notify ();
-            frames_presented = presented;
             current_frame = index;
-            frame_delay = loaded.interval;
-            frame_duration_ms = (int) (frame_delay / 1000).clamp (0, int.MAX);
+            frame_duration_ms = (int) (loaded.duration_us / 1000).clamp (0, int.MAX);
             frame_source = loaded.source;
             texture = loaded.texture;
             if (frame_source != null && (presentation_pending ||
@@ -799,53 +670,15 @@ namespace ImageKit {
             thaw_notify ();
         }
 
-        private async AnimationFrame load_frame (ImageDocument source, int index,
-            Cancellable stop) throws Error {
-            var frame = yield source.open_frame (index, stop);
-            while (true) {
-                var decision = Presentation.inspect (this, presentation_policy, frame.hdr);
-                var pixels = yield Presentation.pixels (frame, decision, stop);
-                stop.set_error_if_cancelled ();
-                if (decision.tone_map != Presentation.inspect (this, presentation_policy, frame.hdr).tone_map) {
-                    continue;
-                }
-                var result = new AnimationFrame (texture_for_pixels (pixels), frame.frame_duration_us);
-                result.source = frame;
-                result.decision = decision;
-                return result;
-            }
-        }
-
-        private async void prefetch () {
-            var source = document;
-            if (source == null || prefetched != null || frame_pending) {
-                return;
-            }
-            frame_pending = true;
-            int index = next_frame_index ();
-            uint request = generation, seek = playback_generation;
-            var stop = playback;
-            try {
-                var loaded = yield load_frame (source, index, stop);
-                if (is_current (request) && seek == playback_generation) {
-                    prefetched = loaded;
-                }
-            } catch (Error error) {
-                if (!stop.is_cancelled () && is_current (request) && seek == playback_generation) {
-                    pause ();
-                    warning = error.message;
-                }
-            } finally {
-                if (is_current (request) && seek == playback_generation) {
-                    frame_pending = false;
-                    advance_when_ready ();
-                }
-            }
-        }
-
         private double device_scale () {
             var surface = get_native ()?.get_surface ();
             return surface != null ? surface.get_scale () : get_scale_factor ();
+        }
+
+        private void rotated_image_size (out int width, out int height) {
+            bool quarter_turn = turns % 2 != 0;
+            width = quarter_turn ? image_height : image_width;
+            height = quarter_turn ? image_width : image_height;
         }
 
         private double effective_zoom () {
@@ -858,8 +691,11 @@ namespace ImageKit {
             if (get_width () < 1 || get_height () < 1) {
                 return 1;
             }
-            double width = (double) get_width () / (turns % 2 == 0 ? image_width : image_height);
-            double height = (double) get_height () / (turns % 2 == 0 ? image_height : image_width);
+            int rotated_width;
+            int rotated_height;
+            rotated_image_size (out rotated_width, out rotated_height);
+            double width = (double) get_width () / rotated_width;
+            double height = (double) get_height () / rotated_height;
             switch (fit_mode) {
                 case FitMode.WIDTH:
                     return width;
@@ -881,10 +717,11 @@ namespace ImageKit {
                 return;
             }
             double scale = zoom;
-            double max_x = double.max (0, ((turns % 2 == 0 ? image_width
-                : image_height) * scale - get_width ()) / 2);
-            double max_y = double.max (0, ((turns % 2 == 0 ? image_height
-                : image_width) * scale - get_height ()) / 2);
+            int rotated_width;
+            int rotated_height;
+            rotated_image_size (out rotated_width, out rotated_height);
+            double max_x = double.max (0, (rotated_width * scale - get_width ()) / 2);
+            double max_y = double.max (0, (rotated_height * scale - get_height ()) / 2);
             pan_x = pan_x.clamp (-max_x, max_x);
             pan_y = pan_y.clamp (-max_y, max_y);
             notify_property ("zoom");
@@ -1062,6 +899,7 @@ namespace ImageKit {
                 disposed = true;
                 watch_output (false);
                 invalidate ();
+                animation.detach ();
                 current_document = null;
                 texture = null;
             }

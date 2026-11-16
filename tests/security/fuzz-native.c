@@ -5,6 +5,9 @@
 #include <glib/gstdio.h>
 
 #include "bridge.h"
+#ifdef IMAGE_CODEC_HEIF_SEQUENCE
+#include "sequence-timeline.h"
+#endif
 
 gboolean image_thumbnail_valid(GBytes *bytes, int edge);
 
@@ -38,6 +41,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         if (!g_file_set_contents(path, (const char *)data, size, &error)) {
             g_error("Cannot write fuzz input: %s", error->message);
         }
+#ifdef IMAGE_CODEC_HEIF_SEQUENCE
+        if (parser == 2) {
+            // Use the seed fixture's track and timing so malformed bytes reach the
+            // timeline parser even when libheif rejects the container first.
+            g_autoptr(GArray) frames = g_array_new(FALSE, FALSE, sizeof(PresentationFrame));
+            gboolean uses_libheif = FALSE;
+            sequence_verify_track_timing(path, 1, 1000, 1000, 460, frames, &uses_libheif);
+        }
+#endif
         VipsImage *image = parser == 4 ? image_codec_read_pixels(path, &error)
                                        : image_codec_sequence(path, 1, parser == 3, 0, &error);
         if (image) {

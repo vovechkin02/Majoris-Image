@@ -66,8 +66,8 @@ namespace ImageKit {
                     image = next;
                 }
             }
-            image = ToneOperations.apply (image, recipe);
-            image = ColorOperations.apply (image, recipe);
+            image = ToneAdjustments.apply (image, recipe);
+            image = ColorAdjustments.apply (image, recipe);
             check (Vips.copy (image, out next, "interpretation", 28, null));
             next.set_int ("majoris-image-working-linear", 1);
             return next;

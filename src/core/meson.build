@@ -1,8 +1,11 @@
 core_sources = files(
   'image-error.vala',
   'image-source.vala',
+  'pixel-buffer.vala',
+  'image-metadata.vala',
   'image-document.vala',
   'decoder-backend.vala',
+  'image-probe.vala',
   'decoder-registry.vala',
   'glycin-fallback.vala',
   'encoder-registry.vala',
@@ -11,6 +14,7 @@ core_sources = files(
   'thumbnail-service.vala',
   'preload-manager.vala',
   'job-scheduler.vala',
+  'decode-options.vala',
   'worker-request.vala',
   'worker-client.vala',
   'worker-failure.vala',
@@ -64,8 +68,10 @@ core_api = declare_dependency(
 worker_contract = files(
   'image-error.vala',
   'decoder-backend.vala',
+  'image-probe.vala',
   'render-options.vala',
   'export-options.vala',
+  'decode-options.vala',
   'worker-request.vala',
   'worker-failure.vala',
 )

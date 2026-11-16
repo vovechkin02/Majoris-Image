@@ -5,6 +5,7 @@ gtk_flags = ['--shared-library=libmajoris-image-gtk4.so.2', '--hide-internal']
 gtk_library = shared_library(
   'majoris-image-gtk4',
   'image-view.vala',
+  'animation-controller.vala',
   'tile-cache.vala',
   'presentation.vala',
   'image-texture.c',

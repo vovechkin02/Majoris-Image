@@ -14,6 +14,9 @@ namespace ImageKit {
 
     // Shared admission queue with a reserved slot for interactive work.
     internal class JobScheduler : Object {
+        internal const int FOREGROUND_PRIORITY = 0;
+        internal const int TILE_PRIORITY = 1;
+        internal const int THUMBNAIL_PRIORITY = 2;
         internal const int PRELOAD_PRIORITY = 3;
         private static JobScheduler? instance;
         private Mutex mutex;
@@ -66,7 +69,7 @@ namespace ImageKit {
 
         private void dispatch () {
             while (queue.size > 0 && active < 4) {
-                if (queue[0].priority >= 2 && active >= 3) {
+                if (queue[0].priority >= THUMBNAIL_PRIORITY && active >= 3) {
                     return;
                 }
                 var ticket = queue.remove_at (0);

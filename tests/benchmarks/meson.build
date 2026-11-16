@@ -166,3 +166,52 @@ if get_option('gtk')
     endif
   endif
 endif
+
+if glycin.found()
+  foreach workload : [
+    'small-rgb8',
+    'large-rgb8',
+    'rgba8',
+    'premultiplied-rgba8',
+    'gray8',
+    'rgb16',
+    'rgba16',
+    'linear-rgb',
+    'large-downscale',
+    'fractional-crop',
+    'concurrent',
+  ]
+    benchmark(
+      'Glycin pixel conversion (' + workload + ')',
+      glycin_pixels_test,
+      args: ['--benchmark', workload],
+      suite: 'performance',
+      timeout: 60,
+    )
+  endforeach
+endif
+
+render_options_source = configure_file(
+  input: '../../src/core/render-options.vala',
+  output: 'render-options-impl.vala',
+  copy: true,
+)
+render_error_source = configure_file(
+  input: '../../src/core/image-error.vala',
+  output: 'image-error-impl.vala',
+  copy: true,
+)
+render_options_benchmark = executable(
+  'benchmark-render-options',
+  ['benchmark-render-options.vala', render_options_source, render_error_source],
+  dependencies: [gio, json, math],
+  vala_args: render_options_vala_args,
+)
+foreach workload : ['copy', 'default-comparison']
+  benchmark(
+    'Render recipe ' + workload,
+    render_options_benchmark,
+    args: [workload],
+    suite: 'performance',
+  )
+endforeach

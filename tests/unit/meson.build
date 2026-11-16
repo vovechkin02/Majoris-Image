@@ -55,3 +55,51 @@ if get_option('gtk')
   test('HDR presentation policy', presentation_test, suite: 'unit')
   test('GDK floating-point texture color state', texture_test, suite: 'unit')
 endif
+
+if glycin.found()
+  glycin_pixels_test = executable(
+    'test-glycin-pixels',
+    ['test-glycin-pixels.c', '../../src/core/glycin-pixels.c'],
+    dependencies: [glycin, gio, math],
+    link_args: [
+      '-Wl,--wrap=gly_frame_get_width',
+      '-Wl,--wrap=gly_frame_get_height',
+      '-Wl,--wrap=gly_frame_get_stride',
+      '-Wl,--wrap=gly_frame_get_memory_format',
+      '-Wl,--wrap=gly_frame_get_buf_bytes',
+      '-Wl,--wrap=g_cancellable_set_error_if_cancelled',
+      '-Wl,--wrap=g_try_malloc_n',
+    ],
+  )
+  test('Glycin frame layouts and resampling', glycin_pixels_test, suite: 'unit')
+endif
+
+render_options_source = configure_file(
+  input: '../../src/core/render-options.vala',
+  output: 'render-options-impl.vala',
+  copy: true,
+)
+render_error_source = configure_file(
+  input: '../../src/core/image-error.vala',
+  output: 'image-error-impl.vala',
+  copy: true,
+)
+render_options_test = executable(
+  'test-render-options',
+  ['test-render-options.vala', render_options_source, render_error_source],
+  dependencies: [gio, json, math],
+  vala_args: render_options_vala_args,
+)
+test('Render recipe copying and compatibility', render_options_test, suite: 'unit')
+
+sniff_stream_source = configure_file(
+  input: '../../src/core/source-sniff-stream.vala',
+  output: 'source-sniff-stream-impl.vala',
+  copy: true,
+)
+sniff_stream_test = executable(
+  'test-source-sniff-stream',
+  ['test-source-sniff-stream.vala', sniff_stream_source],
+  dependencies: gio,
+)
+test('Source sniffing stream closure and error precedence', sniff_stream_test, suite: 'unit')

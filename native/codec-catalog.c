@@ -19,39 +19,80 @@ static const struct NativeLoader {
     unsigned capabilities;
     const char *desktop_baseline;
 } loaders[] = {
-    {"jpegload", "image/jpeg",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA, "image/jpeg"},
-    {"pngload", "image/png;image/apng",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL |
-         IMAGE_CAPABILITY_METADATA,
-     "image/png"},
-    {"tiffload", "image/tiff",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_MULTI_IMAGE | IMAGE_CAPABILITY_HIGH_DEPTH |
-         IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_REGION | IMAGE_CAPABILITY_THUMBNAIL |
-         IMAGE_CAPABILITY_METADATA,
-     "image/tiff"},
-    {"webpload", "image/webp",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION | IMAGE_CAPABILITY_THUMBNAIL |
-         IMAGE_CAPABILITY_METADATA},
-    {"gifload", "image/gif",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION | IMAGE_CAPABILITY_THUMBNAIL |
-         IMAGE_CAPABILITY_METADATA},
-    {"jp2kload", "image/jp2",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL |
-         IMAGE_CAPABILITY_METADATA},
-    {"jxlload", "image/jxl",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR |
-         IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA},
-    {"svgload", "image/svg+xml;image/svg+xml-compressed",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_REGION | IMAGE_CAPABILITY_THUMBNAIL |
-         IMAGE_CAPABILITY_VECTOR},
-    {"radload", "image/vnd.radiance",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR |
-         IMAGE_CAPABILITY_THUMBNAIL},
-    {"ppmload",
-     "image/x-portable-anymap;image/x-portable-bitmap;image/x-portable-graymap;image/"
-     "x-portable-pixmap",
-     IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL},
+    {
+        .operation = "jpegload",
+        .mimes = "image/jpeg",
+        .capabilities =
+            IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA,
+        .desktop_baseline = "image/jpeg",
+    },
+    {
+        .operation = "pngload",
+        .mimes = "image/png;image/apng",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH |
+                        IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA,
+        .desktop_baseline = "image/png",
+    },
+    {
+        .operation = "tiffload",
+        .mimes = "image/tiff",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_MULTI_IMAGE |
+                        IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_HDR |
+                        IMAGE_CAPABILITY_REGION | IMAGE_CAPABILITY_THUMBNAIL |
+                        IMAGE_CAPABILITY_METADATA,
+        .desktop_baseline = "image/tiff",
+    },
+    {
+        .operation = "webpload",
+        .mimes = "image/webp",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION |
+                        IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA,
+        .desktop_baseline = NULL,
+    },
+    {
+        .operation = "gifload",
+        .mimes = "image/gif",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_ANIMATION |
+                        IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA,
+        .desktop_baseline = NULL,
+    },
+    {
+        .operation = "jp2kload",
+        .mimes = "image/jp2",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH |
+                        IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_METADATA,
+        .desktop_baseline = NULL,
+    },
+    {
+        .operation = "jxlload",
+        .mimes = "image/jxl",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH |
+                        IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL |
+                        IMAGE_CAPABILITY_METADATA,
+        .desktop_baseline = NULL,
+    },
+    {
+        .operation = "svgload",
+        .mimes = "image/svg+xml;image/svg+xml-compressed",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_REGION |
+                        IMAGE_CAPABILITY_THUMBNAIL | IMAGE_CAPABILITY_VECTOR,
+        .desktop_baseline = NULL,
+    },
+    {
+        .operation = "radload",
+        .mimes = "image/vnd.radiance",
+        .capabilities = IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH |
+                        IMAGE_CAPABILITY_HDR | IMAGE_CAPABILITY_THUMBNAIL,
+        .desktop_baseline = NULL,
+    },
+    {
+        .operation = "ppmload",
+        .mimes = "image/x-portable-anymap;image/x-portable-bitmap;image/x-portable-graymap;image/"
+                 "x-portable-pixmap",
+        .capabilities =
+            IMAGE_CAPABILITY_STILL | IMAGE_CAPABILITY_HIGH_DEPTH | IMAGE_CAPABILITY_THUMBNAIL,
+        .desktop_baseline = NULL,
+    },
 };
 
 static void add_format_capabilities(JsonBuilder *builder, const char *mimes, unsigned capabilities)

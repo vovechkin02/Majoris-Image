@@ -1,6 +1,7 @@
 core_sources = files(
   'image-error.vala',
   'image-source.vala',
+  'source-sniff-stream.vala',
   'pixel-buffer.vala',
   'image-metadata.vala',
   'image-document.vala',
@@ -24,7 +25,12 @@ core_sources = files(
   'capability-contract.c',
 )
 core_dependencies = [gio, gee, json, math, dependency('zlib')]
-core_vala_args = ['--shared-library=libmajoris-image.so.2', '--hide-internal']
+# The shared worker contract only needs recipe copying and serialization.
+render_options_vala_args = ['--define=RENDER_OPTIONS_DEFAULT_CHECK']
+core_vala_args = [
+  '--shared-library=libmajoris-image.so.2',
+  '--hide-internal',
+] + render_options_vala_args
 if glycin.found()
   core_dependencies += [glycin]
   core_sources += files('glycin-pixels.c', '../../native/glycin-discovery.c')

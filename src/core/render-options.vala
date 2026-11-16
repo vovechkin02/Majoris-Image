@@ -96,11 +96,60 @@ namespace ImageKit {
         }
 
         public RenderOptions copy () {
+            var result = new RenderOptions ();
+            result.version = version;
+            result.turns = turns;
+            result.nearest_neighbor = nearest_neighbor;
+            result.flip_x = flip_x;
+            result.flip_y = flip_y;
+            result.angle = copy_double (angle, 0.0);
+            result.exposure = copy_double (exposure, 0.0);
+            result.contrast = copy_double (contrast, 1.0);
+            result.brightness = copy_double (brightness, 0.0);
+            result.highlights = copy_double (highlights, 0.0);
+            result.shadows = copy_double (shadows, 0.0);
+            result.whites = copy_double (whites, 0.0);
+            result.blacks = copy_double (blacks, 0.0);
+            result.saturation = copy_double (saturation, 1.0);
+            result.vibrance = copy_double (vibrance, 0.0);
+            result.temperature = copy_double (temperature, 0.0);
+            result.tint = copy_double (tint, 0.0);
+            result.clarity = copy_double (clarity, 0.0);
+            result.sharpness = copy_double (sharpness, 0.0);
+            result.vignette = copy_double (vignette, 0.0);
+            result.filter = filter ?? "original";
+            result.filter_intensity = copy_double (filter_intensity, 1.0);
+            result.crop_x = copy_double (crop_x, 0.0);
+            result.crop_y = copy_double (crop_y, 0.0);
+            result.crop_width = copy_double (crop_width, 1.0);
+            result.crop_height = copy_double (crop_height, 1.0);
+            result.monochrome = monochrome;
+            result.sharpen = sharpen;
             try {
-                return deserialize (serialize ());
-            } catch (Error e) {
+                result.validate ();
+            } catch (Error error) {
                 assert_not_reached ();
             }
+            return result;
+        }
+
+#if RENDER_OPTIONS_DEFAULT_CHECK
+        internal bool is_default () {
+            // The comparison runs on a validated copy after crop and sampling are normalized.
+            return version == 2 && turns == 0 && !nearest_neighbor && !flip_x && !flip_y &&
+                angle == 0 && exposure == 0 && contrast == 1 && brightness == 0 &&
+                highlights == 0 && shadows == 0 && whites == 0 && blacks == 0 &&
+                saturation == 1 && vibrance == 0 && temperature == 0 && tint == 0 &&
+                clarity == 0 && sharpness == 0 && vignette == 0 && filter == "original" &&
+                filter_intensity == 1 && crop_x == 0 && crop_y == 0 &&
+                crop_width == 1 && crop_height == 1 && !monochrome && !sharpen;
+        }
+#endif
+
+        private static double copy_double (double value, double default_value) {
+            // Match GParamSpecDouble's default comparison used by JSON-GLib.
+            // This restores the default for signed zero, tiny differences, and NaN.
+            return Math.fabs (value - default_value) > 1e-90 ? value : default_value;
         }
     }
 }

@@ -36,8 +36,10 @@ namespace ImageKit {
             if (size < 0 || size > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Image output edge must be at most 4096 pixels");
             }
-            int priority = preload ? JobScheduler.PRELOAD_PRIORITY : operation == "thumbnail" ? 2
-                : operation == "tile" ? 1 : 0;
+            int priority = preload ? JobScheduler.PRELOAD_PRIORITY
+                : operation == "thumbnail" ? JobScheduler.THUMBNAIL_PRIORITY
+                : operation == "tile" ? JobScheduler.TILE_PRIORITY
+                : JobScheduler.FOREGROUND_PRIORITY;
             var scheduler = JobScheduler.shared ();
             int64 admission = OperationProfile.begin ();
             try {

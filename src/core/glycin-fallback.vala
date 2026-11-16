@@ -71,9 +71,8 @@ namespace ImageKit {
             int priority = preload ? Priority.LOW : Priority.DEFAULT;
             var stream = yield source.read_async (priority, stop);
             int64 started = OperationProfile.begin ();
-            var prefix = yield stream.read_bytes_async (4096, priority, stop);
+            var prefix = yield read_sniff_stream (stream, 4096, priority, stop);
             OperationProfile.record ("source-header-read", started, prefix.get_size ());
-            yield stream.close_async (priority, stop);
             unowned uint8[] b = prefix.get_data ();
             if (b.length >= 14 && b[0] == 'q' && b[1] == 'o' && b[2] == 'i' && b[3] == 'f') {
                 return "image/qoi";
@@ -89,9 +88,8 @@ namespace ImageKit {
             OperationProfile.record ("source-query", started);
             if (source.is_native () && info.get_size () >= 26) {
                 var footer = yield source.read_async (priority, stop);
-                if (footer.can_seek () && footer.seek (-18, SeekType.END, stop)) {
-                    var signature = yield footer.read_bytes_async (18, priority, stop);
-                    yield footer.close_async (priority, stop);
+                var signature = yield read_sniff_stream (footer, 18, priority, stop, true);
+                if (signature != null) {
                     uint8[] marker = "TRUEVISION-XFILE.".data;
                     unowned uint8[] end = signature.get_data ();
                     if (end.length == 18 && Memory.cmp (end, marker, 17) == 0 && end[17] == 0) {
@@ -117,7 +115,7 @@ namespace ImageKit {
                 (request.required_capabilities & ~supported) != 0) {
                 throw original;
             }
-            OperationProfile.record ("glycin-attempt", OperationProfile.begin ());
+            OperationProfile.event ("glycin-attempt");
             var identity = yield source.stamp (stop);
             string mime = animation != null ? animation.mime : yield sniff (source.file, stop, preload);
             if (mime == "") {
@@ -176,7 +174,8 @@ namespace ImageKit {
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded color state");
                 }
 
-                yield scheduler.acquire (preload ? JobScheduler.PRELOAD_PRIORITY : 0, job);
+                yield scheduler.acquire (preload ? JobScheduler.PRELOAD_PRIORITY :
+                    JobScheduler.FOREGROUND_PRIORITY, job);
                 admitted = true;
                 var loader = new Gly.Loader (source.file);
                 loader.set_sandbox_selector (Gly.SandboxSelector.BWRAP);
@@ -305,7 +304,7 @@ namespace ImageKit {
             edits.crop_x = edits.crop_y = 0;
             edits.crop_width = edits.crop_height = 1;
             edits.nearest_neighbor = false;
-            if (edits.serialize () == new RenderOptions ().serialize ()) {
+            if (edits.is_default ()) {
                 return document.preview;
             }
 

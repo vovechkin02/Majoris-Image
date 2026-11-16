@@ -30,8 +30,7 @@ namespace ImageKit {
                 int priority = preload ? Priority.LOW : Priority.DEFAULT;
                 var stream = yield source.file.read_async (priority, stop);
                 int64 header_read = OperationProfile.begin ();
-                var bytes = yield stream.read_bytes_async (65536, priority, stop);
-                yield stream.close_async (priority, stop);
+                var bytes = yield read_sniff_stream (stream, 65536, priority, stop);
                 OperationProfile.record ("source-header-read", header_read, bytes.get_size ());
                 bool uncertain;
                 string content_type = ContentType.guess (null, bytes.get_data (), out uncertain);
@@ -203,8 +202,7 @@ namespace ImageKit {
                     throw new ImageError.INVALID_RESPONSE ("Decoder exceeded the requested image size");
                 }
                 if (identity != "" && identity != (yield source.stamp (stop))) {
-                    OperationProfile.record ("source-validation-failure",
-                        OperationProfile.begin ());
+                    OperationProfile.event ("source-validation-failure");
                     throw new ImageError.SOURCE_CHANGED ("Image source changed during decoding");
                 }
                 return new ImageDocument (source, probe, preview, request, worker, identity);

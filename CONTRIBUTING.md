@@ -9,7 +9,8 @@ external spellings and identifiers, including the version 1 worker keys
 
 On Linux, use the formatter versions from the test workflow. The pinned Meson
 formatter is a development tool. Building the project still requires Meson 1.4
-or later.
+or later. The Ruff 0.17.5 result in the Core worker verification report records
+that run. The workflow pin below is the supported contributor version.
 
 ```sh
 python3 -m pip install clang-format==21.1.8 ruff==0.15.0 meson==1.12.1
@@ -38,8 +39,7 @@ meson test -C build-diagnostic --print-errorlogs
 dpkg-buildpackage -us -uc -b
 ```
 
-The worker entry point is built into an uninstalled static archive and linked
-whole into the worker executable. The archive is private to that executable.
+Meson compiles the worker entry point directly into the worker executable.
 The versioned public libraries and introspection interfaces are built
 independently.
 

@@ -13,6 +13,34 @@ static double linear_sample(const guint8 *data, int depth)
     return value / 65535.0;
 }
 
+static inline double decode_transfer(double value, gboolean gray_gamma)
+{
+    if (gray_gamma) {
+        return pow(value, 2.2);
+    }
+    if (value <= .04045) {
+        return value / 12.92;
+    }
+    return pow((value + .055) / 1.055, 2.4);
+}
+
+static const double *transfer_table(gboolean gray_gamma)
+{
+    static double srgb[256];
+    static double gray[256];
+    static gsize srgb_ready, gray_ready;
+    double *table = gray_gamma ? gray : srgb;
+    gsize *ready = gray_gamma ? &gray_ready : &srgb_ready;
+
+    if (g_once_init_enter(ready)) {
+        for (unsigned i = 0; i < 256; i++) {
+            table[i] = decode_transfer(i / 255.0, gray_gamma);
+        }
+        g_once_init_leave(ready, 1);
+    }
+    return table;
+}
+
 static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top,
                               double region_width, double region_height, gboolean nearest,
                               gboolean gray_icc, gboolean linear_rgb, int *width, int *height,
@@ -112,6 +140,10 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
         return NULL;
     }
     gboolean premultiplied = gly_memory_format_is_premultiplied(format);
+    gboolean gray_gamma = gray_icc && r == g;
+    // Unpremultiplication produces values between table entries.
+    const double *table =
+        *depth == 8 && !premultiplied && !linear_rgb ? transfer_table(gray_gamma) : NULL;
     int channels[] = {r, g, b};
     double dx = (double)crop_w / *width, dy = (double)crop_h / *height;
     // Integrate the source-pixel area of each destination sample. This keeps
@@ -145,16 +177,19 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
                         continue;
                     }
                     double weight = area * alpha;
-                    for (int c = 0; c < 3; c++) {
-                        double v = linear_sample(src + channels[c] * component, *depth);
-                        if (premultiplied) {
-                            v = MIN(v / alpha, 1.0);
+                    if (table != NULL) {
+                        for (int c = 0; c < 3; c++) {
+                            sum[c] += weight * table[src[channels[c]]];
                         }
-                        double linear = linear_rgb           ? v
-                                        : gray_icc && r == g ? pow(v, 2.2)
-                                        : v <= .04045        ? v / 12.92
-                                                             : pow((v + .055) / 1.055, 2.4);
-                        sum[c] += weight * linear;
+                    } else {
+                        for (int c = 0; c < 3; c++) {
+                            double value = linear_sample(src + channels[c] * component, *depth);
+                            if (premultiplied) {
+                                value = MIN(value / alpha, 1.0);
+                            }
+                            double linear = linear_rgb ? value : decode_transfer(value, gray_gamma);
+                            sum[c] += weight * linear;
+                        }
                     }
                     sum[3] += weight;
                 }
@@ -182,7 +217,8 @@ static void pixel_job_free(PixelJob *job)
     g_free(job);
 }
 
-static void convert_thread(GTask *task, gpointer source, gpointer data, GCancellable *stop)
+static void convert_thread(GTask *task, gpointer source G_GNUC_UNUSED, gpointer data,
+                           GCancellable *stop)
 {
     PixelJob *job = data;
     GError *error = NULL;

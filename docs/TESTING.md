@@ -136,6 +136,26 @@ counted by their launch records. A missing RSS sample is reported as
 counts. CPU time includes waited child processes. The warm result measures
 repeated verified preload-cache hits separately from setup.
 
+The Glycin conversion benchmarks use deterministic buffers in each Glycin
+memory layout. They call the production asynchronous converter without starting
+a loader. Each workload launches a fresh process, then repeats conversions in
+that process. Each CSV row contains the workload, cold or warm status, wall
+and process CPU time in microseconds, peak RSS in KiB, output dimensions,
+source pixels per second, and SHA-256 of the complete RGBA32F output. The
+frame fixture substitutes Glycin's accessors because Glycin 1 has no public
+frame constructor. The decoder-selection integration test and the public API
+`fallback` workload exercise installed loaders. The standalone public API runner
+needs `--fault-worker BUILD/tests/security/worker-fault` for the QOI fallback
+workload on hosts whose native stack decodes QOI.
+
+```sh
+meson test -C build --benchmark --verbose 'Glycin pixel conversion (large-rgb8)'
+meson test -C build --benchmark --verbose 'Render recipe copy' 'Render recipe default-comparison'
+```
+
+See the [render options and Glycin verification report](verification-render-glycin.md)
+for the before-and-after measurements.
+
 For a standalone baseline, pass the built benchmark and worker to
 `tests/benchmarks/run_benchmarks.py`, `--output result.json`, and one or more
 `MODE=FIXTURE` arguments. Pass `--baseline previous.json` to compare workloads

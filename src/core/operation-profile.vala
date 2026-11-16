@@ -8,9 +8,19 @@ namespace ImageKit {
 
         internal static void record (string stage, int64 started, uint64 count = 1) {
             if (started != 0) {
-                stderr.printf ("ImageKit-profile %s %" + int64.FORMAT + " %" + uint64.FORMAT + "\n",
-                    stage, get_monotonic_time () - started, count);
+                emit (stage, get_monotonic_time () - started, count);
             }
+        }
+
+        internal static void event (string stage) {
+            if (Environment.get_variable ("MAJORIS_IMAGE_PROFILE") == "1") {
+                emit (stage, 0, 1);
+            }
+        }
+
+        private static void emit (string stage, int64 elapsed, uint64 count) {
+            stderr.printf ("ImageKit-profile %s %" + int64.FORMAT + " %" + uint64.FORMAT + "\n",
+                stage, elapsed, count);
         }
     }
 }

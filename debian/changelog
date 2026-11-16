@@ -2,6 +2,8 @@ majoris-image (2.0.0) unstable; urgency=medium
 
   * Move the public API to ImageKit and bump both library SONAMEs to 2.
   * Standardize source identifiers and developer-facing text to American English.
+  * Name the runtime packages for ABI 2 and handle upgrades from packages
+    that previously shipped ABI 2 under the ABI 1 package names.
 
  -- Majoris contributors <packages@majoris.invalid>  Sun, 15 Nov 2026 19:00:00 +1100
 

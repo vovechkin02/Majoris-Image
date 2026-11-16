@@ -33,6 +33,24 @@ library requires the worker, Bubblewrap, and `prlimit`. Debian supplies
 `prlimit` through its Essential util-linux package.
 
 Build the five stock Debian 13 packages with `dpkg-buildpackage -us -uc -b`.
+
+The ABI 2 runtimes are `libmajoris-image2` and `libmajoris-image-gtk4-2`.
+Install these with the matching `libmajoris-image-dev`, `majoris-image-worker`,
+and `majoris-image-thumbnailer` packages. Reinstall the development package
+from this build if an earlier 2.0.0 build used the old runtime package names.
+The new runtimes replace the overlapping files in old-name 2.0.0 packages.
+
+ABI 1 applications need the original ABI 1 runtimes. Their SONAMEs and
+typelibs use distinct paths, but the ABI 1 Core package pins the single
+worker package to its matching version. A normal installation therefore
+requires a coordinated upgrade of ABI 1 consumers and the worker. For
+applications that must still use ABI 1, keep the matching package set in
+a separate installation.
+
+Publishing Debian packages is blocked until the Majoris release owner
+supplies a monitored maintainer address to replace
+`packages@majoris.invalid` in `debian/control` and the current changelog
+entry.
 That package configuration uses Debian's runtime codecs, including libavif.
 Add `-Ppkg.majoris-image.nosequence` for a still-codec build without that dependency.
 Libheif track playback also requires its detected visual-track and loop-control APIs. For Majoris gain-map

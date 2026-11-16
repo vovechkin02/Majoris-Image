@@ -13,19 +13,23 @@ Build-Depends: debhelper-compat (= 13), meson (>= 1.4), ninja-build, valac, pkgc
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 
-Package: libmajoris-image-1
+Package: libmajoris-image2
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}, majoris-image-worker (= ${binary:Version})
+Breaks: libmajoris-image-1 (>= 2.0.0~)
+Replaces: libmajoris-image-1 (>= 2.0.0~)
 Recommends: glycin-loaders
 Description: shared sandboxed image processing library
  Majoris Image provides asynchronous image opening, metadata, floating-point
  image data, region rendering, export and headless PNG thumbnail generation.
 
-Package: libmajoris-image-gtk4-1
+Package: libmajoris-image-gtk4-2
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Breaks: libmajoris-image-gtk4-1 (>= 2.0.0~)
+Replaces: libmajoris-image-gtk4-1 (>= 2.0.0~)
 Recommends: glycin-loaders
 Description: reusable Majoris Image GTK4 widget
  ImageKitView presents images with zoom, pan, rotation, page navigation
@@ -54,8 +58,8 @@ Package: libmajoris-image-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: ${misc:Depends}, libmajoris-image-1 (= ${binary:Version}),
- libmajoris-image-gtk4-1 (= ${binary:Version}), libglib2.0-dev, libgtk-4-dev (>= 4.16)
+Depends: ${misc:Depends}, libmajoris-image2 (= ${binary:Version}),
+ libmajoris-image-gtk4-2 (= ${binary:Version}), libglib2.0-dev, libgtk-4-dev (>= 4.16)
 Description: Majoris Image public development interfaces
  C headers, Vala bindings, pkg-config metadata and examples for the Majoris
  Image core and GTK4 libraries.

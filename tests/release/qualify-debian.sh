@@ -19,16 +19,16 @@ tar -xzf "$work/source.tar.gz" -C "$work/source"
     cd "$work/source"
     dpkg-buildpackage -Ppkg.majoris-image.gainmap -us -uc -b
 )
-set -- "$work"/libmajoris-image-1_*.deb "$work"/libmajoris-image-gtk4-1_*.deb \
+set -- "$work"/libmajoris-image2_*.deb "$work"/libmajoris-image-gtk4-2_*.deb \
     "$work"/libmajoris-image-dev_*.deb "$work"/majoris-image-worker_*.deb \
     "$work"/majoris-image-thumbnailer_*.deb
-sudo apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-1 \
-    majoris-image-thumbnailer libmajoris-image-1 majoris-image-worker
+sudo apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-2 \
+    majoris-image-thumbnailer libmajoris-image2 majoris-image-worker
 sudo apt-get install -y "$@"
 meson compile -C "$build"
 python3 tests/release/installed_consumers.py "$build/tests/large.tiff"
-sudo apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-1 \
-    majoris-image-thumbnailer libmajoris-image-1 majoris-image-worker
+sudo apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-2 \
+    majoris-image-thumbnailer libmajoris-image2 majoris-image-worker
 test ! -e /usr/libexec/majoris-image-worker
 sudo apt-get install -y "$@"
 python3 tests/release/installed_consumers.py --gainmap

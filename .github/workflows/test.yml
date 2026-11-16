@@ -80,15 +80,15 @@ jobs:
             cd "$work/source"
             runuser -u nobody -- dpkg-buildpackage -us -uc -b
           )
-          set -- "$work"/libmajoris-image-1_*.deb "$work"/libmajoris-image-gtk4-1_*.deb \
+          set -- "$work"/libmajoris-image2_*.deb "$work"/libmajoris-image-gtk4-2_*.deb \
             "$work"/libmajoris-image-dev_*.deb "$work"/majoris-image-worker_*.deb \
             "$work"/majoris-image-thumbnailer_*.deb
           apt-get install -y "$@"
           fixture=$(find "$work/source" -path '*/tests/large.tiff' -print -quit)
           test -n "$fixture"
           runuser -u nobody -- python3 tests/release/installed_consumers.py "$fixture"
-          apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-1 \
-            majoris-image-thumbnailer libmajoris-image-1 majoris-image-worker
+          apt-get remove -y libmajoris-image-dev libmajoris-image-gtk4-2 \
+            majoris-image-thumbnailer libmajoris-image2 majoris-image-worker
           test ! -e /usr/libexec/majoris-image-worker
           apt-get install -y "$@"
           runuser -u nobody -- python3 tests/release/installed_consumers.py "$fixture"

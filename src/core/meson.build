@@ -10,6 +10,7 @@ core_sources = files(
   'decoder-registry.vala',
   'glycin-fallback.vala',
   'encoder-registry.vala',
+  'export-transfer.c',
   'render-options.vala',
   'export-options.vala',
   'thumbnail-service.vala',

@@ -69,6 +69,18 @@ crop, exposure and color adjustments. `EncoderRegistry.encode()` writes a
 completed export to a separate destination using the chosen container,
 quality, bit depth, color profile and metadata policy.
 
+The encoded worker output must be a nonempty regular file of at most 256 MiB.
+For a native destination, Core copies it into private staging on the destination
+filesystem and publishes it with a rename after validation and successful close.
+Cancellation before publication discards staging. A cancellation observed after
+the rename leaves the successful export in place. A destination symlink is
+followed to its referent. Atomic replacement updates the destination directory
+entry and leaves any other hard links referring to the original inode.
+
+For other `GFile` backends, Core validates a complete in-memory payload before
+requesting the backend's normal GIO replacement. The backend determines atomicity
+and whether a canceled replacement reached the destination.
+
 Use `DecoderRegistry.inspect()` for the actual source format and
 capabilities. `installed_codecs()` returns the runtime libvips operation
 catalog. Its suffixes are discovery information. Decoder availability for

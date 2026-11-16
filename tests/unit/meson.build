@@ -103,3 +103,10 @@ sniff_stream_test = executable(
   dependencies: gio,
 )
 test('Source sniffing stream closure and error precedence', sniff_stream_test, suite: 'unit')
+export_transfer_test = executable(
+  'test-export-transfer',
+  ['test-export-transfer.c', '../../src/core/export-transfer.c'],
+  dependencies: core_api,
+  link_args: ['-Wl,--wrap=read,--wrap=write,--wrap=fsync,--wrap=g_close,--wrap=renameat'],
+)
+test('Encoded export transfer validation and publication', export_transfer_test, suite: 'unit')

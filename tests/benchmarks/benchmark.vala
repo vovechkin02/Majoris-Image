@@ -35,6 +35,23 @@ private void record_phase (string stage, int64 started) {
         stage, get_monotonic_time () - started);
 }
 
+private async void measure_export (string format, ImageSource source) throws Error {
+    var options = new ExportOptions ();
+    options.format = format;
+    options.lossless = true;
+    var transform = new RenderOptions ();
+    // The shared large TIFF fixture contributes a 2500 × 1250 region.
+    transform.crop_width = 0.125;
+    transform.crop_height = 0.125;
+    var destination = File.new_for_path (
+        Path.build_filename (Environment.get_tmp_dir (), "benchmark-export"));
+    // Exercise replacement of an existing file in both builds.
+    destination.replace_contents ("existing".data, null, false, FileCreateFlags.NONE, null);
+    int64 started = get_monotonic_time ();
+    yield new EncoderRegistry ().encode (source, destination, options, transform);
+    record_phase ("workload", started);
+}
+
 private bool job_file_exists (string filename, int minimum_size) throws Error {
     string temporary_path = Environment.get_tmp_dir ();
     var temporary = Dir.open (temporary_path);
@@ -149,6 +166,10 @@ private async void measure_preloading (string mode, ImageSource source,
 }
 
 private async void measure (string mode, ImageSource source) throws Error {
+    if (mode.has_prefix ("export-")) {
+        yield measure_export (mode.substring ("export-".length), source);
+        return;
+    }
     int64 began = get_monotonic_time ();
     var registry = new DecoderRegistry ();
     var options = new DecodeOptions ();

@@ -240,6 +240,15 @@ def measure(
         output = log.read()
         if process.returncode:
             raise RuntimeError(f"{operation} failed ({process.returncode}): {output}")
+    exported = {}
+    if operation.startswith(("export-", "transfer-")):
+        destination = staging / "benchmark-export"
+        with destination.open("rb") as output_file:
+            exported = {
+                "bytes_transferred": destination.stat().st_size,
+                "output_sha256": hashlib.file_digest(output_file, "sha256").hexdigest(),
+            }
+        destination.unlink()
     if any(staging.iterdir()):
         raise RuntimeError(f"{operation} left temporary files or job directories")
     shutil.rmtree(cache)
@@ -273,11 +282,13 @@ def measure(
         "wall_seconds": wall,
         "warm_open_seconds": measured,
         "cpu_seconds_process_and_waited_children": usage.ru_utime + usage.ru_stime,
+        "wait4_peak_rss_kib": usage.ru_maxrss,
         "sampled_host_peak_kib": host_peak or None,
         "sampled_worker_peak_kib": worker_peak or None,
         "worker_launches": worker_launches,
         "sampled_concurrent_workers": concurrency,
         "sampled_temp_and_cache_bytes": temporary_bytes,
+        **exported,
     }
 
 

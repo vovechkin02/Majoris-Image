@@ -13,6 +13,7 @@ CORE_TESTS = {
     "Thumbnail PNG decoding and validation",
     "Job scheduling and priorities",
     "Headless Core API",
+    "Encoded export transfer validation and publication",
     "Decoder selection and composited APNG frames",
     "Desktop thumbnail registration and output",
     "Cross-process thumbnail publication",

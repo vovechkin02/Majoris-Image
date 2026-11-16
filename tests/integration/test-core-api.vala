@@ -278,11 +278,31 @@ async void verify_headless_core_api (string directory, string large_path) throws
     string temp = DirUtils.make_tmp ("majoris-export-test-XXXXXX");
     var target = File.new_for_path (Path.build_filename (temp, "export.png"));
     try {
+        var encoder = new EncoderRegistry ();
+        try {
+            yield encoder.encode (source, source.file, new ExportOptions ());
+            assert_not_reached ();
+        } catch (IOError.INVALID_ARGUMENT error) {
+            assert (error.message.contains ("separate destination"));
+        }
         var transform = new RenderOptions ();
         transform.turns = 1;
-        yield new EncoderRegistry ().encode (source, target, new ExportOptions (), transform);
+        yield encoder.encode (source, target, new ExportOptions (), transform);
         var exported = yield registry.open (new ImageSource (target));
         assert (exported.width == 16 && exported.height == 24 && exported.bit_depth == 16);
+
+        var tiff = new ExportOptions ();
+        tiff.format = "tiff";
+        tiff.metadata = "remove-all";
+        yield encoder.encode (source, target, tiff, transform);
+        var replacement = yield registry.open (new ImageSource (target));
+        assert (replacement.mime_type == "image/tiff");
+        assert (replacement.width == exported.width && replacement.height == exported.height);
+        assert (replacement.bit_depth == exported.bit_depth);
+        for (int channel = 0; channel < 3; channel++) {
+            assert (Math.fabs (sample (replacement.preview, 5, 7, channel) -
+                sample (exported.preview, 5, 7, channel)) < 0.001);
+        }
     } finally {
         FileUtils.unlink (target.get_path ());
         DirUtils.remove (temp);

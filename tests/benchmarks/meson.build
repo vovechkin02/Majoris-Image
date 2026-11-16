@@ -5,6 +5,9 @@ native_benchmark = executable(
   dependencies: native_api,
 )
 workloads = [
+  'export-png=' + (fixture_build_dir / 'large.tiff'),
+  'export-jxl=' + (fixture_build_dir / 'large.tiff'),
+  'export-tiff=' + (fixture_build_dir / 'large.tiff'),
   'open=' + (fixture_dir / 'rgb16.png'),
   'jpeg=' + (fixture_build_dir / 'navigation.jpg'),
   'large-tiff=' + (fixture_build_dir / 'large.tiff'),
@@ -38,6 +41,21 @@ workloads = [
     fixture_build_dir / 'animated.gif'
   ),
 ]
+
+transfer_benchmark = executable(
+  'benchmark-export-transfer',
+  ['benchmark-export-transfer.vala', '../../src/core/export-transfer.c'],
+  dependencies: core_api,
+)
+benchmark(
+  'Encoded export transfer memory and throughput',
+  python,
+  args: isolated + [
+    python.full_path(), '-B', files('benchmark_export_transfer.py'), transfer_benchmark,
+  ],
+  suite: 'performance',
+  timeout: 900,
+)
 if get_option('glycin').enabled()
   workloads += ['fallback=' + (fixture_build_dir / 'fallback.qoi')]
 endif

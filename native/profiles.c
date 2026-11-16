@@ -71,7 +71,7 @@ VipsImage *image_codec_convert_profile(VipsImage *linear, const char *profile_na
         if (vips_image_get_blob(linear, "majoris-image-source-icc", &source_profile, &source_size)) goto fail;
         profile = cmsOpenProfileFromMem(source_profile, source_size);
     } else profile = make_profile(profile_name);
-    if (!profile) { vips_error("Photos", "%s", "Cannot open the requested color profile"); goto fail; }
+    if (!profile) { vips_error("ImageKit", "%s", "Cannot open the requested color profile"); goto fail; }
     cmsUInt32Number size = 0; cmsSaveProfileToMem(profile, NULL, &size); owned = g_malloc(size);
     if (!cmsSaveProfileToMem(profile, owned, &size)) goto fail;
     char *path = NULL; int fd = g_file_open_tmp("majoris-image-profile-XXXXXX", &path, error);

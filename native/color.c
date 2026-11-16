@@ -69,7 +69,7 @@ VipsImage *image_codec_to_linear(VipsImage *image, GError **error) {
         rgb = g_object_ref(image);
     } else if (vips_image_get_typeof(image, VIPS_META_ICC_NAME) && (image->BandFmt == VIPS_FORMAT_FLOAT || image->BandFmt == VIPS_FORMAT_DOUBLE) && (image->Bands == 3 || image->Bands == 4)) {
         transform = float_profile_transform(image);
-        if (!transform) { vips_error("Photos","%s","Invalid floating-point RGB profile"); goto fail; }
+        if (!transform) { vips_error("ImageKit","%s","Invalid floating-point RGB profile"); goto fail; }
         rgb = g_object_ref(image);
     } else {
         g_autoptr(VipsImage) color = NULL;
@@ -97,7 +97,7 @@ VipsImage *image_codec_to_linear(VipsImage *image, GError **error) {
         }
     }
     if (vips_cast(rgb, &floating, VIPS_FORMAT_FLOAT, NULL)) goto fail;
-    if (floating->Bands != 3 && floating->Bands != 4) { vips_error("Photos", "%s", "Expected RGB or RGBA color data"); goto fail; }
+    if (floating->Bands != 3 && floating->Bands != 4) { vips_error("ImageKit", "%s", "Expected RGB or RGBA color data"); goto fail; }
     out = vips_image_new();
     if (vips_image_pipelinev(out, VIPS_DEMAND_STYLE_THINSTRIP, floating, NULL)) goto fail;
     out->BandFmt = VIPS_FORMAT_FLOAT; out->Type = VIPS_INTERPRETATION_scRGB;

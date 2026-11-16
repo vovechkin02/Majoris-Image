@@ -42,8 +42,8 @@ jobs:
           if [ "$VARIANT" = sanitizer ]; then
             ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
               runuser -u nobody -- meson test -C "$build" --print-errorlogs \
-              'OpenEXR regions' 'Imaging references' 'thumbnail PNG decode and validation' \
-              'native parser fuzz smoke' 'worker protocol properties'
+              'OpenEXR region decoding' 'Native image processing references' 'Thumbnail PNG decoding and validation' \
+              'Native parser fuzz smoke' 'Worker protocol round trips and validation'
           else
             runuser -u nobody -- python3 tests/release/qualify.py "$build" --variant "$VARIANT"
           fi

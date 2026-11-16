@@ -110,7 +110,7 @@ def check_gtk(env: dict[str, str], large: Path) -> None:
         "valac",
         "--pkg",
         GTK_PACKAGE,
-        RELEASE / "installed-viewer.vala",
+        RELEASE / "test-installed-viewer.vala",
         "-o",
         "view-check",
     )
@@ -220,7 +220,7 @@ def check_gainmap(env: dict[str, str]) -> None:
         "valac",
         "--pkg",
         CORE_PACKAGE,
-        RELEASE / "installed-gainmap.vala",
+        RELEASE / "test-installed-gainmap.vala",
         "-o",
         "gainmap",
     )

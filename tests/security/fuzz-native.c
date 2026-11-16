@@ -11,8 +11,9 @@ gboolean image_thumbnail_valid (GBytes *bytes, int edge);
 int
 LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
 {
-    if (size < 2 || size > 512 * 1024)
+    if (size < 2 || size > 512 * 1024) {
         return 0;
+    }
     unsigned parser = data[0] % 5;
     data++;
     size--;
@@ -31,11 +32,13 @@ LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
         g_autofree char *path = NULL;
         g_autoptr (GError) error = NULL;
         int fd = g_file_open_tmp ("imagekit-fuzz-XXXXXX", &path, &error);
-        if (fd < 0)
+        if (fd < 0) {
             g_error ("Cannot create fuzz input: %s", error->message);
+        }
         close (fd);
-        if (!g_file_set_contents (path, (const char *)data, size, &error))
+        if (!g_file_set_contents (path, (const char *)data, size, &error)) {
             g_error ("Cannot write fuzz input: %s", error->message);
+        }
         VipsImage *image = parser == 4 ? image_codec_read_pixels (path, &error)
                                        : image_codec_sequence (path, 1, parser == 3, 0, &error);
         if (image) {
@@ -43,8 +46,9 @@ LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
             g_assert_cmpint (image->Ysize, >, 0);
             g_object_unref (image);
         }
-        if (g_unlink (path))
+        if (g_unlink (path)) {
             g_error ("Cannot remove fuzz input");
+        }
     }
     vips_error_clear ();
     return 0;
@@ -53,8 +57,9 @@ LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
 int
 LLVMFuzzerInitialize (int *argc, char ***argv)
 {
-    if (VIPS_INIT ((*argv)[0]))
+    if (VIPS_INIT ((*argv)[0])) {
         return 1;
+    }
     vips_cache_set_max (0);
     vips_concurrency_set (2);
     return 0;
@@ -67,8 +72,9 @@ mutate_fixture (const char *path, guint8 selector, GRand *random)
     g_autofree char *data = NULL;
     gsize size = 0;
     g_autoptr (GError) error = NULL;
-    if (!g_file_get_contents (path, &data, &size, &error))
+    if (!g_file_get_contents (path, &data, &size, &error)) {
         g_error ("%s", error->message);
+    }
     g_assert_cmpuint (size, >, 0);
     g_assert_cmpuint (size, <, 512 * 1024);
     g_autofree guint8 *input = g_malloc (size + 1);
@@ -76,12 +82,14 @@ mutate_fixture (const char *path, guint8 selector, GRand *random)
     for (unsigned trial = 0; trial < 48; trial++) {
         memcpy (input + 1, data, size);
         gsize length = size + 1;
-        if (trial % 2)
+        if (trial % 2) {
             input[1 + g_rand_int_range (random, 0, size)] ^= 1 << (trial % 8);
-        else if (trial)
+        } else if (trial) {
             length = g_rand_int_range (random, 2, size + 1);
-        if (g_getenv ("IMAGEKIT_TEST_TRACE"))
+        }
+        if (g_getenv ("IMAGEKIT_TEST_TRACE")) {
             g_printerr ("%s parser %u trial %u length %zu\n", path, selector, trial, length);
+        }
         LLVMFuzzerTestOneInput (input, length);
     }
 }
@@ -89,8 +97,9 @@ mutate_fixture (const char *path, guint8 selector, GRand *random)
 int
 main (int argc, char **argv)
 {
-    if (argc != 4 || LLVMFuzzerInitialize (&argc, &argv))
+    if (argc != 4 || LLVMFuzzerInitialize (&argc, &argv)) {
         return 2;
+    }
     guint32 seed = 0x8f64ac91;
     g_autoptr (GRand) random = g_rand_new_with_seed (seed);
     g_printerr ("Native parser smoke seed %#x\n", seed);

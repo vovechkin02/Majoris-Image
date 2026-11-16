@@ -164,7 +164,7 @@ def main() -> int:
             check=False,
         ).stdout.strip()
         or None,
-        "environment": dict(system=platform.platform(), cpu=platform.machine()),
+        "environment": {"system": platform.platform(), "cpu": platform.machine()},
         "build_options": {
             o["name"]: o["value"]
             for o in options

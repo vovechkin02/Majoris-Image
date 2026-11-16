@@ -1,6 +1,6 @@
 using ImageKit;
 
-private async void verify (ImageView view, File fixture, File corrupt) throws Error {
+private async void verify_installed_viewer (ImageView view, File fixture, File corrupt) throws Error {
     yield view.load_file (fixture);
     assert (view.state == ViewState.READY && view.document.source.file.equal (fixture));
     assert (view.image_width == 24 && view.image_height == 16);
@@ -16,8 +16,12 @@ private async void verify (ImageView view, File fixture, File corrupt) throws Er
 }
 
 int main (string[] args) {
-    if (args.length != 3 || !Gtk.init_check ()) return 2;
+    if (args.length != 3 || !Gtk.init_check ()) {
+        return 2;
+    }
     var window = new Gtk.Window ();
+    window.title = "Installed GTK viewer test";
+    window.set_default_size (640, 480);
     var view = new ImageView ();
     window.child = view;
     window.present ();
@@ -28,10 +32,14 @@ int main (string[] args) {
         loop.quit ();
         return Source.REMOVE;
     });
-    verify.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]), (obj, result) => {
+    verify_installed_viewer.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]), (obj, result) => {
         Source.remove (watchdog);
-        try { verify.end (result); status = 0; }
-        catch (Error error) { stderr.printf ("%s\n", error.message); }
+        try {
+            verify_installed_viewer.end (result);
+            status = 0;
+        } catch (Error error) {
+            stderr.printf ("%s\n", error.message);
+        }
         loop.quit ();
     });
     loop.run ();

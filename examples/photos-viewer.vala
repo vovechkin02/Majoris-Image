@@ -1,6 +1,6 @@
 using ImageKit;
 
-private async void exercise (ImageView view, File large, File next, File destination, File? raw, string[] extra) throws Error {
+private async void verify_photos_export_workflow (ImageView view, File large, File next, File destination, File? raw, string[] extra) throws Error {
     var registry = new DecoderRegistry ();
     var options = new DecodeOptions ();
     options.preview_size = 800;
@@ -18,8 +18,9 @@ private async void exercise (ImageView view, File large, File next, File destina
             view.set_document (first);
         } else if (path.has_suffix (".qoi")) {
             var mimes = yield registry.thumbnail_mime_types ();
-            if ("image/qoi" in mimes || "image/x-qoi" in mimes)
+            if ("image/qoi" in mimes || "image/x-qoi" in mimes) {
                 neighbors += new ImageSource (File.new_for_path (path));
+            }
         }
     }
     yield navigation.preload (neighbors, options);
@@ -52,10 +53,14 @@ private async void exercise (ImageView view, File large, File next, File destina
     view.presentation_policy = PresentationPolicy.SDR;
     var sdr = yield view.document.render_region (0, 0, view.document.width, view.document.height, 64, true);
     assert (sdr.width > 0);
-    if (view.document.page_count > 1) yield view.set_page (1);
+    if (view.document.page_count > 1) {
+        yield view.set_page (1);
+    }
 
     foreach (var path in extra) {
-        if (path.has_suffix (".jpg") || path.has_suffix (".qoi")) continue;
+        if (path.has_suffix (".jpg") || path.has_suffix (".qoi")) {
+            continue;
+        }
         yield view.load_file (File.new_for_path (path), options);
         if (view.animated) {
             yield view.seek_frame (1);
@@ -85,17 +90,18 @@ private async void exercise (ImageView view, File large, File next, File destina
         foreach (int x in new int[] { 0, exported.width / 2, exported.width - 1 }) {
             for (int band = 0; band < 4; band++) {
                 // The PNG export quantizes the linear SDR result to 16-bit sRGB.
-                double wanted = sample (expected, x, y, band).clamp (0, 1);
-                double observed = sample (actual, x, y, band);
-                if (!observed.is_finite () || !wanted.is_finite () || Math.fabs (observed - wanted) >= 0.002)
+                double wanted = sample_float_channel (expected, x, y, band).clamp (0, 1);
+                double observed = sample_float_channel (actual, x, y, band);
+                if (!observed.is_finite () || !wanted.is_finite () || Math.fabs (observed - wanted) >= 0.002) {
                     throw new ImageError.EXPORT ("PNG pixel (%d,%d) channel %d: expected %.6f, got %.6f",
                         x, y, band, wanted, observed);
+                }
             }
         }
     }
 }
 
-private float sample (PixelBuffer buffer, int x, int y, int band) {
+private float sample_float_channel (PixelBuffer buffer, int x, int y, int band) {
     unowned uint8[] bytes = buffer.bytes.get_data ();
     float value = 0;
     Memory.copy (&value, &bytes[y * buffer.stride + (x * 4 + band) * 4], sizeof (float));
@@ -103,22 +109,32 @@ private float sample (PixelBuffer buffer, int x, int y, int band) {
 }
 
 int main (string[] args) {
-    if (args.length < 4) return 2;
-    if (!Gtk.init_check ()) return 77;
+    if (args.length < 4) {
+        return 2;
+    }
+    if (!Gtk.init_check ()) {
+        return 77;
+    }
     ImageView.register_type ();
     var builder = new Gtk.Builder.from_string (
         "<interface><object class='ImageKitView' id='image'/></interface>", -1);
     var view = (ImageView) builder.get_object ("image");
     var window = new Gtk.Window ();
+    window.title = "Photos viewer";
+    window.set_default_size (960, 720);
     window.child = view;
     window.present ();
     var loop = new MainLoop ();
     int status = 0;
-    exercise.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]),
+    verify_photos_export_workflow.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]),
         File.new_for_path (args[3]), args.length > 4 && args[4] != "" ? File.new_for_path (args[4]) : null,
         args.length > 5 ? args[5:args.length] : new string[0], (obj, result) => {
-        try { exercise.end (result); }
-        catch (Error error) { stderr.printf ("%s\n", error.message); status = 1; }
+        try {
+            verify_photos_export_workflow.end (result);
+        } catch (Error error) {
+            stderr.printf ("%s\n", error.message);
+            status = 1;
+        }
         loop.quit ();
     });
     loop.run ();

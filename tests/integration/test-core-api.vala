@@ -1,6 +1,6 @@
 using ImageKit;
 
-async void verify (string directory, string large_path) throws Error {
+async void verify_headless_core_api (string directory, string large_path) throws Error {
     var recipe = RenderOptions.deserialize ("{\"version\":2,\"nearest-neighbour\":true}");
     assert (recipe.nearest_neighbor);
     string saved = recipe.serialize ();
@@ -29,9 +29,12 @@ async void verify (string directory, string large_path) throws Error {
     var active_reader = yield expired.read_async ();
     var output = yield new ThumbnailService ().generate (source, 64);
     int64 eviction_deadline = get_monotonic_time () + 5 * TimeSpan.SECOND;
-    while (expired.query_exists () && get_monotonic_time () < eviction_deadline)
+    while (expired.query_exists () && get_monotonic_time () < eviction_deadline) {
         yield wait_for_eviction ();
-    if (expired.query_exists ()) throw new IOError.TIMED_OUT ("Expired thumbnail was not evicted");
+    }
+    if (expired.query_exists ()) {
+        throw new IOError.TIMED_OUT ("Expired thumbnail was not evicted");
+    }
     uint8[] saved_pixels = new uint8[original_png.length];
     size_t read;
     assert (active_reader.read_all (saved_pixels, out read, null) && read == original_png.length);
@@ -88,12 +91,16 @@ async void verify (string directory, string large_path) throws Error {
     try {
         yield registry.open (source, null, cancel);
         assert_not_reached ();
-    } catch (IOError.CANCELLED e) { }
+    } catch (IOError.CANCELLED e) {
+        // Cancellation is the expected result for this request.
+    }
     var corrupt = new ImageSource (File.new_for_path (Path.build_filename (directory, "corrupt.bin")));
     try {
         yield registry.open (corrupt);
         assert_not_reached ();
-    } catch (ImageError.UNSUPPORTED e) { }
+    } catch (ImageError.UNSUPPORTED e) {
+        // The fixture or requested operation may be unsupported.
+    }
 
     var preloader = new PreloadManager.with_registry (registry);
     var smaller = new DecodeOptions ();
@@ -155,7 +162,10 @@ async void verify (string directory, string large_path) throws Error {
 }
 
 private async void wait_for_eviction () {
-    Timeout.add (10, () => { wait_for_eviction.callback (); return Source.REMOVE; });
+    Timeout.add (10, () => {
+        wait_for_eviction.callback ();
+        return Source.REMOVE;
+    });
     yield;
 }
 
@@ -174,9 +184,13 @@ private double luminance (PixelBuffer pixels, int x, int y) {
 int main (string[] args) {
     var loop = new MainLoop ();
     int result = 0;
-    verify.begin (args[1], args[2], (obj, response) => {
-        try { verify.end (response); }
-        catch (Error e) { stderr.printf ("%s\n", e.message); result = 1; }
+    verify_headless_core_api.begin (args[1], args[2], (obj, response) => {
+        try {
+            verify_headless_core_api.end (response);
+        } catch (Error e) {
+            stderr.printf ("%s\n", e.message);
+            result = 1;
+        }
         loop.quit ();
     });
     loop.run ();

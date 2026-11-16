@@ -13,18 +13,20 @@ append_chunk (GByteArray *png, const char *type, const guint8 *data, guint size)
 {
     guint32 length = GUINT32_TO_BE (size);
     guint32 crc = crc32 (0, (const guint8 *)type, 4);
-    if (size)
+    if (size) {
         crc = crc32 (crc, data, size);
+    }
     crc = GUINT32_TO_BE (crc);
     g_byte_array_append (png, (guint8 *)&length, 4);
     g_byte_array_append (png, (const guint8 *)type, 4);
-    if (size)
+    if (size) {
         g_byte_array_append (png, data, size);
+    }
     g_byte_array_append (png, (guint8 *)&crc, 4);
 }
 
 static GBytes *
-fixture (const char *mode)
+create_png_fixture (const char *mode)
 {
     g_autoptr (GByteArray) png = g_byte_array_new ();
     guint8 header[] = { 0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0 };
@@ -32,22 +34,27 @@ fixture (const char *mode)
     guint8 deflated[64];
     uLongf size = sizeof deflated;
     memcpy (raw, rgba, sizeof rgba);
-    if (!strcmp (mode, "zero-width"))
+    if (!strcmp (mode, "zero-width")) {
         header[3] = 0;
-    if (!strcmp (mode, "color-type"))
+    }
+    if (!strcmp (mode, "color-type")) {
         header[9] = 1;
-    if (!strcmp (mode, "filter"))
+    }
+    if (!strcmp (mode, "filter")) {
         raw[0] = 5;
+    }
     if (!strcmp (mode, "adam7")) {
         header[12] = 1;
         memmove (raw + 6, raw + 5, 4);
         raw[5] = 0;
     }
     guint raw_size = sizeof rgba;
-    if (!strcmp (mode, "excess"))
+    if (!strcmp (mode, "excess")) {
         raw_size = sizeof raw;
-    if (!strcmp (mode, "adam7"))
+    }
+    if (!strcmp (mode, "adam7")) {
         raw_size++;
+    }
     g_assert_cmpint (compress (deflated, &size, raw, raw_size), ==, Z_OK);
 
     g_byte_array_append (png, signature, sizeof signature);
@@ -58,35 +65,42 @@ fixture (const char *mode)
     const char invalid_time[] = "Thumb::MTime\0today";
     append_chunk (png, "tEXt", (const guint8 *)uri,
                   !strcmp (mode, "malformed-text") ? 4 : sizeof uri - 1);
-    if (!strcmp (mode, "mtime"))
+    if (!strcmp (mode, "mtime")) {
         append_chunk (png, "tEXt", (const guint8 *)invalid_time, sizeof invalid_time - 1);
-    else
+    } else {
         append_chunk (png, "tEXt", (const guint8 *)time, sizeof time - 1);
-    if (!strcmp (mode, "compression"))
+    }
+    if (!strcmp (mode, "compression")) {
         deflated[0] = 0;
-    if (!strcmp (mode, "truncated-zlib"))
+    }
+    if (!strcmp (mode, "truncated-zlib")) {
         size--;
+    }
     if (!strcmp (mode, "split-idat")) {
         append_chunk (png, "IDAT", deflated, 1);
         append_chunk (png, "IDAT", deflated + 1, size - 1);
     } else if (strcmp (mode, "missing-idat")) {
         append_chunk (png, "IDAT", deflated, size);
     }
-    if (strcmp (mode, "missing-iend"))
+    if (strcmp (mode, "missing-iend")) {
         append_chunk (png, "IEND", NULL, 0);
-    if (!strcmp (mode, "crc"))
+    }
+    if (!strcmp (mode, "crc")) {
         png->data[png->len - 1] ^= 1;
-    if (!strcmp (mode, "signature"))
+    }
+    if (!strcmp (mode, "signature")) {
         png->data[0] ^= 1;
-    if (!strcmp (mode, "truncated-chunk"))
+    }
+    if (!strcmp (mode, "truncated-chunk")) {
         g_byte_array_set_size (png, png->len - 14);
+    }
     return g_byte_array_free_to_bytes (g_steal_pointer (&png));
 }
 
 static void
-verify_valid (gconstpointer mode)
+test_valid_thumbnail_pixels (gconstpointer mode)
 {
-    g_autoptr (GBytes) bytes = fixture (mode);
+    g_autoptr (GBytes) bytes = create_png_fixture (mode);
     gsize size;
     const void *data = g_bytes_get_data (bytes, &size);
     g_assert_true (image_thumbnail_valid (bytes, 2));
@@ -102,9 +116,9 @@ verify_valid (gconstpointer mode)
 }
 
 static void
-verify_invalid (gconstpointer mode)
+test_invalid_thumbnail_rejection (gconstpointer mode)
 {
-    g_autoptr (GBytes) bytes = fixture (mode);
+    g_autoptr (GBytes) bytes = create_png_fixture (mode);
     g_assert_false (image_thumbnail_valid (bytes, 2));
 }
 
@@ -112,8 +126,9 @@ int
 main (int argc, char **argv)
 {
     g_test_init (&argc, &argv, NULL);
-    if (VIPS_INIT (argv[0]))
+    if (VIPS_INIT (argv[0])) {
         return 1;
+    }
     vips_cache_set_max (0);
     const char *good[] = { "valid", "split-idat", "adam7" };
     const char *bad[]
@@ -121,12 +136,12 @@ main (int argc, char **argv)
             "truncated-chunk", "compression", "truncated-zlib", "filter",       "excess",
             "malformed-text",  "color-type",  "mtime" };
     for (gsize i = 0; i < G_N_ELEMENTS (good); i++) {
-        g_autofree char *name = g_strdup_printf ("/thumbnail/valid/%s", good[i]);
-        g_test_add_data_func (name, good[i], verify_valid);
+        g_autofree char *name = g_strdup_printf ("/thumbnail/png/decodes/%s", good[i]);
+        g_test_add_data_func (name, good[i], test_valid_thumbnail_pixels);
     }
     for (gsize i = 0; i < G_N_ELEMENTS (bad); i++) {
-        g_autofree char *name = g_strdup_printf ("/thumbnail/invalid/%s", bad[i]);
-        g_test_add_data_func (name, bad[i], verify_invalid);
+        g_autofree char *name = g_strdup_printf ("/thumbnail/png/rejects/%s", bad[i]);
+        g_test_add_data_func (name, bad[i], test_invalid_thumbnail_rejection);
     }
     int status = g_test_run ();
     vips_shutdown ();

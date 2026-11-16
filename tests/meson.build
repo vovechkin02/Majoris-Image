@@ -4,7 +4,7 @@ if get_option('tests')
   isolated = files('support/run_isolated.py')
   fixture_dir = meson.current_source_dir() / 'fixtures'
   fixture_build_dir = meson.current_build_dir()
-  installed_viewer_source = files('release/installed-viewer.vala')
+  installed_viewer_source = files('release/test-installed-viewer.vala')
   test_zlib = dependency('zlib')
 
   # Packaging and installed consumers use the generated large.tiff in this directory.

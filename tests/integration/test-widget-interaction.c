@@ -5,13 +5,19 @@
 
 #include <majoris-image-gtk4.h>
 
+enum {
+    ANCHOR_X = 80,
+    ANCHOR_Y = 70,
+    LAYOUT_TIMEOUT_MS = 5000,
+};
+
 typedef struct {
     Display *display;
     GtkWindow *window;
 } Input;
 
 static GdkTexture *
-make_texture (GdkColorState *state)
+create_gradient_texture (GdkColorState *state)
 {
     enum { edge = 160 };
     guint8 *pixels = g_malloc (edge * edge * 4);
@@ -42,22 +48,95 @@ flush_events (Input *input)
     const gint64 end = g_get_monotonic_time () + 120 * G_TIME_SPAN_MILLISECOND;
     do {
         while (g_main_context_iteration (NULL, FALSE)) {
+            /* Drain queued X11 events before checking the resulting view state. */
         }
         g_usleep (2000);
     } while (g_get_monotonic_time () < end);
 }
 
 static void
+fail_input_layout (GtkWidget *view, const char *description)
+{
+    g_error ("%s: mapped=%d, allocation=%dx%d logical pixels, anchor=(%d,%d)", description,
+             gtk_widget_get_mapped (view), gtk_widget_get_width (view),
+             gtk_widget_get_height (view), ANCHOR_X, ANCHOR_Y);
+}
+
+static gboolean
+find_input_anchor (GtkWidget *window, GtkWidget *view, graphene_point_t *point)
+{
+    const graphene_point_t anchor = GRAPHENE_POINT_INIT (ANCHOR_X, ANCHOR_Y);
+    if (!gtk_widget_get_mapped (view) || gtk_widget_get_width (view) <= ANCHOR_X
+        || gtk_widget_get_height (view) <= ANCHOR_Y
+        || !gtk_widget_compute_point (view, window, &anchor, point)) {
+        return FALSE;
+    }
+    GtkWidget *hit = gtk_widget_pick (window, point->x, point->y, GTK_PICK_DEFAULT);
+    return hit != NULL && (hit == view || gtk_widget_is_ancestor (hit, view));
+}
+
+static gboolean
+layout_timed_out (gpointer data)
+{
+    *(gboolean *)data = TRUE;
+    return G_SOURCE_REMOVE;
+}
+
+static void
+wait_for_input_layout (GtkWindow *window, GtkScrolledWindow *scroll, GtkWidget *views[],
+                       gsize view_count)
+{
+    gboolean timed_out = FALSE;
+    guint watchdog = g_timeout_add (LAYOUT_TIMEOUT_MS, layout_timed_out, &timed_out);
+    GtkAdjustment *vertical = gtk_scrolled_window_get_vadjustment (scroll);
+    while (!timed_out) {
+        gboolean ready
+            = gtk_widget_get_mapped (GTK_WIDGET (window))
+              && gtk_widget_get_mapped (GTK_WIDGET (scroll))
+              && gtk_adjustment_get_page_size (vertical) > ANCHOR_Y
+              && gtk_adjustment_get_upper (vertical) > gtk_adjustment_get_page_size (vertical);
+        for (gsize index = 0; index < view_count && ready; index++) {
+            graphene_point_t point;
+            ready = find_input_anchor (GTK_WIDGET (window), views[index], &point);
+        }
+        if (ready) {
+            g_source_remove (watchdog);
+            return;
+        }
+        g_main_context_iteration (NULL, TRUE);
+    }
+    for (gsize index = 0; index < view_count; index++) {
+        graphene_point_t point;
+        if (!find_input_anchor (GTK_WIDGET (window), views[index], &point)) {
+            char description[80];
+            g_snprintf (description, sizeof description,
+                        "View %" G_GSIZE_FORMAT " has no visible input anchor", index + 1);
+            fail_input_layout (views[index], description);
+        }
+    }
+    g_error (
+        "Scroll layout did not become ready: window=%dx%d, viewport=%dx%d, page=%g, content=%g",
+        gtk_widget_get_width (GTK_WIDGET (window)), gtk_widget_get_height (GTK_WIDGET (window)),
+        gtk_widget_get_width (GTK_WIDGET (scroll)), gtk_widget_get_height (GTK_WIDGET (scroll)),
+        gtk_adjustment_get_page_size (vertical), gtk_adjustment_get_upper (vertical));
+}
+
+static void
 move_pointer (Input *input, GtkWidget *view)
 {
     GtkWidget *window = GTK_WIDGET (input->window);
-    graphene_point_t center = GRAPHENE_POINT_INIT (80, 70), point;
-    g_assert_true (gtk_widget_compute_point (view, window, &center, &point));
+    graphene_point_t point;
+    if (!find_input_anchor (window, view, &point)) {
+        fail_input_layout (view, "Cannot inject pointer input");
+    }
     GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (window));
     Window unused;
-    int x, y;
-    XTranslateCoordinates (input->display, gdk_x11_surface_get_xid (surface),
-                           DefaultRootWindow (input->display), 0, 0, &x, &y, &unused);
+    int x;
+    int y;
+    g_assert_true (XTranslateCoordinates (input->display, gdk_x11_surface_get_xid (surface),
+                                          DefaultRootWindow (input->display), 0, 0, &x, &y,
+                                          &unused));
+    // The GTK transform is logical; XTest targets the root window in device pixels.
     int scale = gdk_surface_get_scale_factor (surface);
     XTestFakeMotionEvent (input->display, -1, x + (int)(point.x * scale),
                           y + (int)(point.y * scale), CurrentTime);
@@ -65,38 +144,42 @@ move_pointer (Input *input, GtkWidget *view)
 }
 
 static void
-key (Input *input, KeySym symbol, gboolean press)
+inject_key_event (Input *input, KeySym symbol, gboolean press)
 {
     XTestFakeKeyEvent (input->display, XKeysymToKeycode (input->display, symbol), press,
                        CurrentTime);
 }
 
 static void
-wheel (Input *input, unsigned button, gboolean control)
+scroll_wheel (Input *input, unsigned button, gboolean control)
 {
-    if (control)
-        key (input, XK_Control_L, TRUE);
+    if (control) {
+        inject_key_event (input, XK_Control_L, TRUE);
+    }
     XTestFakeButtonEvent (input->display, button, True, CurrentTime);
     XTestFakeButtonEvent (input->display, button, False, CurrentTime);
-    if (control)
-        key (input, XK_Control_L, FALSE);
+    if (control) {
+        inject_key_event (input, XK_Control_L, FALSE);
+    }
     flush_events (input);
 }
 
 static void
 press_key (Input *input, KeySym symbol, gboolean control)
 {
-    if (control)
-        key (input, XK_Control_L, TRUE);
-    key (input, symbol, TRUE);
-    key (input, symbol, FALSE);
-    if (control)
-        key (input, XK_Control_L, FALSE);
+    if (control) {
+        inject_key_event (input, XK_Control_L, TRUE);
+    }
+    inject_key_event (input, symbol, TRUE);
+    inject_key_event (input, symbol, FALSE);
+    if (control) {
+        inject_key_event (input, XK_Control_L, FALSE);
+    }
     flush_events (input);
 }
 
 static void
-sample_view (GtkWidget *view, float x, float y, guint8 pixel[4])
+sample_view_pixel (GtkWidget *view, float x, float y, guint8 pixel[4])
 {
     GtkWidget *parent = gtk_widget_get_parent (view);
     GtkSnapshot *snapshot = gtk_snapshot_new ();
@@ -114,35 +197,38 @@ sample_view (GtkWidget *view, float x, float y, guint8 pixel[4])
 }
 
 static gboolean
-parent_scroll (GtkEventControllerScroll *controller, double dx, double dy, guint *received)
+observe_propagated_scroll (GtkEventControllerScroll *controller, double dx, double dy,
+                           guint *received)
 {
     (void)controller;
-    if (dx || dy)
+    if (dx || dy) {
         (*received)++;
+    }
     return FALSE;
 }
 
 static gboolean
-parent_key (GtkEventControllerKey *controller, guint keyval, guint code, GdkModifierType modifiers,
-            guint *received)
+observe_propagated_key (GtkEventControllerKey *controller, guint keyval, guint code,
+                        GdkModifierType modifiers, guint *received)
 {
     (void)controller;
     (void)code;
     (void)modifiers;
-    if (keyval == GDK_KEY_F6 || keyval == GDK_KEY_equal || keyval == GDK_KEY_Left)
+    if (keyval == GDK_KEY_F6 || keyval == GDK_KEY_equal || keyval == GDK_KEY_Left) {
         (*received)++;
+    }
     return FALSE;
 }
 
 static void
-finalized (gpointer data, GObject *object)
+mark_texture_released (gpointer data, GObject *object)
 {
     (void)object;
     *(gboolean *)data = TRUE;
 }
 
 static void
-test_external (void)
+verify_external_texture_state_and_accessibility (void)
 {
     g_autoptr (ImageKitView) view = g_object_ref_sink (image_kit_image_view_new ());
     GtkAccessible *accessible = GTK_ACCESSIBLE (view);
@@ -154,8 +240,8 @@ test_external (void)
                                          "First product");
 
     gboolean released = FALSE;
-    GdkTexture *pq = make_texture (gdk_color_state_get_rec2100_pq ());
-    g_object_weak_ref (G_OBJECT (pq), finalized, &released);
+    GdkTexture *pq = create_gradient_texture (gdk_color_state_get_rec2100_pq ());
+    g_object_weak_ref (G_OBJECT (pq), mark_texture_released, &released);
     image_kit_image_view_set_texture (view, pq);
     g_object_unref (pq);
     g_assert_false (released);
@@ -178,7 +264,7 @@ test_external (void)
     image_kit_image_view_set_texture (view, pq);
     g_assert_false (released);
 
-    g_autoptr (GdkTexture) linear = make_texture (gdk_color_state_get_srgb_linear ());
+    g_autoptr (GdkTexture) linear = create_gradient_texture (gdk_color_state_get_srgb_linear ());
     image_kit_image_view_set_texture (view, linear);
     g_assert_true (released);
     gtk_test_accessible_assert_property (accessible, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION,
@@ -198,19 +284,9 @@ test_external (void)
                                          "Product browser");
 }
 
-int
-main (void)
+static void
+verify_input_routing_and_zoom (Display *display)
 {
-    if (!gtk_init_check () || !GDK_IS_X11_DISPLAY (gdk_display_get_default ()))
-        return 77;
-    Display *display = gdk_x11_display_get_xdisplay (gdk_display_get_default ());
-    int event, error, major, minor;
-    if (!XTestQueryExtension (display, &event, &error, &major, &minor))
-        return 77;
-    g_object_set (gtk_settings_get_default (), "gtk-enable-animations", FALSE, NULL);
-    image_kit_image_view_register_type ();
-    test_external ();
-
     g_autoptr (GtkBuilder) builder = gtk_builder_new_from_string (
         "<interface><object class='ImageKitView' id='files'>"
         "<property name='scroll-zoom-mode'>control</property>"
@@ -239,19 +315,28 @@ main (void)
     gtk_box_append (GTK_BOX (layout), GTK_WIDGET (photos));
     gtk_box_append (GTK_BOX (layout), GTK_WIDGET (disabled));
     GtkWindow *window = GTK_WINDOW (gtk_window_new ());
+    gtk_window_set_title (window, "GTK input and accessibility test");
+    // The three views share this width. The 1000-pixel filler must overflow the scroll viewport.
     gtk_window_set_default_size (window, 780, 400);
     gtk_window_set_child (window, layout);
     gtk_window_present (window);
     Input input = { display, window };
-    flush_events (&input);
+    GtkWidget *views[] = { GTK_WIDGET (files), GTK_WIDGET (photos), GTK_WIDGET (disabled) };
+    wait_for_input_layout (window, GTK_SCROLLED_WINDOW (scroll), views, G_N_ELEMENTS (views));
+    GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (window));
+    int scale = gdk_surface_get_scale_factor (surface);
+    const char *configured_scale = g_getenv ("GDK_SCALE");
+    if (g_strcmp0 (configured_scale, "1") == 0 || g_strcmp0 (configured_scale, "2") == 0) {
+        g_assert_cmpint (scale, ==, configured_scale[0] - '0');
+    }
     move_pointer (&input, GTK_WIDGET (files));
     GtkAdjustment *vertical = gtk_scrolled_window_get_vadjustment (GTK_SCROLLED_WINDOW (scroll));
-    wheel (&input, 5, FALSE);
+    scroll_wheel (&input, 5, FALSE);
     g_assert_cmpfloat (gtk_adjustment_get_value (vertical), >, 0);
     gtk_adjustment_set_value (vertical, 0);
     flush_events (&input);
 
-    g_autoptr (GdkTexture) srgb = make_texture (gdk_color_state_get_srgb ());
+    g_autoptr (GdkTexture) srgb = create_gradient_texture (gdk_color_state_get_srgb ());
     image_kit_image_view_set_texture (files, srgb);
     image_kit_image_view_set_texture (photos, srgb);
     image_kit_image_view_set_texture (disabled, srgb);
@@ -260,42 +345,42 @@ main (void)
     g_assert_cmpint (image_kit_image_view_get_presentation_status (files), ==,
                      IMAGE_KIT_PRESENTATION_STATUS_SDR);
     image_kit_image_view_zoom_to (files, 2.5, -1, -1);
-    wheel (&input, 5, FALSE);
+    scroll_wheel (&input, 5, FALSE);
     g_assert_cmpfloat (image_kit_image_view_get_zoom (files), ==, 2.5);
     g_assert_cmpfloat (gtk_adjustment_get_value (vertical), >, 0);
     gtk_adjustment_set_value (vertical, 0);
     flush_events (&input);
-    wheel (&input, 4, TRUE);
+    scroll_wheel (&input, 4, TRUE);
     g_assert_cmpfloat (image_kit_image_view_get_zoom (files), >, 2.5);
     g_assert_cmpfloat (gtk_adjustment_get_value (vertical), ==, 0);
     guint propagated_scroll = 0;
     GtkEventController *parent_wheel
         = gtk_event_controller_scroll_new (GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
-    g_signal_connect (parent_wheel, "scroll", G_CALLBACK (parent_scroll), &propagated_scroll);
+    g_signal_connect (parent_wheel, "scroll", G_CALLBACK (observe_propagated_scroll),
+                      &propagated_scroll);
     gtk_widget_add_controller (content, parent_wheel);
     image_kit_image_view_set_minimum_zoom (files, 2.5);
     image_kit_image_view_zoom_to (files, 2.5, -1, -1);
-    wheel (&input, 5, TRUE);
+    scroll_wheel (&input, 5, TRUE);
     g_assert_cmpfloat (image_kit_image_view_get_zoom (files), ==, 2.5);
     g_assert_cmpuint (propagated_scroll, ==, 1);
-    wheel (&input, 7, TRUE);
+    scroll_wheel (&input, 7, TRUE);
     g_assert_cmpfloat (image_kit_image_view_get_zoom (files), ==, 2.5);
     g_assert_cmpuint (propagated_scroll, ==, 2);
     gtk_adjustment_set_value (vertical, 0);
     flush_events (&input);
 
     image_kit_image_view_set_allow_zoom (files, FALSE);
-    wheel (&input, 5, FALSE);
+    scroll_wheel (&input, 5, FALSE);
     g_assert_cmpfloat (image_kit_image_view_get_zoom (files), ==, 2.5);
     g_assert_cmpfloat (gtk_adjustment_get_value (vertical), >, 0);
     gtk_adjustment_set_value (vertical, 0);
     flush_events (&input);
     guint propagated = 0;
     GtkEventController *keys = gtk_event_controller_key_new ();
-    g_signal_connect (keys, "key-pressed", G_CALLBACK (parent_key), &propagated);
+    g_signal_connect (keys, "key-pressed", G_CALLBACK (observe_propagated_key), &propagated);
     gtk_widget_add_controller (content, keys);
     g_assert_true (gtk_widget_grab_focus (GTK_WIDGET (files)));
-    GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (window));
     XSetInputFocus (display, gdk_x11_surface_get_xid (surface), RevertToParent, CurrentTime);
     flush_events (&input);
     g_assert_true (gtk_widget_has_focus (GTK_WIDGET (files)));
@@ -323,22 +408,44 @@ main (void)
     image_kit_image_view_pan_by (files, -24, 16);
     move_pointer (&input, GTK_WIDGET (files));
     guint8 before[4], after[4];
-    sample_view (GTK_WIDGET (files), 80, 70, before);
-    wheel (&input, 4, TRUE);
-    sample_view (GTK_WIDGET (files), 80, 70, after);
-    for (unsigned i = 0; i < 4; i++)
+    // Sample the same anchor before and after zoom to detect transform drift.
+    sample_view_pixel (GTK_WIDGET (files), ANCHOR_X, ANCHOR_Y, before);
+    scroll_wheel (&input, 4, TRUE);
+    sample_view_pixel (GTK_WIDGET (files), ANCHOR_X, ANCHOR_Y, after);
+    for (unsigned i = 0; i < 4; i++) {
         g_assert_cmpint (ABS (before[i] - after[i]), <=, 2);
+    }
 
     double photo_zoom = image_kit_image_view_get_zoom (photos);
     move_pointer (&input, GTK_WIDGET (photos));
-    wheel (&input, 4, FALSE);
+    scroll_wheel (&input, 4, FALSE);
     g_assert_cmpfloat (image_kit_image_view_get_zoom (photos), >, photo_zoom);
     double disabled_zoom = image_kit_image_view_get_zoom (disabled);
     move_pointer (&input, GTK_WIDGET (disabled));
-    wheel (&input, 4, TRUE);
+    scroll_wheel (&input, 4, TRUE);
     g_assert_cmpfloat (image_kit_image_view_get_zoom (disabled), ==, disabled_zoom);
     g_assert_cmpint (image_kit_image_view_get_scroll_zoom_mode (files), ==,
                      IMAGE_KIT_SCROLL_ZOOM_MODE_CONTROL);
     gtk_window_destroy (window);
+}
+
+int
+main (void)
+{
+    if (!gtk_init_check () || !GDK_IS_X11_DISPLAY (gdk_display_get_default ())) {
+        return 77;
+    }
+    Display *display = gdk_x11_display_get_xdisplay (gdk_display_get_default ());
+    int event;
+    int error;
+    int major;
+    int minor;
+    if (!XTestQueryExtension (display, &event, &error, &major, &minor)) {
+        return 77;
+    }
+    g_object_set (gtk_settings_get_default (), "gtk-enable-animations", FALSE, NULL);
+    image_kit_image_view_register_type ();
+    verify_external_texture_state_and_accessibility ();
+    verify_input_routing_and_zoom (display);
     return 0;
 }

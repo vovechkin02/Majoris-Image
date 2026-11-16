@@ -8,7 +8,8 @@ Test sources live under `tests/unit/`, `tests/integration/`, and
 `tests/security/`. Shared runners and fixture generators are in
 `tests/support/`, performance workloads are in `tests/benchmarks/`, and
 package and installed checks are in `tests/release/`. Meson suite membership
-is independent of the source directory. Shared fixture targets still write to
+is independent of the source directory. Meson display names are sentence case.
+The historical baseline and verification reports use the names from their runs. Shared fixture targets still write to
 `build/tests/`, including the `large.tiff` used by installed qualification.
 
 ## Development and extended suites
@@ -81,8 +82,8 @@ meson setup sanitize -Dgtk=false -Dglycin=disabled -Dsequence=enabled \
   -Dultrahdr=disabled -Dwarning_level=3 -Db_sanitize=address,undefined -Db_lundef=false
 ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   meson test -C sanitize --print-errorlogs \
-  'OpenEXR regions' 'Imaging references' 'thumbnail PNG decode and validation' \
-  'native parser fuzz smoke' 'worker protocol properties'
+  'OpenEXR region decoding' 'Native image processing references' 'Thumbnail PNG decoding and validation' \
+  'Native parser fuzz smoke' 'Worker protocol round trips and validation'
 ```
 
 The sandbox enforces a 2 GiB address-space ceiling, so ASan-instrumented worker

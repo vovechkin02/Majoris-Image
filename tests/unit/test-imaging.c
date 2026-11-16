@@ -13,8 +13,9 @@ constant_image (float value, gboolean alpha)
     float *data = g_new (float, 64 * 32 * bands);
     for (int p = 0; p < 64 * 32; p++) {
         data[p * bands] = data[p * bands + 1] = data[p * bands + 2] = value;
-        if (alpha)
+        if (alpha) {
             data[p * bands + 3] = .375;
+        }
     }
     VipsImage *image = vips_image_new_from_memory_copy (data, 64 * 32 * bands * sizeof (float), 64,
                                                         32, bands, VIPS_FORMAT_FLOAT);
@@ -307,9 +308,11 @@ heif_transfer_reference (gconstpointer parameter)
     int stride;
     guint8 *plane = heif_image_get_plane (image, heif_channel_interleaved, &stride);
     int code = transfer == 16 ? 520 : 1023;
-    for (int y = 0; y < 32; y++)
-        for (int x = 0; x < 64 * 3; x++)
+    for (int y = 0; y < 32; y++) {
+        for (int x = 0; x < 64 * 3; x++) {
             ((guint16 *)(plane + y * stride))[x] = code;
+        }
+    }
     struct heif_color_profile_nclx *profile = heif_nclx_color_profile_alloc ();
     profile->color_primaries = heif_color_primaries_ITU_R_BT_2020_2_and_2100_0;
     profile->transfer_characteristics = (enum heif_transfer_characteristics)transfer;

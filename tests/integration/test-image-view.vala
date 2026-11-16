@@ -3,13 +3,17 @@ using ImageKit;
 [CCode (cname = "g_object_run_dispose", cheader_filename = "glib-object.h")]
 private extern void force_dispose (Object object);
 
-async void exercise_view (ImageView view, ImageView other, string fixture_dir, string webp_path, string[] animations) throws Error {
+async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other, string fixture_dir, string webp_path, string[] animations) throws Error {
     var png = File.new_for_path (Path.build_filename (fixture_dir, "rgb16.png"));
     var tiff = File.new_for_path (Path.build_filename (fixture_dir, "multipage.tiff"));
     var canceled = new Cancellable ();
     canceled.cancel ();
-    try { yield view.load_file (png, null, canceled); assert_not_reached (); }
-    catch (IOError.CANCELLED e) { assert (view.state == ViewState.CANCELED); }
+    try {
+        yield view.load_file (png, null, canceled);
+        assert_not_reached ();
+    } catch (IOError.CANCELLED e) {
+        assert (view.state == ViewState.CANCELED);
+    }
 
     view.visible = false;
     yield view.load_file (png);
@@ -21,16 +25,26 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
 
     bool obsolete_finished = false;
     view.load_file.begin (png, null, null, (obj, result) => {
-        try { view.load_file.end (result); }
-        catch (Error e) { assert (e is IOError.CANCELLED); obsolete_finished = true; }
+        try {
+            view.load_file.end (result);
+        } catch (Error e) {
+            assert (e is IOError.CANCELLED);
+            obsolete_finished = true;
+        }
     });
     other.load_file.begin (png, null, null, (obj, result) => {
-        try { other.load_file.end (result); }
-        catch (Error error) { assert_not_reached (); }
+        try {
+            other.load_file.end (result);
+        } catch (Error error) {
+            assert_not_reached ();
+        }
     });
     view.load_file.begin (tiff, null, null, (obj, result) => {
-        try { view.load_file.end (result); }
-        catch (Error error) { assert (error is IOError.CANCELLED); }
+        try {
+            view.load_file.end (result);
+        } catch (Error error) {
+            assert (error is IOError.CANCELLED);
+        }
     });
     view.visible = false;
     yield view.load_file (tiff);
@@ -53,15 +67,24 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
 
     bool replacement_done = false;
     ulong followup = view.notify["document"].connect (() => {
-        if (view.document == null || view.document.mime_type != "image/tiff") return;
+        if (view.document == null || view.document.mime_type != "image/tiff") {
+            return;
+        }
         view.load_file.begin (png, null, null, (obj, result) => {
-            try { view.load_file.end (result); }
-            catch (Error error) { assert_not_reached (); }
+            try {
+                view.load_file.end (result);
+            } catch (Error error) {
+                assert_not_reached ();
+            }
             replacement_done = true;
         });
     });
-    try { yield view.load_file (tiff); assert_not_reached (); }
-    catch (IOError.CANCELLED error) { }
+    try {
+        yield view.load_file (tiff);
+        assert_not_reached ();
+    } catch (IOError.CANCELLED error) {
+        // Cancellation is the expected result for this request.
+    }
     yield wait_for ("replacement callback", () => replacement_done);
     view.disconnect (followup);
     assert (replacement_done && view.document.mime_type == "image/png" && view.image_width == 24);
@@ -96,8 +119,12 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
     var dying = new ImageView ();
     bool disposed_callback = false;
     dying.load_file.begin (tiff, null, null, (obj, result) => {
-        try { dying.load_file.end (result); assert_not_reached (); }
-        catch (Error error) { assert (error is IOError.CANCELLED); }
+        try {
+            dying.load_file.end (result);
+            assert_not_reached ();
+        } catch (Error error) {
+            assert (error is IOError.CANCELLED);
+        }
         disposed_callback = true;
     });
     force_dispose (dying);
@@ -113,7 +140,9 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
             PresentationStatus.SDR_TONE_MAPPED : PresentationStatus.SDR));
         if (animation.has_suffix (".apng")) {
             assert (view.document.decoder == "Glycin");
-            if (animation.has_suffix ("wide.apng")) assert (view.document.color_diagnostic.contains ("ICC"));
+            if (animation.has_suffix ("wide.apng")) {
+                assert (view.document.color_diagnostic.contains ("ICC"));
+            }
             yield view.seek_frame (1);
             assert (view.frame_duration_ms == 170);
             yield view.seek_frame (0);
@@ -128,10 +157,12 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
         assert (view.playing);
         view.visible = false;
         assert (!view.playing);
-        yield delay (60);
+        yield wait_for_main_loop_delay (60);
         view.visible = true;
         assert (view.playing);
-        for (int i = 0; view.current_frame == 0 && i < 100; i++) yield delay (15);
+        for (int i = 0; view.current_frame == 0 && i < 100; i++) {
+            yield wait_for_main_loop_delay (15);
+        }
         assert (view.current_frame > 0);
         if (hdr_animation) {
             view.presentation_policy = PresentationPolicy.HDR_PREFERRED;
@@ -143,8 +174,13 @@ async void exercise_view (ImageView view, ImageView other, string fixture_dir, s
         view.visible = true;
         assert (!view.playing);
         view.play ();
-        if (view.document.loop_count == 0) yield delay (350);
-        else for (int i = 0; view.playing && i < 150; i++) yield delay (15);
+        if (view.document.loop_count == 0) {
+            yield wait_for_main_loop_delay (350);
+        } else {
+            for (int i = 0; view.playing && i < 150; i++) {
+                yield wait_for_main_loop_delay (15);
+            }
+        }
         assert (view.playing == (view.document.loop_count == 0));
         view.play ();
         yield view.load_file (png);
@@ -159,19 +195,25 @@ private delegate bool Condition ();
 private async void wait_for (string operation, Condition completed) throws Error {
     int64 deadline = get_monotonic_time () + 5 * TimeSpan.SECOND;
     while (!completed ()) {
-        if (get_monotonic_time () >= deadline)
+        if (get_monotonic_time () >= deadline) {
             throw new IOError.TIMED_OUT ("GTK test timed out waiting for %s", operation);
-        yield delay (10);
+        }
+        yield wait_for_main_loop_delay (10);
     }
 }
 
-private async void delay (uint milliseconds) {
-    Timeout.add (milliseconds, () => { delay.callback (); return Source.REMOVE; });
+private async void wait_for_main_loop_delay (uint milliseconds) {
+    Timeout.add (milliseconds, () => {
+        wait_for_main_loop_delay.callback ();
+        return Source.REMOVE;
+    });
     yield;
 }
 
 int main (string[] args) {
-    if (!Gtk.init_check ()) return 77;
+    if (!Gtk.init_check ()) {
+        return 77;
+    }
     ImageView.register_type ();
     var builder = new Gtk.Builder.from_string (
         "<interface><object class='ImageKitView' id='test'/></interface>", -1);
@@ -181,14 +223,19 @@ int main (string[] args) {
     box.append (view);
     box.append (other);
     var window = new Gtk.Window ();
+    window.title = "GTK view lifecycle and navigation test";
     window.set_default_size (640, 480);
     window.child = box;
     window.present ();
     var loop = new MainLoop ();
     int code = 0;
-    exercise_view.begin (view, other, args[1], args[2], args[3:args.length], (obj, result) => {
-        try { exercise_view.end (result); }
-        catch (Error e) { stderr.printf ("%s\n", e.message); code = 1; }
+    verify_view_lifecycle_and_navigation.begin (view, other, args[1], args[2], args[3:args.length], (obj, result) => {
+        try {
+            verify_view_lifecycle_and_navigation.end (result);
+        } catch (Error e) {
+            stderr.printf ("%s\n", e.message);
+            code = 1;
+        }
         loop.quit ();
     });
     loop.run ();

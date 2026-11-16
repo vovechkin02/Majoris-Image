@@ -20,11 +20,13 @@ fsync (int fd)
         if (size >= (ssize_t)sizeof suffix - 1
             && !memcmp (path + size - sizeof suffix + 1, suffix, sizeof suffix - 1)) {
             int marker = open (gate, O_WRONLY | O_CREAT | O_EXCL, 0600);
-            if (marker < 0)
+            if (marker < 0) {
                 _exit (112);
+            }
             close (marker);
-            for (;;)
+            for (;;) {
                 pause ();
+            }
         }
     }
     return next_fsync (fd);

@@ -7,31 +7,35 @@ import sys
 from pathlib import Path
 
 CORE_TESTS = {
-    "OpenEXR regions",
-    "Imaging references",
-    "thumbnail PNG decode and validation",
-    "foreground, tile and preload scheduling",
-    "public headless API",
-    "decoder selection and composited APNG frames",
-    "desktop thumbnail registration and sample output",
-    "cross-process thumbnail publication",
-    "worker timeout, cancellation, crash and response validation",
-    "native parser fuzz smoke",
-    "worker protocol properties",
+    "OpenEXR region decoding",
+    "Native image processing references",
+    "Thumbnail PNG decoding and validation",
+    "Job scheduling and priorities",
+    "Headless Core API",
+    "Decoder selection and composited APNG frames",
+    "Desktop thumbnail registration and output",
+    "Cross-process thumbnail publication",
+    "Worker timeout, cancellation, crash and response validation",
+    "Native parser fuzz smoke",
+    "Worker protocol round trips and validation",
 }
 GTK_TESTS = {
     "HDR presentation policy",
     "GDK floating-point texture color state",
     "GTK input and accessibility at scale 1",
     "GTK input and accessibility at scale 2",
-    "wide viewport tile coverage and cancellation",
+    "Viewport tile coverage and cancellation",
     "Files public preview workflow",
     "Photos public full-quality workflow",
-    "public GTK Builder API",
+    "GtkBuilder view loading",
     "GTK view lifecycle and navigation",
-    "public GTK viewer readiness and error",
+    "GTK viewer readiness and load errors",
 }
-RELEASE_TESTS = {"tile-coverage-complete", "GTK lifecycle stress", "real camera RAW"}
+RELEASE_TESTS = {
+    "Complete 8K tile coverage",
+    "GTK lifecycle stress",
+    "Real-camera RAW decoding",
+}
 
 
 def load_json(path: Path):

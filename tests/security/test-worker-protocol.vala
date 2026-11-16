@@ -13,8 +13,9 @@ void check_protocol_round_trips () {
         string manifest = ("{\"protocol-version\":%d,\"width\":%d,\"height\":1,"
             + "\"loader\":\"test\"}").printf (version, width);
         string request = "{\"version\":%d,\"options\":{\"page\":%d}}".printf (version, page);
-        if (Environment.get_variable ("IMAGEKIT_TEST_TRACE") == "1")
+        if (Environment.get_variable ("IMAGEKIT_TEST_TRACE") == "1") {
             stderr.printf ("trial %d: %s / %s\n", trial, manifest, request);
+        }
         bool valid_manifest = version == 1 && width >= 1 && width <= 1000000;
         try {
             var probe = ImageProbe.deserialize (manifest);

@@ -8,7 +8,7 @@ if get_option('raw_fixtures') != ''
   workloads += ['raw-preview=' + (get_option('raw_fixtures') / '350D.CR2'),
     'raw-develop=' + (get_option('raw_fixtures') / '350D.CR2')]
 endif
-benchmark('public API performance', python, suite: 'performance', timeout: 900,
+benchmark('Public API performance', python, suite: 'performance', timeout: 900,
   args: isolated + [python, files('run_benchmarks.py'), '--build', meson.project_build_root(),
     '--worker', worker, '--executable', benchmark_program] + workloads,
   depends: [fixtures, worker])

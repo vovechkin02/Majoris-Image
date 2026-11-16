@@ -13,10 +13,13 @@ namespace ImageKit {
 private void assert_plan (TileBounds bounds, int width, int height, double zoom,
                           bool vector, int expected = 0) {
     var plan = TileCoverage.plan (bounds, width, height, zoom, vector);
-    if (plan.count < 1 || plan.count > TileCoverage.MAX_SLOTS)
+    if (plan.count < 1 || plan.count > TileCoverage.MAX_SLOTS) {
         error ("Invalid tile count %d for %dx%d [%g,%g,%g,%g], zoom %g", plan.count,
             width, height, bounds.left, bounds.top, bounds.right, bounds.bottom, zoom);
-    if (expected > 0) assert (plan.count == expected && plan.level == 1);
+    }
+    if (expected > 0) {
+        assert (plan.count == expected && plan.level == 1);
+    }
 
     int clipped_left = (int) Math.floor (bounds.left.clamp (0, width));
     int clipped_top = (int) Math.floor (bounds.top.clamp (0, height));
@@ -44,7 +47,7 @@ private void assert_plan (TileBounds bounds, int width, int height, double zoom,
     assert (covered == (int64) (clipped_right - clipped_left) * (clipped_bottom - clipped_top));
 }
 
-private void test_geometry () {
+private void verify_tile_geometry () {
     assert_plan ({ 0, 0, 1920, 1080 }, 20000, 10000, 1, false, 12);
     assert_plan ({ 0, 0, 3840, 2160 }, 20000, 10000, 1, false, 40);
     assert_plan ({ 0, 0, 5120, 2880 }, 20000, 10000, 1, false, 60);
@@ -68,13 +71,15 @@ private void test_geometry () {
         double bottom = double.min (h + 512, double.max (10.0, top + random.double_range (64, 8192)));
         TileBounds bounds = { left, top, right, bottom };
         double zoom = random.double_range (0.2, 4.0);
-        if (Environment.get_variable ("IMAGEKIT_TEST_TRACE") == "1")
+        if (Environment.get_variable ("IMAGEKIT_TEST_TRACE") == "1") {
             stderr.printf ("trial %d: %dx%d [%g,%g,%g,%g], zoom %g\n",
                 trial, w, h, left, top, right, bottom, zoom);
-        if (right <= 0 || bottom <= 0)
+        }
+        if (right <= 0 || bottom <= 0) {
             assert (TileCoverage.plan (bounds, w, h, zoom, false).count == 0);
-        else
+        } else {
             assert_plan (bounds, w, h, zoom, zoom > 1.0);
+        }
     }
 
     var rotated = TileBounds.from_view (100, 80, 30, 20, -100, -80, 0.5, 1, true, false);
@@ -84,11 +89,14 @@ private void test_geometry () {
 }
 
 private async void delay () {
-    Timeout.add (10, () => { delay.callback (); return Source.REMOVE; });
+    Timeout.add (10, () => {
+        delay.callback ();
+        return Source.REMOVE;
+    });
     yield;
 }
 
-private async void test_cache (string path, string exr_path, bool complete) throws Error {
+private async void verify_tile_cache_coverage_and_cancellation (string path, string exr_path, bool complete) throws Error {
     var document = yield new DecoderRegistry ().open (new ImageSource (File.new_for_path (path)));
     var cache = new TileCache ();
     cache.reset (document);
@@ -104,8 +112,9 @@ private async void test_cache (string path, string exr_path, bool complete) thro
     TileBounds revised = { 8192, 512, 9216, 1536 };
     var visible = cache.visible (revised, 1);
     assert (canceled.is_cancelled () && visible[0].request == null);
-    for (int attempt = 0; attempt < 500 && !visible.all_match (tile => tile.texture != null); attempt++)
+    for (int attempt = 0; attempt < 500 && !visible.all_match (tile => tile.texture != null); attempt++) {
         yield delay ();
+    }
     assert (visible.all_match (tile => tile.texture != null));
     assert (first.all_match (tile => tile.texture == null));
 
@@ -122,8 +131,9 @@ private async void test_cache (string path, string exr_path, bool complete) thro
     cache.reset (hdr, true);
     var hdr_tiles = cache.visible ({0, 0, hdr.width, hdr.height}, 1);
     assert (hdr_tiles.size == 1);
-    for (int attempt = 0; attempt < 500 && hdr_tiles[0].texture == null; attempt++)
+    for (int attempt = 0; attempt < 500 && hdr_tiles[0].texture == null; attempt++) {
         yield delay ();
+    }
     assert (hdr_tiles[0].texture != null);
     var preview = yield hdr.render_preview (true);
     var base_texture = texture_for_pixels (preview);
@@ -132,15 +142,18 @@ private async void test_cache (string path, string exr_path, bool complete) thro
     uint8[] tile_pixels = new uint8[base_pixels.length];
     base_texture.download (base_pixels, stride);
     hdr_tiles[0].texture.download (tile_pixels, stride);
-    for (int i = 0; i < base_pixels.length; i++) assert (base_pixels[i] == tile_pixels[i]);
+    for (int i = 0; i < base_pixels.length; i++) {
+        assert (base_pixels[i] == tile_pixels[i]);
+    }
     cache.reset (null);
     if (complete) {
         cache.reset (document);
         var eight_k = cache.visible ({511, 511, 8191, 4831}, 1);
         assert (eight_k.size == 160 && eight_k.all_match (tile => tile.texture == null));
         int64 deadline = get_monotonic_time () + 120 * TimeSpan.SECOND;
-        while (get_monotonic_time () < deadline && !eight_k.all_match (tile => tile.texture != null))
+        while (get_monotonic_time () < deadline && !eight_k.all_match (tile => tile.texture != null)) {
             yield delay ();
+        }
         assert (eight_k.all_match (tile => tile.texture != null));
         var same = cache.visible ({511, 511, 8191, 4831}, 1);
         assert (same.size == 160);
@@ -164,10 +177,11 @@ private async void test_cache (string path, string exr_path, bool complete) thro
                         pixels[offset + 1] == (source_y < 67 ? 255 : 0) &&
                         pixels[offset + 2] == (source_x + source_y < 111 ? 255 : 0) &&
                         pixels[offset + 3] == 255;
-                    if (!matches)
+                    if (!matches) {
                         throw new IOError.INVALID_DATA ("Incorrect 8K tile at (%d,%d), pixel (%d,%d): %u,%u,%u,%u",
                             tile.x, tile.y, x, y, pixels[offset], pixels[offset + 1],
                             pixels[offset + 2], pixels[offset + 3]);
+                    }
                 }
             }
             retained_bytes += (size_t) texture.width * texture.height * 16;
@@ -177,7 +191,9 @@ private async void test_cache (string path, string exr_path, bool complete) thro
         FileUtils.get_contents ("/proc/self/status", out memory);
         bool measured_peak = false;
         foreach (string line in memory.split ("\n")) {
-            if (!line.has_prefix ("VmHWM:")) continue;
+            if (!line.has_prefix ("VmHWM:")) {
+                continue;
+            }
             int64 peak = int64.parse (line.substring (6).strip ());
             assert (peak > 0 && peak < 1400 * 1024);
             measured_peak = true;
@@ -188,16 +204,22 @@ private async void test_cache (string path, string exr_path, bool complete) thro
         cache.reset (null);
     }
     // Drain the two canceled jobs before leaving the test main loop.
-    for (int i = 0; i < 30; i++) yield delay ();
+    for (int i = 0; i < 30; i++) {
+        yield delay ();
+    }
 }
 
 int main (string[] args) {
-    test_geometry ();
+    verify_tile_geometry ();
     var loop = new MainLoop ();
     int status = 0;
-    test_cache.begin (args[1], args[2], args.length > 3 && args[3] == "--complete", (object, response) => {
-        try { test_cache.end (response); }
-        catch (Error error) { stderr.printf ("%s\n", error.message); status = 1; }
+    verify_tile_cache_coverage_and_cancellation.begin (args[1], args[2], args.length > 3 && args[3] == "--complete", (object, response) => {
+        try {
+            verify_tile_cache_coverage_and_cancellation.end (response);
+        } catch (Error error) {
+            stderr.printf ("%s\n", error.message);
+            status = 1;
+        }
         loop.quit ();
     });
     loop.run ();

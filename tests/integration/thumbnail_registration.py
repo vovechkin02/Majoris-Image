@@ -105,6 +105,7 @@ def main() -> int:
                 "48",
             ],
             env=dict(os.environ, XDG_CACHE_HOME=tmp),
+            check=False,
             capture_output=True,
             timeout=10,
         )

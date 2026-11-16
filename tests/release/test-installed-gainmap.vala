@@ -1,6 +1,6 @@
 using ImageKit;
 
-private async void round_trip (ImageSource source, File output) throws Error {
+private async void verify_installed_gainmap_round_trip (ImageSource source, File output) throws Error {
     var options = new ExportOptions ();
     options.format = "uhdr";
     options.hdr = true;
@@ -14,12 +14,18 @@ private async void round_trip (ImageSource source, File output) throws Error {
 }
 
 int main (string[] args) {
-    if (args.length != 3) return 2;
+    if (args.length != 3) {
+        return 2;
+    }
     var loop = new MainLoop ();
     int status = 0;
-    round_trip.begin (new ImageSource (File.new_for_path (args[1])), File.new_for_path (args[2]), (obj, result) => {
-        try { round_trip.end (result); }
-        catch (Error error) { stderr.printf ("%s\n", error.message); status = 1; }
+    verify_installed_gainmap_round_trip.begin (new ImageSource (File.new_for_path (args[1])), File.new_for_path (args[2]), (obj, result) => {
+        try {
+            verify_installed_gainmap_round_trip.end (result);
+        } catch (Error error) {
+            stderr.printf ("%s\n", error.message);
+            status = 1;
+        }
         loop.quit ();
     });
     loop.run ();

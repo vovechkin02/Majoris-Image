@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 CORE_TESTS = {
     "OpenEXR region decoding",
@@ -38,7 +39,7 @@ RELEASE_TESTS = {
 }
 
 
-def load_json(path: Path):
+def load_json(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         raise SystemExit(f"Missing Meson qualification input: {path}")
     return json.loads(path.read_text())
@@ -51,7 +52,7 @@ def run(*args: str, timeout: int = 1800) -> None:
 
 def verify_profile(
     info: Path, variant: str, installed: bool, parser: argparse.ArgumentParser
-) -> dict:
+) -> dict[str, Any]:
     options = {
         option["name"]: option["value"]
         for option in load_json(info / "intro-buildoptions.json")

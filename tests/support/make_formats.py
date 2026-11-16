@@ -7,7 +7,7 @@ import zlib
 from pathlib import Path
 
 
-def chunk(kind, payload=b""):
+def chunk(kind: bytes, payload: bytes = b"") -> bytes:
     return (
         struct.pack(">I", len(payload))
         + kind
@@ -16,7 +16,7 @@ def chunk(kind, payload=b""):
     )
 
 
-def rgba(pixels):
+def rgba(pixels: list[int]) -> bytes:
     return zlib.compress(b"\0" + bytes(pixels))
 
 

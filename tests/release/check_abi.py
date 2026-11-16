@@ -14,11 +14,16 @@ GLYCIN_ONLY = {
 }
 
 
-def command(*args):
+def command(*args: str | Path) -> str:
     return subprocess.check_output(args, text=True, timeout=15)
 
 
-def check(library, soname, baseline, optional=frozenset()):
+def check(
+    library: Path,
+    soname: str,
+    baseline: Path,
+    optional: set[str] | frozenset[str] = frozenset(),
+) -> set[str]:
     dynamic = command("readelf", "-d", library)
     if re.findall(r"\(SONAME\).*\[(.*?)\]", dynamic) != [soname]:
         raise SystemExit(f"{library}: expected SONAME {soname}")

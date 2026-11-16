@@ -12,10 +12,11 @@ import statistics
 import subprocess
 import tempfile
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 
-def descendants(pid):
+def descendants(pid: int) -> Iterator[int]:
     try:
         children = (
             Path("/proc") / str(pid) / "task" / str(pid) / "children"
@@ -27,7 +28,7 @@ def descendants(pid):
         yield from descendants(child)
 
 
-def memory_kib(pid):
+def memory_kib(pid: int) -> tuple[int, str]:
     try:
         status = (Path("/proc") / str(pid) / "status").read_text()
     except OSError:
@@ -36,7 +37,7 @@ def memory_kib(pid):
     return int(lines.get("VmHWM", "0").split()[0]), lines["Name"].strip()
 
 
-def disk_usage(root):
+def disk_usage(root: Path) -> int:
     total = 0
     for path in root.rglob("*"):
         try:
@@ -47,7 +48,9 @@ def disk_usage(root):
     return total
 
 
-def measure(executable, operation, fixture, root, worker):
+def measure(
+    executable: Path, operation: str, fixture: Path, root: Path, worker: Path
+) -> dict[str, int | float | None]:
     cache = root / "sample-cache"
     cache.mkdir()
     staging = root / "sample-tmp"
@@ -116,7 +119,7 @@ def measure(executable, operation, fixture, root, worker):
     }
 
 
-def codec_versions():
+def codec_versions() -> dict[str, str]:
     result = {}
     for name in (
         "vips",

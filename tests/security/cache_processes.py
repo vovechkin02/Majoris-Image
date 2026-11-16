@@ -12,7 +12,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 
-def pixel_payload(png):
+def pixel_payload(png: bytes) -> bytes:
     payload = []
     offset = 8
     while offset + 12 <= len(png):
@@ -23,7 +23,7 @@ def pixel_payload(png):
     return zlib.decompress(b"".join(payload))
 
 
-def corrupt_idat(png):
+def corrupt_idat(png: bytes) -> bytearray:
     """Destroy the stream while keeping the PNG chunk framing and CRC intact."""
     corrupted = bytearray(png)
     offset = 8

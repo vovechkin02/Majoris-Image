@@ -9,7 +9,11 @@ namespace ImageKit {
         public int bit_depth { get; private set; }
         /** Source sample precision, or zero when the decoder cannot establish it. */
         public int source_bit_depth { get; private set; }
-        public int pixel_buffer_bit_depth { get { return 32; } }
+        public int pixel_buffer_bit_depth {
+            get {
+                return 32;
+            }
+        }
         public bool has_alpha { get; private set; }
         public bool color_managed { get; private set; }
         public string color_diagnostic { get; private set; }
@@ -52,7 +56,8 @@ namespace ImageKit {
             loop_count = probe.loop_count;
             frame_duration_ms = probe.frame_duration_ms;
             frame_timestamp_us = probe.frame_timestamp_us;
-            frame_duration_us = probe.frame_duration_us > 0 ? probe.frame_duration_us : (int64) frame_duration_ms * 1000;
+            frame_duration_us = probe.frame_duration_us > 0 ? probe.frame_duration_us
+                : (int64) frame_duration_ms * 1000;
             page = probe.animated ? 0 : options.page;
             frame = probe.animated ? options.page : 0;
             bit_depth = probe.depth;
@@ -71,51 +76,72 @@ namespace ImageKit {
             decoder = probe.loader;
             capabilities = probe.capabilities;
             mime_type = probe.mime;
-            if (options.raw_preview_only && probe.raw) warning = "Showing the camera's embedded RAW preview";
-            else if (probe.timed_sequence && !probe.animated) warning = "The installed decoder supplied a still preview of this timed sequence";
-            else warning = probe.loader == "Glycin" ? probe.color_diagnostic : "";
+            if (options.raw_preview_only && probe.raw) {
+                warning = "Showing the camera's embedded RAW preview";
+            } else if (probe.timed_sequence && !probe.animated) {
+                warning = "The installed decoder supplied a still preview of this timed sequence";
+            } else {
+                warning = probe.loader == "Glycin" ? probe.color_diagnostic : "";
+            }
             metadata = new ImageMetadata (probe.metadata);
         }
 
         public async ImageDocument open_page (int index, Cancellable? cancel = null) throws Error {
-            if (index < 0 || index >= page_count)
+            if (index < 0 || index >= page_count) {
                 throw new IOError.INVALID_ARGUMENT ("Page is outside the document");
+            }
             return yield open_index (index, cancel);
         }
 
         public async ImageDocument open_frame (int index, Cancellable? cancel = null) throws Error {
-            if (!animated || index < 0 || index >= frame_count)
+            if (!animated || index < 0 || index >= frame_count) {
                 throw new IOError.INVALID_ARGUMENT ("Frame is outside the animation");
+            }
             return yield open_index (index, cancel, true);
         }
 
-        private async ImageDocument open_index (int index, Cancellable? cancel, bool animation_frame = false) throws Error {
+        private async ImageDocument open_index (int index, Cancellable? cancel,
+            bool animation_frame = false) throws Error {
             var stop = cancel ?? new Cancellable ();
             yield verify_source (stop);
-            if (decoder == "Glycin" && !animated && index == 0) return this;
+            if (decoder == "Glycin" && !animated && index == 0) {
+                return this;
+            }
             var requested = options.copy ();
             requested.page = index;
-            if (decoder == "libheif-sequence") requested.sequence_frames = frame_count;
-            if (animated && mime_type == "image/apng" && (index != frame || (animation_frame && decoder != "Glycin"))) {
+            if (decoder == "libheif-sequence") {
+                requested.sequence_frames = frame_count;
+            }
+            if (animated && mime_type == "image/apng" &&
+                (index != frame || (animation_frame && decoder != "Glycin"))) {
                 try {
                     return yield GlycinFallback.open (source, requested, stop,
                         new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"), 120, probe);
                 } catch (ImageError.CODEC_MISSING error) {
-                    if (index == frame) return this;
+                    if (index == frame) {
+                        return this;
+                    }
                     throw error;
                 }
             }
-            if (animated && index == frame) return this;
+            if (animated && index == frame) {
+                return this;
+            }
             return yield DecoderRegistry.open_with (worker, source, requested, stop);
         }
 
         /** Render presentation pixels from the existing preview when possible. */
-        public async PixelBuffer render_preview (bool tone_map = false, Cancellable? cancel = null) throws Error {
+        public async PixelBuffer render_preview (bool tone_map = false,
+            Cancellable? cancel = null) throws Error {
             var stop = cancel ?? new Cancellable ();
             stop.set_error_if_cancelled ();
-            if (!hdr || tone_mapped == tone_map) return preview;
-            if (!tone_map)
-                return yield render_region (0, 0, width, height, int.max (preview.width, preview.height), false, stop);
+            if (!hdr || tone_mapped == tone_map) {
+                return preview;
+            }
+            if (!tone_map) {
+                return yield render_region (0, 0, width, height,
+                    int.max (preview.width, preview.height), false, stop);
+            }
             var requested = options.copy ();
             requested.sdr_presentation = true;
             return yield new WorkerClient ().render_pixels (preview, null, 0, requested, stop);
@@ -123,10 +149,12 @@ namespace ImageKit {
 
         /** Coordinates refer to the oriented page at its original resolution. */
         public async PixelBuffer render_region (int x, int y, int width, int height, int edge,
-                                                bool tone_map = false, Cancellable? cancel = null) throws Error {
+                                                bool tone_map = false,
+                                                    Cancellable? cancel = null) throws Error {
             if (x < 0 || y < 0 || width < 1 || height < 1 || x > this.width - width ||
-                y > this.height - height || edge < 1 || edge > 4096)
+                y > this.height - height || edge < 1 || edge > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Invalid image region or output size");
+            }
             var transform = new RenderOptions ();
             transform.crop_x = (double) x / this.width;
             transform.crop_y = (double) y / this.height;
@@ -134,7 +162,9 @@ namespace ImageKit {
             transform.crop_height = (double) height / this.height;
             var requested = options.copy ();
             requested.source_hdr = hdr ? 1 : 0;
-            if (decoder == "libheif-sequence") requested.sequence_frames = frame_count;
+            if (decoder == "libheif-sequence") {
+                requested.sequence_frames = frame_count;
+            }
             requested.sdr_presentation = tone_map;
             var stop = cancel ?? new Cancellable ();
             yield verify_source (stop);
@@ -150,12 +180,15 @@ namespace ImageKit {
                 var pixels = yield WorkerClient.read_pixels (output, stop);
                 yield verify_source (stop);
                 return pixels;
+            } finally {
+                WorkerClient.cleanup (output);
             }
-            finally { WorkerClient.cleanup (output); }
         }
+
         private async void verify_source (Cancellable stop) throws Error {
-            if (identity != "" && identity != (yield source.stamp (stop)))
+            if (identity != "" && identity != (yield source.stamp (stop))) {
                 throw new ImageError.SOURCE_CHANGED ("Image source changed; reload it before rendering more regions");
+            }
         }
     }
 }

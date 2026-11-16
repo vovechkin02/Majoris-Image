@@ -4,15 +4,22 @@ namespace ImageKit {
         private class Entry : Object {
             public string key;
             public ImageDocument document;
-            public Entry (string key, ImageDocument document) { this.key = key; this.document = document; }
+            public Entry (string key, ImageDocument document) {
+                this.key = key;
+                this.document = document;
+            }
         }
 
         private DecoderRegistry registry;
 
-        public PreloadManager () { registry = new DecoderRegistry (); }
+        public PreloadManager () {
+            registry = new DecoderRegistry ();
+        }
 
         /** Reuse the same registered backends and timeout as the foreground consumer. */
-        public PreloadManager.with_registry (DecoderRegistry registry) { this.registry = registry; }
+        public PreloadManager.with_registry (DecoderRegistry registry) {
+            this.registry = registry;
+        }
 
         private Gee.ArrayList<Entry> entries = new Gee.ArrayList<Entry> ();
         private Cancellable pending = new Cancellable ();
@@ -32,13 +39,18 @@ namespace ImageKit {
             var request = (options ?? new DecodeOptions ()).copy ();
             var stop = cancel ?? new Cancellable ();
             string? key = null;
-            try { key = yield key_for (source, request, stop); }
-            catch (Error error) { stop.set_error_if_cancelled (); }
+            try {
+                key = yield key_for (source, request, stop);
+            } catch (Error error) {
+                stop.set_error_if_cancelled ();
+            }
             stop.set_error_if_cancelled ();
             if (key != null) {
                 for (int i = 0; i < entries.size; i++) {
                     var entry = entries[i];
-                    if (entry.key != key) continue;
+                    if (entry.key != key) {
+                        continue;
+                    }
                     entries.remove_at (i);
                     entries.add (entry);
                     return entry.document;
@@ -57,25 +69,42 @@ namespace ImageKit {
                 try {
                     var source = neighbors[i];
                     var key = yield key_for (source, request, stop);
-                    if (key == null) continue;
-                    if (entries.any_match (entry => entry.key == key)) continue;
+                    if (key == null) {
+                        continue;
+                    }
+                    if (entries.any_match (entry => entry.key == key)) {
+                        continue;
+                    }
                     var document = yield registry.open_internal (source, request, stop, true);
                     var after = yield key_for (source, request, stop);
-                    if (request_id != generation) return;
-                    if (key != after) continue;
+                    if (request_id != generation) {
+                        return;
+                    }
+                    if (key != after) {
+                        continue;
+                    }
                     size_t length = document.preview.bytes.get_size ();
-                    if (length > 64 * 1024 * 1024 - bytes) return;
+                    if (length > 64 * 1024 * 1024 - bytes) {
+                        return;
+                    }
                     entries.add (new Entry (key, document));
                     bytes += length;
-                } catch (IOError.CANCELLED e) { return; }
-                catch (Error e) { debug ("Adjacent image unavailable: %s", e.message); }
+                } catch (IOError.CANCELLED e) {
+                    return;
+                } catch (Error e) {
+                    debug ("Adjacent image unavailable: %s", e.message);
+                }
             }
         }
 
-        private async string? key_for (ImageSource source, DecodeOptions options, Cancellable stop) throws Error {
-            var info = yield source.file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0, Priority.LOW, stop);
+        private async string? key_for (ImageSource source, DecodeOptions options,
+            Cancellable stop) throws Error {
+            var info = yield source.file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
+                Priority.LOW, stop);
             string stamp = ThumbnailService.source_stamp (source.file, info);
-            if (stamp == "") return null;
+            if (stamp == "") {
+                return null;
+            }
             return stamp + "\n" + Json.gobject_to_data (options, null);
         }
     }

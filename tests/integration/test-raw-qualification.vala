@@ -84,7 +84,8 @@ async void verify_raw_manifest_samples (string directory, string manifest) throw
         var thumbnail = yield new ThumbnailService ().generate (source, 128);
         assert (thumbnail.get_size () > 45);
         assert (before == (yield compute_fixture_sha256 (file)));
-        stdout.printf ("%s developed %dx%d, source precision %d\n", name, rgb.width, rgb.height, rgb.source_bit_depth);
+        stdout.printf ("%s developed %dx%d, source precision %d\n", name, rgb.width, rgb.height,
+            rgb.source_bit_depth);
         count++;
     }
     assert (count == 9 && previews == 9);

@@ -10,12 +10,20 @@ namespace ImageKit {
                 source = "/job/developed.tif";
             }
         }
-        if (probe.gain_map) return ImageNative.ultra_decode (source, false);
-        if (probe.loader == "openexr-native") return ImageNative.exr_image (source, options.page);
+        if (probe.gain_map) {
+            return ImageNative.ultra_decode (source, false);
+        }
+        if (probe.loader == "openexr-native") {
+            return ImageNative.exr_image (source, options.page);
+        }
         var image = options.page == 0 ? Vips.Image.from_file (source, "fail_on", 2, null) :
             Vips.Image.from_file (source, "page", options.page, "n", 1, "fail_on", 2, null);
-        if (image == null) throw new ImageError.CORRUPT ("%s", Vips.error_buffer ());
-        if (probe.loader.contains ("heif")) ImageNative.annotate_heif (image, source);
+        if (image == null) {
+            throw new ImageError.CORRUPT ("%s", Vips.error_buffer ());
+        }
+        if (probe.loader.contains ("heif")) {
+            ImageNative.annotate_heif (image, source);
+        }
         if (probe.raw && !options.raw_preview_only) {
             image.set_int ("majoris-image-transfer", 8);
             image.set_int ("majoris-image-primaries", 1);
@@ -43,7 +51,9 @@ namespace ImageKit {
     }
 
     public int main (string[] args) {
-        if (args.length != 6 || Vips.init ("majoris-image-worker") != 0) return 2;
+        if (args.length != 6 || Vips.init ("majoris-image-worker") != 0) {
+            return 2;
+        }
         Vips.cache_set_max_mem (128 * 1024 * 1024);
         Vips.concurrency_set (2);
         try {
@@ -57,10 +67,15 @@ namespace ImageKit {
             var request = WorkerRequest.deserialize (json);
             var options = request.options;
             int edge = int.parse (args[5]);
-            if (edge < 0 || edge > 4096) throw new IOError.INVALID_ARGUMENT ("Invalid output edge");
+            if (edge < 0 || edge > 4096) {
+                throw new IOError.INVALID_ARGUMENT ("Invalid output edge");
+            }
             if (operation == "render-buffer") {
-                var image = ImageProcessor.render_image (ImageNative.read_pixels (source), request.transform, edge);
-                if (options.sdr_presentation) image = ToneMapper.map (image, options.tone_mode);
+                var image = ImageProcessor.render_image (ImageNative.read_pixels (source),
+                    request.transform, edge);
+                if (options.sdr_presentation) {
+                    image = ToneMapper.map (image, options.tone_mode);
+                }
                 ImageNative.write_pixels (image, output);
                 return 0;
             }
@@ -69,21 +84,27 @@ namespace ImageKit {
                 return 0;
             }
             Vips.Image? prepared;
-            var probe = ImageInspector.inspect_with_pixels (source, request.hdr_hint, options.page, out prepared, request.sequence_frames);
+            var probe = ImageInspector.inspect_with_pixels (source, request.hdr_hint, options.page,
+                out prepared, request.sequence_frames);
             if (operation == "probe") {
                 update_metadata (source, options, request, probe, prepared);
                 FileUtils.set_contents (output, probe.serialize ());
                 return 0;
             }
-            if (operation != "thumbnail" && operation != "decode" && operation != "tile" && operation != "export")
+            if (operation != "thumbnail" && operation != "decode" && operation != "tile" &&
+                operation != "export") {
                 throw new IOError.INVALID_ARGUMENT ("Unknown decoder operation");
+            }
             if (operation == "thumbnail" && probe.raw) {
                 options.raw_preview_only = options.raw_preview_first;
             }
             Vips.Image input;
-            try { input = prepared ?? open_pixels (source, probe, options); }
-            catch (Error e) {
-                if (operation != "thumbnail" || !options.raw_preview_only) throw e;
+            try {
+                input = prepared ?? open_pixels (source, probe, options);
+            } catch (Error e) {
+                if (operation != "thumbnail" || !options.raw_preview_only) {
+                    throw e;
+                }
                 options.raw_preview_only = false;
                 input = open_pixels (source, probe, options);
             }
@@ -98,7 +119,9 @@ namespace ImageKit {
                 probe.region = false;
                 probe.loader = "LibRaw embedded preview";
             }
-            if (operation == "decode") update_metadata (source, options, request, probe, prepared);
+            if (operation == "decode") {
+                update_metadata (source, options, request, probe, prepared);
+            }
             if (probe.vector && edge > 0) {
                 var crop = request.transform;
                 input = ImageNative.svg_region (source, crop.crop_x, crop.crop_y, crop.crop_width,
@@ -109,26 +132,35 @@ namespace ImageKit {
             var image = ImageProcessor.render_image (input, request.transform, edge);
             if (operation == "export") {
                 request.export_options.validate ();
-                string extension = request.export_options.format == "uhdr" ? "jpg" : request.export_options.format;
+                string extension = request.export_options.format == "uhdr" ? "jpg"
+                    : request.export_options.format;
                 ExportEngine.write (image, output + "." + extension, request.export_options, probe.hdr);
             } else if (operation == "thumbnail") {
-                if (probe.hdr) image = ToneMapper.map (image, options.tone_mode);
+                if (probe.hdr) {
+                    image = ToneMapper.map (image, options.tone_mode);
+                }
                 Vips.Image srgb;
                 ImageProcessor.check (Vips.colorspace (image, out srgb, 22, null));
                 ImageNative.tag_srgb (srgb);
-                foreach (string field in srgb.fields ())
+                foreach (string field in srgb.fields ()) {
                     if (field.has_prefix ("exif-") || field.has_prefix ("png-comment-") ||
-                        field == "exif-data" || field == "xmp-data" || field == "iptc-data")
+                            field == "exif-data" || field == "xmp-data" || field == "iptc-data") {
                         srgb.remove (field);
+                    }
+                }
                 if (request.thumbnail_uri != "" && request.thumbnail_mtime != "") {
                     srgb.set_string ("png-comment-0-Thumb::URI", request.thumbnail_uri);
                     srgb.set_string ("png-comment-1-Thumb::MTime", request.thumbnail_mtime);
                 }
                 ImageProcessor.check (srgb.write_to_file (output + ".png", null));
             } else {
-                if (probe.hdr && options.sdr_presentation) image = ToneMapper.map (image, options.tone_mode);
+                if (probe.hdr && options.sdr_presentation) {
+                    image = ToneMapper.map (image, options.tone_mode);
+                }
                 ImageNative.write_pixels (image, output);
-                if (operation == "decode") FileUtils.set_contents ("/job/image.json", probe.serialize ());
+                if (operation == "decode") {
+                    FileUtils.set_contents ("/job/image.json", probe.serialize ());
+                }
             }
             return 0;
         } catch (Error e) {

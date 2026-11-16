@@ -19,7 +19,8 @@ int main (string[] args) {
     }
     var loop = new MainLoop ();
     int status = 0;
-    verify_installed_gainmap_round_trip.begin (new ImageSource (File.new_for_path (args[1])), File.new_for_path (args[2]), (obj, result) => {
+    verify_installed_gainmap_round_trip.begin (new ImageSource (File.new_for_path (args[1])),
+        File.new_for_path (args[2]), (obj, result) => {
         try {
             verify_installed_gainmap_round_trip.end (result);
         } catch (Error error) {

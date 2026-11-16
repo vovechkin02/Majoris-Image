@@ -3,7 +3,8 @@ using ImageKit;
 [CCode (cname = "g_object_run_dispose", cheader_filename = "glib-object.h")]
 private extern void force_dispose (Object object);
 
-async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other, string fixture_dir, string webp_path, string[] animations) throws Error {
+async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other,
+    string fixture_dir, string webp_path, string[] animations) throws Error {
     var png = File.new_for_path (Path.build_filename (fixture_dir, "rgb16.png"));
     var tiff = File.new_for_path (Path.build_filename (fixture_dir, "multipage.tiff"));
     var canceled = new Cancellable ();
@@ -229,7 +230,8 @@ int main (string[] args) {
     window.present ();
     var loop = new MainLoop ();
     int code = 0;
-    verify_view_lifecycle_and_navigation.begin (view, other, args[1], args[2], args[3:args.length], (obj, result) => {
+    verify_view_lifecycle_and_navigation.begin (view, other, args[1], args[2], args[3:args.length],
+        (obj, result) => {
         try {
             verify_view_lifecycle_and_navigation.end (result);
         } catch (Error e) {

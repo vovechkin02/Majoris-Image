@@ -96,7 +96,8 @@ private async void delay () {
     yield;
 }
 
-private async void verify_tile_cache_coverage_and_cancellation (string path, string exr_path, bool complete) throws Error {
+private async void verify_tile_cache_coverage_and_cancellation (string path, string exr_path,
+    bool complete) throws Error {
     var document = yield new DecoderRegistry ().open (new ImageSource (File.new_for_path (path)));
     var cache = new TileCache ();
     cache.reset (document);
@@ -213,7 +214,8 @@ int main (string[] args) {
     verify_tile_geometry ();
     var loop = new MainLoop ();
     int status = 0;
-    verify_tile_cache_coverage_and_cancellation.begin (args[1], args[2], args.length > 3 && args[3] == "--complete", (object, response) => {
+    verify_tile_cache_coverage_and_cancellation.begin (args[1], args[2], args.length > 3 &&
+        args[3] == "--complete", (object, response) => {
         try {
             verify_tile_cache_coverage_and_cancellation.end (response);
         } catch (Error error) {

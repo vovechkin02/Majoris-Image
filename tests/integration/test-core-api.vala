@@ -18,7 +18,8 @@ async void verify_headless_core_api (string directory, string large_path) throws
     var pixels = yield document.render_region (0, 0, 1, 1, 1);
     assert (pixels.width == 1 && pixels.height == 1 && pixels.bytes.get_size () == 16);
     // Hold the expired entry open while the actual cache maintenance runs.
-    string cache_path = Path.build_filename (Environment.get_user_cache_dir (), "majoris-image", "thumbnails-v2");
+    string cache_path = Path.build_filename (Environment.get_user_cache_dir (), "majoris-image",
+        "thumbnails-v2");
     assert (DirUtils.create_with_parents (cache_path, 0700) == 0);
     var expired = File.new_for_path (Path.build_filename (cache_path, string.nfill (64, '0') + ".png"));
     var expired_pixels = yield source.file.load_bytes_async (null, null);

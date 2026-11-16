@@ -3,7 +3,10 @@ using ImageKit;
 int main (string[] args) {
     var app = new Gtk.Application ("org.majoris.Image.Demo", ApplicationFlags.DEFAULT_FLAGS);
     app.activate.connect (() => {
-        if (app.active_window != null) { app.active_window.present (); return; }
+        if (app.active_window != null) {
+            app.active_window.present ();
+            return;
+        }
         ImageView.register_type ();
         var ui = new Gtk.Builder.from_resource ("/org/majoris/Image/demo.ui");
         var window = (Gtk.ApplicationWindow) ui.get_object ("window");
@@ -22,7 +25,13 @@ int main (string[] args) {
         ((Gtk.Button) ui.get_object ("in")).clicked.connect (() => view.zoom_in ());
         ((Gtk.Button) ui.get_object ("out")).clicked.connect (() => view.zoom_out ());
         ((Gtk.Button) ui.get_object ("rotate")).clicked.connect (() => view.rotate_clockwise ());
-        play.clicked.connect (() => { if (view.playing) view.pause (); else view.play (); });
+        play.clicked.connect (() => {
+            if (view.playing) {
+                view.pause ();
+            } else {
+                view.play ();
+            }
+        });
         prev.clicked.connect (() => change_page.begin (view, view.current_page - 1));
         next.clicked.connect (() => change_page.begin (view, view.current_page + 1));
         metadata.clicked.connect (() => show_metadata (window, view));
@@ -35,13 +44,18 @@ int main (string[] args) {
             prev.sensitive = view.current_page > 0 && view.state == ViewState.READY;
             next.sensitive = view.current_page + 1 < view.page_count && view.state == ViewState.READY;
             metadata.sensitive = view.metadata != null;
-            if (view.error_message != "") status.label = view.error_message;
-            else if (view.state == ViewState.LOADING) status.label = "Loading image…";
-            else if (view.state == ViewState.EMPTY) status.label = "Open an image to get started.";
-            else status.label = "%d × %d · %s · Page %d of %d%s%s".printf (
-                view.image_width, view.image_height, view.decoder, view.current_page + 1, view.page_count,
-                view.hdr_source ? " · HDR source, SDR presentation" : "",
-                view.warning != "" ? " · " + view.warning : "");
+            if (view.error_message != "") {
+                status.label = view.error_message;
+            } else if (view.state == ViewState.LOADING) {
+                status.label = "Loading image…";
+            } else if (view.state == ViewState.EMPTY) {
+                status.label = "Open an image to get started.";
+            } else {
+                status.label = "%d × %d · %s · Page %d of %d%s%s".printf (
+                    view.image_width, view.image_height, view.decoder, view.current_page + 1, view.page_count,
+                    view.hdr_source ? " · HDR source, SDR presentation" : "",
+                    view.warning != "" ? " · " + view.warning : "");
+            }
             return Source.REMOVE;
         };
         view.notify["state"].connect (() => refresh ());
@@ -59,16 +73,23 @@ async void choose_image (Gtk.Window window, ImageView view) {
         var chooser = new Gtk.FileDialog ();
         var file = yield chooser.open (window, null);
         yield view.load_file (file);
-    } catch (Error e) { debug ("%s", e.message); }
+    } catch (Error e) {
+        debug ("%s", e.message);
+    }
 }
 
 async void change_page (ImageView view, int page) {
-    try { yield view.set_page (page); }
-    catch (Error e) { debug ("%s", e.message); }
+    try {
+        yield view.set_page (page);
+    } catch (Error e) {
+        debug ("%s", e.message);
+    }
 }
 
 void show_metadata (Gtk.Window parent, ImageView view) {
-    if (view.metadata == null) return;
+    if (view.metadata == null) {
+        return;
+    }
     var text = new Gtk.TextView ();
     text.wrap_mode = Gtk.WrapMode.WORD_CHAR;
     text.editable = false;

@@ -47,13 +47,17 @@ namespace ImageKit {
             TileCoverage coverage = {};
             if (width <= 0 || height <= 0 || !zoom.is_finite () || zoom <= 0 ||
                 !bounds.left.is_finite () || !bounds.top.is_finite () ||
-                !bounds.right.is_finite () || !bounds.bottom.is_finite ()) return coverage;
+                !bounds.right.is_finite () || !bounds.bottom.is_finite ()) {
+                return coverage;
+            }
 
             double left = bounds.left.clamp (0, width);
             double top = bounds.top.clamp (0, height);
             double right = bounds.right.clamp (0, width);
             double bottom = bounds.bottom.clamp (0, height);
-            if (left >= right || top >= bottom) return coverage;
+            if (left >= right || top >= bottom) {
+                return coverage;
+            }
             coverage.end_x = (int) Math.ceil (right);
             coverage.end_y = (int) Math.ceil (bottom);
             coverage.center_x = (left + right) / 2;
@@ -121,11 +125,17 @@ namespace ImageKit {
         public signal void changed ();
 
         public void reset (ImageDocument? source, bool tone_map = false) {
-            if (source != null && !source.supports_regions) source = null;
-            if (document == source && this.tone_map == tone_map) return;
+            if (source != null && !source.supports_regions) {
+                source = null;
+            }
+            if (document == source && this.tone_map == tone_map) {
+                return;
+            }
             generation++;
             this.tone_map = tone_map;
-            foreach (var tile in tiles.values) tile.request?.cancel ();
+            foreach (var tile in tiles.values) {
+                tile.request?.cancel ();
+            }
             document = source;
             tiles.clear ();
             pending.clear ();
@@ -135,7 +145,9 @@ namespace ImageKit {
 
         public Gee.List<ImageTile> visible (TileBounds bounds, double zoom) {
             var visible = new Gee.ArrayList<ImageTile> ();
-            if (document == null) return visible;
+            if (document == null) {
+                return visible;
+            }
             var plan = TileCoverage.plan (bounds, document.width, document.height, zoom, document.vector);
             pending.clear ();
             var keep = new Gee.HashSet<ImageTile> ();
@@ -153,17 +165,23 @@ namespace ImageKit {
                     double first = distance (a, plan), second = distance (b, plan);
                     return first < second ? -1 : first > second ? 1 : 0;
                 });
-                foreach (var tile in visible) queue_tile (tile);
+                foreach (var tile in visible) {
+                    queue_tile (tile);
+                }
 
                 // Prefetch neighbors nearest the visible center after the visible work.
                 var center = visible[0];
                 bool visible_waiting = !pending.is_empty;
                 int64 next_x = ((int64) plan.end_x + plan.extent - 1) / plan.extent * plan.extent;
                 int64 next_y = ((int64) plan.end_y + plan.extent - 1) / plan.extent * plan.extent;
-                if (next_x < document.width)
-                    visible_bytes = prefetch ((int) next_x, center.y, plan, keep, visible_bytes, visible_waiting);
-                if (next_y < document.height)
-                    visible_bytes = prefetch (center.x, (int) next_y, plan, keep, visible_bytes, visible_waiting);
+                if (next_x < document.width) {
+                    visible_bytes = prefetch ((int) next_x, center.y, plan, keep, visible_bytes,
+                        visible_waiting);
+                }
+                if (next_y < document.height) {
+                    visible_bytes = prefetch (center.x, (int) next_y, plan, keep, visible_bytes,
+                        visible_waiting);
+                }
             }
             evict (keep, int64.max (WARM_BYTES, visible_bytes));
             pump ();
@@ -176,11 +194,18 @@ namespace ImageKit {
             return dx * dx + dy * dy;
         }
 
-        private int64 prefetch (int x, int y, TileCoverage plan, Gee.HashSet<ImageTile> keep, int64 used, bool visible_waiting) {
-            if (keep.size >= TileCoverage.MAX_SLOTS) return used;
+        private int64 prefetch (int x, int y, TileCoverage plan, Gee.HashSet<ImageTile> keep,
+            int64 used, bool visible_waiting) {
+            if (keep.size >= TileCoverage.MAX_SLOTS) {
+                return used;
+            }
             var tile = tile_at (x, y, plan);
-            if (used + tile.charge > TileCoverage.MAX_BYTES) return used;
-            if (visible_waiting) tile.request?.cancel ();
+            if (used + tile.charge > TileCoverage.MAX_BYTES) {
+                return used;
+            }
+            if (visible_waiting) {
+                tile.request?.cancel ();
+            }
             keep.add (tile);
             queue_tile (tile);
             return used + tile.charge;
@@ -198,8 +223,10 @@ namespace ImageKit {
                 tile.height = int.min (plan.extent, document.height - y);
                 tile.decode_x = int.max (0, x - plan.bleed);
                 tile.decode_y = int.max (0, y - plan.bleed);
-                tile.decode_width = (int) int64.min (document.width, (int64) x + tile.width + plan.bleed) - tile.decode_x;
-                tile.decode_height = (int) int64.min (document.height, (int64) y + tile.height + plan.bleed) - tile.decode_y;
+                tile.decode_width = (int) int64.min (document.width,
+                    (int64) x + tile.width + plan.bleed) - tile.decode_x;
+                tile.decode_height = (int) int64.min (document.height,
+                    (int64) y + tile.height + plan.bleed) - tile.decode_y;
                 tile.edge = (int) Math.ceil (int.max (tile.decode_width, tile.decode_height) * plan.level);
                 tile.charge = (int64) tile.edge * tile.edge * 16;
                 reserved_bytes += tile.charge;
@@ -210,7 +237,9 @@ namespace ImageKit {
         }
 
         private void queue_tile (ImageTile tile) {
-            if (tile.texture == null && tile.request == null && !tile.failed) pending.offer (tile);
+            if (tile.texture == null && tile.request == null && !tile.failed) {
+                pending.offer (tile);
+            }
         }
 
         private void evict (Gee.HashSet<ImageTile> keep, int64 budget) {
@@ -221,10 +250,14 @@ namespace ImageKit {
                     unused.add (tile);
                 }
             }
-            if (reserved_bytes <= budget && tiles.size <= TileCoverage.MAX_SLOTS) return;
+            if (reserved_bytes <= budget && tiles.size <= TileCoverage.MAX_SLOTS) {
+                return;
+            }
             unused.sort ((a, b) => a.used < b.used ? -1 : a.used > b.used ? 1 : 0);
             foreach (var tile in unused) {
-                if (reserved_bytes <= budget && tiles.size <= TileCoverage.MAX_SLOTS) break;
+                if (reserved_bytes <= budget && tiles.size <= TileCoverage.MAX_SLOTS) {
+                    break;
+                }
                 reserved_bytes -= tile.charge;
                 tiles.unset (tile.key);
             }
@@ -233,22 +266,27 @@ namespace ImageKit {
         private void pump () {
             while (active < 2 && !pending.is_empty) {
                 var tile = pending.poll ();
-                if (tiles[tile.key] != tile) continue;
+                if (tiles[tile.key] != tile) {
+                    continue;
+                }
                 tile.request = new Cancellable ();
                 active++;
                 load.begin (document, tile, generation, tone_map, tile.request);
             }
         }
 
-        private async void load (ImageDocument source, ImageTile tile, uint request_generation, bool tone_map, Cancellable stop) {
+        private async void load (ImageDocument source, ImageTile tile, uint request_generation,
+            bool tone_map, Cancellable stop) {
             try {
                 var pixels = yield source.render_region (tile.decode_x, tile.decode_y,
                     tile.decode_width, tile.decode_height, tile.edge, tone_map, stop);
                 if (pixels.width > tile.edge || pixels.height > tile.edge ||
-                    pixels.bytes.get_size () > tile.charge)
+                    pixels.bytes.get_size () > tile.charge) {
                     throw new ImageError.INVALID_RESPONSE ("Region decoder exceeded the tile allocation");
-                if (!stop.is_cancelled () && generation == request_generation && tiles[tile.key] == tile)
+                }
+                if (!stop.is_cancelled () && generation == request_generation && tiles[tile.key] == tile) {
                     tile.texture = texture_for_pixels (pixels);
+                }
             } catch (Error e) {
                 if (!stop.is_cancelled ()) {
                     tile.failed = true;
@@ -258,7 +296,9 @@ namespace ImageKit {
                 tile.request = null;
                 active--;
                 pump ();
-                if (request_generation == generation) changed ();
+                if (request_generation == generation) {
+                    changed ();
+                }
             }
         }
     }

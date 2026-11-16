@@ -27,6 +27,7 @@ private class FaultBackend : Object, DecoderBackend {
     public FaultBackend (string path) {
         this.path = path;
     }
+
     public bool accepts (string mime, Bytes signature) {
         return signature.get_size () > 0;
     }
@@ -41,7 +42,9 @@ async void verify_worker_failures_and_isolation (string worker_path) throws Erro
     string secret = Path.build_filename (dir, "app-data");
     var source = new ImageSource (File.new_for_path (input));
     try {
-        foreach (string mode in new string[] { "C", "C", "X" }) {
+        foreach (string mode in new string[] {
+            "C", "C", "X"
+        }) {
             FileUtils.set_contents (input, mode);
             try {
                 yield registry.inspect (source);
@@ -82,7 +85,9 @@ async void verify_worker_failures_and_isolation (string worker_path) throws Erro
         FileUtils.get_contents (input, out original);
         assert (original == "R");
 
-        foreach (string mode in new string[] { "I", "J", "N", "Q", "Z", "E", "K", "W" }) {
+        foreach (string mode in new string[] {
+            "I", "J", "N", "Q", "Z", "E", "K", "W"
+        }) {
             FileUtils.set_contents (input, mode);
             try {
                 yield registry.inspect (source);
@@ -114,7 +119,9 @@ async void verify_worker_failures_and_isolation (string worker_path) throws Erro
         var recovered = yield registry.inspect (source);
         assert (recovered.width == 1 && recovered.loader == "fault-test");
 
-        foreach (string mode in new string[] { "S", "L" }) {
+        foreach (string mode in new string[] {
+            "S", "L"
+        }) {
             FileUtils.set_contents (input, mode);
             try {
                 yield registry.open (source);

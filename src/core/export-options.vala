@@ -14,13 +14,23 @@ namespace ImageKit {
         public bool maintain_aspect { get; set; default = true; }
         public string compression { get; set; default = "deflate"; }
         public void validate () throws Error {
-            string[] formats = { "jpg", "jpeg", "png", "tif", "tiff", "webp", "avif", "heif", "heic", "jxl", "exr", "uhdr" };
-            if (!(format in formats) || quality < 1 || quality > 100 || !(bit_depth in new int[] { 8, 10, 12, 16, 32 }) || !scale.is_finite () || scale <= 0 || scale > 8 || width < 0 || height < 0)
+            string[] formats = { "jpg", "jpeg", "png", "tif", "tiff", "webp", "avif", "heif",
+                "heic", "jxl", "exr", "uhdr" };
+            if (!(format in formats) || quality < 1 || quality > 100 || !(bit_depth in new int[] {
+                8, 10, 12, 16, 32
+            }) || !scale.is_finite () || scale <= 0 || scale > 8 || width < 0 || height < 0) {
                 throw new ImageError.EXPORT (_("Invalid export options."));
-            if (hdr && !(format in new string[] { "exr", "tif", "tiff", "avif", "heif", "heic", "jxl", "uhdr" }))
+            }
+            if (hdr && !(format in new string[] {
+                "exr", "tif", "tiff", "avif", "heif", "heic", "jxl", "uhdr"
+            })) {
                 throw new ImageError.EXPORT (_("The selected format cannot preserve HDR."));
-            if (!(compression in new string[] { "none", "deflate", "lzw" }) || (format == "png" && compression == "lzw"))
+            }
+            if (!(compression in new string[] {
+                "none", "deflate", "lzw"
+            }) || (format == "png" && compression == "lzw")) {
                 throw new ImageError.EXPORT (_("Unsupported compression option."));
+            }
         }
     }
 }

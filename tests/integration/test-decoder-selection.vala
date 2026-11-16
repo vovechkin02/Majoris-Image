@@ -33,6 +33,7 @@ private class MissingFixtureCodec : Object, DecoderBackend {
                      "image/vnd-ms.dds", "image/x-portable-graymap" };
         }
     }
+
     public bool accepts (string mime, Bytes signature) {
         unowned uint8[] data = signature.get_data ();
         if (data.length < 4) {
@@ -69,11 +70,14 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
         var oriented = yield registry.open (new ImageSource (File.new_for_path (path)));
         assert (oriented.width == (i < 4 ? 3 : 2) && oriented.height == (i < 4 ? 2 : 3));
         for (int channel = 0; channel < 3; channel++) {
-            assert ((sample_float_channel (oriented.preview, 0, channel) > 0.9f) == ((corner[i] & (4 >> channel)) != 0));
+            assert ((sample_float_channel (oriented.preview, 0,
+                channel) > 0.9f) == ((corner[i] & (4 >> channel)) != 0));
         }
     }
     string generated_directory = Path.get_dirname (args[1]);
-    foreach (string name in new string[] { "navigation.jpg", "still.webp", "jpeg2000.jp2", "animated.gif", "animated.webp" }) {
+    foreach (string name in new string[] {
+        "navigation.jpg", "still.webp", "jpeg2000.jp2", "animated.gif", "animated.webp"
+    }) {
         var file = File.new_for_path (Path.build_filename (generated_directory, name));
         var info = yield file.query_info_async (FileAttribute.STANDARD_SIZE, 0);
         if (name == "jpeg2000.jp2" && info.get_size () == 0) {
@@ -91,7 +95,8 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
         if (name.has_prefix ("animated")) {
             assert (decoded.animated && decoded.frame_count == 3);
             var green = yield decoded.open_frame (1);
-            assert (sample_float_channel (green.preview, 0, 1) > 0.99f && sample_float_channel (green.preview, 0, 0) < 0.01f);
+            assert (sample_float_channel (green.preview, 0, 1) > 0.99f &&
+                sample_float_channel (green.preview, 0, 0) < 0.01f);
         }
     }
     var sequence = new ImageSource (File.new_for_path (args[5]));
@@ -103,7 +108,8 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
             assert (sample_float_channel (still.preview, 0, 0) > 0.9f);
             var next = yield still.open_frame (1);
             assert (next.frame == 1 && next.frame_timestamp_us == 70000 && next.frame_duration_us == 160000);
-            assert (sample_float_channel (next.preview, 0, 1) > 0.9f && sample_float_channel (next.preview, 0, 0) < 0.05f);
+            assert (sample_float_channel (next.preview, 0, 1) > 0.9f &&
+                sample_float_channel (next.preview, 0, 0) < 0.05f);
         } else {
             assert (args[6] != "avif");
             assert (still.timed_sequence && still.page_count == 1);
@@ -164,7 +170,9 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
         var tail = yield fractional.open_frame (2);
         assert (tail.frame_timestamp_us == 230000 && tail.frame_duration_us == 40000);
         assert (sample_float_channel (tail.preview, 0, 0) > 0.9f);
-        foreach (var invalid in new string[] { "offset.heic", "invalid-timing.heic", "rate.heic", "composition.heic" }) {
+        foreach (var invalid in new string[] {
+            "offset.heic", "invalid-timing.heic", "rate.heic", "composition.heic"
+        }) {
             var source = new ImageSource (File.new_for_path (Path.build_filename (generated, invalid)));
             try {
                 yield registry.open (source);
@@ -200,7 +208,8 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
     float[] reference = { 0.18f, 0.32f, 0.12f };
     for (int channel = 0; channel < 3; channel++) {
         assert (Math.fabs (sample_float_channel (native_p3.preview, 0, channel) - reference[channel]) < 0.005);
-        assert (Math.fabs (sample_float_channel (native_tiff.preview, 0, channel) - reference[channel]) < 0.005);
+        assert (Math.fabs (sample_float_channel (native_tiff.preview, 0,
+            channel) - reference[channel]) < 0.005);
     }
     registry.register_backend (new MissingFixtureCodec (args[4]));
     if (catalog.contains ("image/png")) {
@@ -208,13 +217,15 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
         assert (fallback_p3.decoder == "Glycin" && fallback_p3.bit_depth == 16);
         assert (!fallback_p3.color_managed && fallback_p3.color_diagnostic.contains ("ICC"));
         for (int channel = 0; channel < 3; channel++) {
-            assert (Math.fabs (sample_float_channel (fallback_p3.preview, 0, channel) - reference[channel]) < 0.01);
+            assert (Math.fabs (sample_float_channel (fallback_p3.preview, 0,
+                channel) - reference[channel]) < 0.01);
         }
         var adobe = new ImageSource (File.new_for_path (Path.build_filename (directory, "adobe.png")));
         var fallback_adobe = yield registry.open (adobe);
         assert (fallback_adobe.decoder == "Glycin" && fallback_adobe.bit_depth == 16);
         for (int channel = 0; channel < 3; channel++) {
-            assert (Math.fabs (sample_float_channel (fallback_adobe.preview, 0, channel) - reference[channel]) < 0.01);
+            assert (Math.fabs (sample_float_channel (fallback_adobe.preview, 0,
+                channel) - reference[channel]) < 0.01);
         }
         var gray = new ImageSource (File.new_for_path (Path.build_filename (directory, "gray-profile.png")));
         var fallback_gray = yield registry.open (gray);
@@ -223,7 +234,8 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
             assert (Math.fabs (sample_float_channel (fallback_gray.preview, 0, channel) - 0.106) < 0.01);
         }
         assert (Math.fabs (sample_float_channel (fallback_gray.preview, 0, 3) - 0.5) < 0.002);
-        assert (sample_float_channel (fallback_gray.preview, 1, 3) == 0 && sample_float_channel (fallback_gray.preview, 1, 0) == 0);
+        assert (sample_float_channel (fallback_gray.preview, 1, 3) == 0 &&
+            sample_float_channel (fallback_gray.preview, 1, 0) == 0);
         var srgb = new ImageSource (File.new_for_path (Path.build_filename (directory, "srgb.png")));
         var require_color = new DecodeOptions ();
         require_color.required_capabilities |= ImageCapabilities.COLOR_MANAGED;
@@ -238,7 +250,8 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
         } catch (ImageError.COLOR_PROFILE error) {
             // Strict color handling must reject this profile.
         }
-        var broken = new ImageSource (File.new_for_path (Path.build_filename (directory, "invalid-profile.png")));
+        var broken = new ImageSource (File.new_for_path (Path.build_filename (directory,
+            "invalid-profile.png")));
         try {
             yield registry.open (broken);
             assert_not_reached ();
@@ -261,7 +274,8 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
         stdout.printf ("%s: %s %dx%d\n", names[i], legacy.decoder, legacy.width, legacy.height);
         assert (legacy.decoder == "Glycin" && legacy.width == (i == 3 ? 4 : 2));
         if (i < 4) {
-            assert (sample_float_channel (legacy.preview, 0, 0) > 0.95f && sample_float_channel (legacy.preview, 1, 1) > 0.95f);
+            assert (sample_float_channel (legacy.preview, 0, 0) > 0.95f &&
+                sample_float_channel (legacy.preview, 1, 1) > 0.95f);
         } else {
             assert (Math.fabs (sample_float_channel (legacy.preview, 0, 0) - 0.0513f) < 0.002f);
             assert (sample_float_channel (legacy.preview, 0, 0) == sample_float_channel (legacy.preview, 0, 1));
@@ -341,13 +355,15 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
 
     var second = yield animation.open_frame (1);
     assert (second.frame == 1 && second.frame_duration_ms == 170);
-    assert (sample_float_channel (second.preview, 0, 0) > 0.1f && sample_float_channel (second.preview, 0, 1) > 0.1f);
+    assert (sample_float_channel (second.preview, 0, 0) > 0.1f &&
+        sample_float_channel (second.preview, 0, 1) > 0.1f);
     assert (sample_float_channel (second.preview, 1, 0) > 0.99f);
     var frame_options = new DecodeOptions ();
     frame_options.page = 2;
     var third = yield registry.open (apng, frame_options);
     assert (third.frame == 2 && third.frame_duration_ms == 250);
-    assert (sample_float_channel (third.preview, 0, 0) > 0.99f && sample_float_channel (third.preview, 0, 1) < 0.01f);
+    assert (sample_float_channel (third.preview, 0, 0) > 0.99f &&
+        sample_float_channel (third.preview, 0, 1) < 0.01f);
     assert (sample_float_channel (third.preview, 1, 3) < 0.01f);
 }
 

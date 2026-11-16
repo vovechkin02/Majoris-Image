@@ -22,7 +22,9 @@ namespace ImageKit {
 
         internal static JobScheduler shared () {
             lock (instance) {
-                if (instance == null) instance = new JobScheduler ();
+                if (instance == null) {
+                    instance = new JobScheduler ();
+                }
                 return instance;
             }
         }
@@ -31,7 +33,10 @@ namespace ImageKit {
             cancel.set_error_if_cancelled ();
             var ticket = new JobTicket ();
             ticket.priority = priority;
-            ticket.resume = () => { acquire.callback (); return Source.REMOVE; };
+            ticket.resume = () => {
+                acquire.callback ();
+                return Source.REMOVE;
+            };
             mutex.lock ();
             queue.add (ticket);
             queue.sort ((a, b) => a.priority - b.priority);
@@ -52,14 +57,18 @@ namespace ImageKit {
             yield;
             cancel.disconnect (handler);
             if (cancel.is_cancelled ()) {
-                if (ticket.granted) release ();
+                if (ticket.granted) {
+                    release ();
+                }
                 cancel.set_error_if_cancelled ();
             }
         }
 
         private void dispatch () {
             while (queue.size > 0 && active < 4) {
-                if (queue[0].priority >= 2 && active >= 3) return;
+                if (queue[0].priority >= 2 && active >= 3) {
+                    return;
+                }
                 var ticket = queue.remove_at (0);
                 active++;
                 ticket.granted = true;

@@ -16,11 +16,17 @@ namespace ImageKit {
             var surface = native?.get_surface ();
             var renderer = native?.get_renderer ();
             if (!view.get_mapped () || surface == null || !surface.get_mapped () ||
-                renderer == null || !renderer.is_realized ()) return OutputCapability.UNREALIZED;
+                renderer == null || !renderer.is_realized ()) {
+                return OutputCapability.UNREALIZED;
+            }
             var display = surface.get_display ();
-            if (display.get_monitor_at_surface (surface) == null) return OutputCapability.UNKNOWN;
+            if (display.get_monitor_at_surface (surface) == null) {
+                return OutputCapability.UNKNOWN;
+            }
             // The Cairo renderer presents Cairo image surfaces with SDR color.
-            if (renderer is Gsk.CairoRenderer) return OutputCapability.SDR;
+            if (renderer is Gsk.CairoRenderer) {
+                return OutputCapability.SDR;
+            }
             // Public GDK has no surface-level HDR negotiation or scanout query.
             return OutputCapability.UNKNOWN;
         }
@@ -29,7 +35,8 @@ namespace ImageKit {
             return choose (policy, hdr, output_capability (view));
         }
 
-        internal static PresentationDecision choose (PresentationPolicy policy, bool hdr, OutputCapability output) {
+        internal static PresentationDecision choose (PresentationPolicy policy, bool hdr,
+            OutputCapability output) {
             PresentationDecision result = {};
             if (!hdr) {
                 result.status = PresentationStatus.SDR;
@@ -41,16 +48,22 @@ namespace ImageKit {
                 result.tone_map = true;
                 result.status = policy == PresentationPolicy.HDR_PREFERRED ?
                     PresentationStatus.HDR_UNAVAILABLE : PresentationStatus.SDR_TONE_MAPPED;
-                if (policy == PresentationPolicy.SDR) result.diagnostic = "SDR policy: color-managed tone mapping.";
-                else if (output == OutputCapability.UNREALIZED) result.diagnostic = "No realized output surface. Showing tone-mapped SDR.";
-                else if (output == OutputCapability.SDR) result.diagnostic = "SDR renderer. Showing tone-mapped SDR.";
-                else result.diagnostic = "GDK cannot verify HDR output for this surface. Showing tone-mapped SDR.";
+                if (policy == PresentationPolicy.SDR) {
+                    result.diagnostic = "SDR policy: color-managed tone mapping.";
+                } else if (output == OutputCapability.UNREALIZED) {
+                    result.diagnostic = "No realized output surface. Showing tone-mapped SDR.";
+                } else if (output == OutputCapability.SDR) {
+                    result.diagnostic = "SDR renderer. Showing tone-mapped SDR.";
+                } else {
+                    result.diagnostic = "GDK cannot verify HDR output for this surface. Showing tone-mapped SDR.";
+                }
             }
             return result;
         }
 
         [CCode (cname = "image_texture_external_description", cheader_filename = "image-texture.h")]
-        private extern static unowned string external_description (Gdk.Texture texture, out bool sdr, out bool hdr);
+        private extern static unowned string external_description (Gdk.Texture texture,
+            out bool sdr, out bool hdr);
 
         internal static PresentationDecision external (Gdk.Texture texture, out bool hdr) {
             PresentationDecision decision = {};

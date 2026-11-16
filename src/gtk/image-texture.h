@@ -3,9 +3,8 @@
 G_BEGIN_DECLS
 GdkTexture *image_texture_new(GBytes *bytes, int width, int height, gsize stride);
 /* Samples are straight-alpha RGBA float32 and already encoded in state. */
-GdkTexture *image_texture_new_float_rgba(GBytes *bytes, int width, int height,
-                                                gsize stride, GdkColorState *state);
-const char *image_texture_external_description(GdkTexture *texture,
-                                                        gboolean *sdr, gboolean *hdr);
+GdkTexture *image_texture_new_float_rgba(GBytes *bytes, int width, int height, gsize stride,
+                                         GdkColorState *state);
+const char *image_texture_external_description(GdkTexture *texture, gboolean *sdr, gboolean *hdr);
 int image_hdr_output(GtkWidget *widget);
 G_END_DECLS

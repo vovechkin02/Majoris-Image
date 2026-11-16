@@ -29,7 +29,9 @@ private async void verify_job_priorities_and_cancellation () throws Error {
             assert_not_reached ();
         }
     });
-    foreach (int priority in new int[] {JobScheduler.PRELOAD_PRIORITY, 1, 0}) {
+    foreach (int priority in new int[] {
+        JobScheduler.PRELOAD_PRIORITY, 1, 0
+    }) {
         int expected = priority;
         scheduler.acquire.begin (expected, open, (source, result) => {
             try {

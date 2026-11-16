@@ -5,18 +5,25 @@ namespace ImageKit {
 
         /** Register a trusted executable. Its parsers still run inside Bubblewrap. */
         public void register_backend (DecoderBackend backend) throws IOError {
-            if (!Path.is_absolute (backend.executable) || backend.id == "")
+            if (!Path.is_absolute (backend.executable) || backend.id == "") {
                 throw new IOError.INVALID_ARGUMENT ("Decoder workers require an ID and an absolute executable path");
+            }
             lock (custom_workers) {
-                foreach (var existing in custom_workers)
-                    if (existing.id == backend.id) throw new IOError.EXISTS ("Decoder ID already registered");
+                foreach (var existing in custom_workers) {
+                    if (existing.id == backend.id) {
+                        throw new IOError.EXISTS ("Decoder ID already registered");
+                    }
+                }
                 custom_workers.add (backend);
             }
         }
 
-        private async WorkerClient select (ImageSource source, ImageCapabilities required, Cancellable stop, bool preload = false) throws Error {
+        private async WorkerClient select (ImageSource source, ImageCapabilities required,
+            Cancellable stop, bool preload = false) throws Error {
             DecoderBackend[] snapshot;
-            lock (custom_workers) { snapshot = custom_workers.to_array (); }
+            lock (custom_workers) {
+                snapshot = custom_workers.to_array ();
+            }
             if (snapshot.length > 0) {
                 yield source.stamp (stop);
                 int priority = preload ? Priority.LOW : Priority.DEFAULT;
@@ -27,8 +34,9 @@ namespace ImageKit {
                 string content_type = ContentType.guess (null, bytes.get_data (), out uncertain);
                 string mime = ContentType.get_mime_type (content_type);
                 foreach (var backend in snapshot) {
-                    if ((backend.capabilities & required) == required && backend.accepts (mime, bytes))
+                    if ((backend.capabilities & required) == required && backend.accepts (mime, bytes)) {
                         return new WorkerClient (backend.executable, timeout_seconds);
+                    }
                 }
             }
             return new WorkerClient (null, timeout_seconds);
@@ -43,11 +51,14 @@ namespace ImageKit {
                 var parser = new Json.Parser ();
                 parser.load_from_data (catalog);
                 var root = parser.get_root ();
-                if (root == null || root.get_node_type () != Json.NodeType.ARRAY)
+                if (root == null || root.get_node_type () != Json.NodeType.ARRAY) {
                     throw new ImageError.INVALID_RESPONSE ("Invalid codec catalog");
+                }
                 var entries = root.get_array ();
                 var mimes = GlycinFallback.installed ();
-                if (mimes.length == 0) return catalog;
+                if (mimes.length == 0) {
+                    return catalog;
+                }
                 var backend = new Json.Object ();
                 backend.set_string_member ("operation", "glycin");
                 backend.set_boolean_member ("encoder", false);
@@ -55,16 +66,20 @@ namespace ImageKit {
                 backend.set_boolean_member ("conditional", true);
                 backend.set_int_member ("capability-flags", ImageCapabilities.STILL |
                     ImageCapabilities.THUMBNAIL | ImageCapabilities.METADATA | ImageCapabilities.HIGH_DEPTH);
-                backend.set_string_member ("capabilities", "Still, thumbnail, dimensions, alpha and decoded sample depth; no source ICC or HDR guarantees");
+                backend.set_string_member ("capabilities",
+                    "Still, thumbnail, dimensions, alpha and decoded sample depth; no source ICC or HDR guarantees");
                 var supported = new Json.Array ();
-                foreach (var mime in mimes) supported.add_string_element (mime);
+                foreach (var mime in mimes) {
+                    supported.add_string_element (mime);
+                }
                 backend.set_array_member ("mime-types", supported);
                 entries.add_object_element (backend);
                 var generator = new Json.Generator ();
                 generator.set_root (parser.get_root ());
                 return generator.to_data (null);
+            } finally {
+                WorkerClient.cleanup (output);
             }
-            finally { WorkerClient.cleanup (output); }
         }
 
         /** MIME types with a configured thumbnail backend. Inspect individual inputs for guarantees. */
@@ -75,11 +90,15 @@ namespace ImageKit {
             string[] result = {};
             for (uint i = 0; i < entries.get_length (); i++) {
                 var entry = entries.get_object_element (i);
-                if (!entry.get_boolean_member_with_default ("thumbnail", false)) continue;
+                if (!entry.get_boolean_member_with_default ("thumbnail", false)) {
+                    continue;
+                }
                 var mimes = entry.get_array_member ("mime-types");
                 for (uint j = 0; j < mimes.get_length (); j++) {
                     var mime = mimes.get_string_element (j);
-                    if (!(mime in result)) result += mime;
+                    if (!(mime in result)) {
+                        result += mime;
+                    }
                 }
             }
             return result;
@@ -89,17 +108,24 @@ namespace ImageKit {
             return yield inspect_internal (source, cancel ?? new Cancellable (), false);
         }
 
-        private async ImageProbe inspect_internal (ImageSource source, Cancellable stop, bool preload) throws Error {
+        private async ImageProbe inspect_internal (ImageSource source, Cancellable stop,
+            bool preload) throws Error {
             var worker = yield select (source, ImageCapabilities.METADATA, stop, preload);
             try {
                 string output = yield worker.run (source.file, "probe", null, stop, 0, null, null, preload);
-                try { return ImageProbe.deserialize (yield WorkerClient.read_text (output, stop)); }
-                finally { WorkerClient.cleanup (output); }
+                try {
+                    return ImageProbe.deserialize (yield WorkerClient.read_text (output, stop));
+                } finally {
+                    WorkerClient.cleanup (output);
+                }
             } catch (Error error) {
-                if (!GlycinFallback.eligible (error)) throw error;
+                if (!GlycinFallback.eligible (error)) {
+                    throw error;
+                }
                 var options = new DecodeOptions ();
                 options.preview_size = 1;
-                return (yield GlycinFallback.open (source, options, stop, error, timeout_seconds, null, null, preload)).probe;
+                return (yield GlycinFallback.open (source, options, stop, error, timeout_seconds,
+                    null, null, preload)).probe;
             }
         }
 
@@ -111,54 +137,72 @@ namespace ImageKit {
 
         internal async ImageDocument open_internal (ImageSource source, DecodeOptions request,
                                                      Cancellable stop, bool preload) throws Error {
-            if (request.preview_size < 1 || request.preview_size > 4096)
+            if (request.preview_size < 1 || request.preview_size > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Preview edge must be between 1 and 4096");
+            }
             var worker = yield select (source, request.required_capabilities, stop, preload);
-            try { return yield open_with (worker, source, request, stop, preload); }
-            catch (Error error) {
-                if (!GlycinFallback.eligible (error)) throw error;
+            try {
+                return yield open_with (worker, source, request, stop, preload);
+            } catch (Error error) {
+                if (!GlycinFallback.eligible (error)) {
+                    throw error;
+                }
                 ImageProbe? animation = null;
                 if (request.page > 0) {
                     try {
                         var header = yield inspect_internal (source, stop, preload);
                         if (header.animated && header.mime == "image/apng") {
-                            if (request.page >= header.pages)
+                            if (request.page >= header.pages) {
                                 throw new IOError.INVALID_ARGUMENT ("Frame is outside the animation");
+                            }
                             animation = header;
                         }
                     } catch (Error probe_error) {
-                        if (probe_error is IOError.CANCELLED || probe_error is IOError.INVALID_ARGUMENT)
+                        if (probe_error is IOError.CANCELLED || probe_error is IOError.INVALID_ARGUMENT) {
                             throw probe_error;
+                        }
                     }
                 }
-                return yield GlycinFallback.open (source, request, stop, error, timeout_seconds, animation, null, preload);
+                return yield GlycinFallback.open (source, request, stop, error, timeout_seconds,
+                    animation, null, preload);
             }
         }
 
         internal static async ImageDocument open_with (WorkerClient worker, ImageSource source,
-                                                        DecodeOptions request, Cancellable stop, bool preload = false) throws Error {
-            if (request.preview_size < 1 || request.preview_size > 4096)
+                                                        DecodeOptions request, Cancellable stop,
+                                                            bool preload = false) throws Error {
+            if (request.preview_size < 1 || request.preview_size > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Preview edge must be between 1 and 4096");
+            }
             string identity = yield source.stamp (stop);
-            string output = yield worker.run (source.file, "decode", null, stop, request.preview_size, request, null, preload);
+            string output = yield worker.run (source.file, "decode", null, stop,
+                request.preview_size, request, null, preload);
             try {
                 string manifest = Path.build_filename (Path.get_dirname (output), "image.json");
                 var probe = ImageProbe.deserialize (yield WorkerClient.read_text (manifest, stop));
-                if ((probe.capabilities & request.required_capabilities) != request.required_capabilities)
+                if ((probe.capabilities & request.required_capabilities) != request.required_capabilities) {
                     throw new ImageError.UNSUPPORTED ("Image does not meet the requested decoder capabilities");
+                }
                 var preview = yield WorkerClient.read_pixels (output, stop);
-                if (preview.width > request.preview_size || preview.height > request.preview_size)
+                if (preview.width > request.preview_size || preview.height > request.preview_size) {
                     throw new ImageError.INVALID_RESPONSE ("Decoder exceeded the requested image size");
-                if (identity != "" && identity != (yield source.stamp (stop)))
+                }
+                if (identity != "" && identity != (yield source.stamp (stop))) {
                     throw new ImageError.SOURCE_CHANGED ("Image source changed during decoding");
+                }
                 return new ImageDocument (source, probe, preview, request, worker, identity);
-            } finally { WorkerClient.cleanup (output); }
+            } finally {
+                WorkerClient.cleanup (output);
+            }
         }
 
         /** Render a transformed source without modifying it. */
         public async PixelBuffer render (ImageSource source, RenderOptions transform, int edge,
-                                         DecodeOptions? options = null, Cancellable? cancel = null) throws Error {
-            if (edge < 1 || edge > 4096) throw new IOError.INVALID_ARGUMENT ("Invalid output edge");
+                                         DecodeOptions? options = null,
+                                             Cancellable? cancel = null) throws Error {
+            if (edge < 1 || edge > 4096) {
+                throw new IOError.INVALID_ARGUMENT ("Invalid output edge");
+            }
             var request = (options ?? new DecodeOptions ()).copy ();
             var stop = cancel ?? new Cancellable ();
             var worker = yield select (source, request.required_capabilities, stop);
@@ -169,12 +213,17 @@ namespace ImageKit {
                 try {
                     var path = Path.build_filename (Path.get_dirname (output), "image.json");
                     var probe = ImageProbe.deserialize (yield WorkerClient.read_text (path, stop));
-                    if ((probe.capabilities & request.required_capabilities) != request.required_capabilities)
+                    if ((probe.capabilities & request.required_capabilities) != request.required_capabilities) {
                         throw new ImageError.UNSUPPORTED ("Image does not meet the requested render capabilities");
+                    }
                     return yield WorkerClient.read_pixels (output, stop);
-                } finally { WorkerClient.cleanup (output); }
+                } finally {
+                    WorkerClient.cleanup (output);
+                }
             } catch (Error error) {
-                if (!GlycinFallback.eligible (error)) throw error;
+                if (!GlycinFallback.eligible (error)) {
+                    throw error;
+                }
                 return yield GlycinFallback.render (source, request, transform, stop, error, timeout_seconds);
             }
         }

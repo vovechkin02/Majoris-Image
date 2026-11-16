@@ -1,10 +1,24 @@
 [CCode (gir_namespace = "ImageKitGtk", gir_version = "2.0")]
 namespace ImageKit {
-    public enum ViewState { EMPTY, LOADING, PREVIEW_READY, READY, UNSUPPORTED, DECODER_UNAVAILABLE, CORRUPT, CANCELED, ERROR }
-    public enum FitMode { CONTAIN, WIDTH, HEIGHT, ACTUAL, COVER, CUSTOM }
-    public enum ScrollZoomMode { ALWAYS, CONTROL, DISABLED }
-    public enum PresentationPolicy { AUTOMATIC, SDR, HDR_PREFERRED }
-    public enum PresentationStatus { NONE, SDR, SDR_TONE_MAPPED, NATIVE_HDR, HDR_UNAVAILABLE, EXTERNAL_UNVERIFIED }
+    public enum ViewState {
+        EMPTY, LOADING, PREVIEW_READY, READY, UNSUPPORTED, DECODER_UNAVAILABLE, CORRUPT, CANCELED, ERROR
+    }
+
+    public enum FitMode {
+        CONTAIN, WIDTH, HEIGHT, ACTUAL, COVER, CUSTOM
+    }
+
+    public enum ScrollZoomMode {
+        ALWAYS, CONTROL, DISABLED
+    }
+
+    public enum PresentationPolicy {
+        AUTOMATIC, SDR, HDR_PREFERRED
+    }
+
+    public enum PresentationStatus {
+        NONE, SDR, SDR_TONE_MAPPED, NATIVE_HDR, HDR_UNAVAILABLE, EXTERNAL_UNVERIFIED
+    }
 
     [CCode (cname = "image_texture_new", cheader_filename = "image-texture.h")]
     private extern static Gdk.Texture create_texture (Bytes bytes, int width, int height, size_t stride);
@@ -16,7 +30,11 @@ namespace ImageKit {
     [CCode (cname = "ImageKitView")]
     public sealed class ImageView : Gtk.Widget {
         public ViewState state { get; private set; default = ViewState.EMPTY; }
-        public ImageDocument? document { get { return current_document; } }
+        public ImageDocument? document {
+            get {
+                return current_document;
+            }
+        }
         private ImageDocument? current_document;
         public int image_width { get; private set; }
         public int image_height { get; private set; }
@@ -29,9 +47,11 @@ namespace ImageKit {
         public bool hdr_source { get; private set; }
         public PresentationPolicy presentation_policy { get; set; default = PresentationPolicy.AUTOMATIC; }
         public PresentationStatus presentation_status { get; private set; }
-        public string presentation_diagnostic { get {
-            return texture != null ? presented.diagnostic : "";
-        } }
+        public string presentation_diagnostic {
+            get {
+                return texture != null ? presented.diagnostic : "";
+            }
+        }
         public bool animated { get; private set; }
         public bool playing { get; private set; }
         public int current_frame { get; private set; }
@@ -45,7 +65,12 @@ namespace ImageKit {
         public bool nearest_neighbor { get; set; }
         public double minimum_zoom { get; set; default = 0.01; }
         public double maximum_zoom { get; set; default = 64; }
-        public double zoom { get { return effective_zoom (); } }
+        public double zoom {
+            get {
+                return effective_zoom ();
+            }
+        }
+
         public signal void transformed ();
 
         private Gdk.Texture? texture;
@@ -90,7 +115,9 @@ namespace ImageKit {
             set_accessible_role (Gtk.AccessibleRole.IMG);
         }
 
-        public static void register_type () { typeof (ImageView).ensure (); }
+        public static void register_type () {
+            typeof (ImageView).ensure ();
+        }
 
         construct {
             hexpand = true;
@@ -111,7 +138,9 @@ namespace ImageKit {
                 watch_output ();
                 update_presentation ();
                 update_transform ();
-                if (playback_requested) play ();
+                if (playback_requested) {
+                    play ();
+                }
             });
             unmap.connect (() => {
                 watch_output (false);
@@ -121,7 +150,10 @@ namespace ImageKit {
             });
 
             var motion = new Gtk.EventControllerMotion ();
-            motion.motion.connect ((x, y) => { pointer_x = x; pointer_y = y; });
+            motion.motion.connect ((x, y) => {
+                pointer_x = x;
+                pointer_y = y;
+            });
             add_controller (motion);
             var scroll = new Gtk.EventControllerScroll (Gtk.EventControllerScrollFlags.BOTH_AXES);
             scroll.propagation_phase = Gtk.PropagationPhase.BUBBLE;
@@ -131,15 +163,22 @@ namespace ImageKit {
                     Math.fabs (dx) >= Math.fabs (dy) ||
                     (modifiers & (Gdk.ModifierType.SHIFT_MASK | shortcut_modifiers ())) != 0 ||
                     (scroll_zoom_mode == ScrollZoomMode.CONTROL &&
-                     (modifiers & Gdk.ModifierType.CONTROL_MASK) == 0))
+                     (modifiers & Gdk.ModifierType.CONTROL_MASK) == 0)) {
                     return false;
+                }
                 return interactive_zoom (zoom * Math.pow (1.15, -dy), pointer_x, pointer_y);
             });
             add_controller (scroll);
             var drag = new Gtk.GestureDrag ();
-            drag.drag_begin.connect (() => { grab_focus (); start_x = pan_x; start_y = pan_y; });
+            drag.drag_begin.connect (() => {
+                grab_focus ();
+                start_x = pan_x;
+                start_y = pan_y;
+            });
             drag.drag_update.connect ((x, y) => {
-                if (!allow_pan) return;
+                if (!allow_pan) {
+                    return;
+                }
                 pan_x = start_x + x;
                 pan_y = start_y + y;
                 update_transform ();
@@ -148,39 +187,58 @@ namespace ImageKit {
             var pinch = new Gtk.GestureZoom ();
             pinch.begin.connect (() => pinch_start = zoom);
             pinch.scale_changed.connect (scale => {
-                if (!allow_zoom) return;
+                if (!allow_zoom) {
+                    return;
+                }
                 double x, y;
-                if (pinch.get_bounding_box_center (out x, out y)) interactive_zoom (pinch_start * scale, x, y);
+                if (pinch.get_bounding_box_center (out x, out y)) {
+                    interactive_zoom (pinch_start * scale, x, y);
+                }
             });
             add_controller (pinch);
             var click = new Gtk.GestureClick ();
             click.pressed.connect ((count, x, y) => {
                 grab_focus ();
                 if (allow_zoom && count == 2) {
-                    if (fit_mode != FitMode.CONTAIN) fit_to_view ();
-                    else zoom_to (1.0 / device_scale (), x, y);
+                    if (fit_mode != FitMode.CONTAIN) {
+                        fit_to_view ();
+                    } else {
+                        zoom_to (1.0 / device_scale (), x, y);
+                    }
                 }
             });
             add_controller (click);
             var keys = new Gtk.EventControllerKey ();
             keys.key_pressed.connect ((key, code, modifiers) => {
                 if (texture == null ||
-                    (modifiers & (shortcut_modifiers () | Gdk.ModifierType.CONTROL_MASK)) != 0)
+                    (modifiers & (shortcut_modifiers () | Gdk.ModifierType.CONTROL_MASK)) != 0) {
                     return false;
+                }
                 switch (key) {
-                case Gdk.Key.plus: case Gdk.Key.equal: case Gdk.Key.KP_Add:
-                    return interactive_zoom (zoom * 1.25);
-                case Gdk.Key.minus: case Gdk.Key.KP_Subtract:
-                    return interactive_zoom (zoom / 1.25);
-                case 0x30: case Gdk.Key.KP_0:
-                    if (!allow_zoom) return false;
-                    fit_to_view ();
-                    return true;
-                case Gdk.Key.Left: return keyboard_pan (64, 0);
-                case Gdk.Key.Right: return keyboard_pan (-64, 0);
-                case Gdk.Key.Up: return keyboard_pan (0, 64);
-                case Gdk.Key.Down: return keyboard_pan (0, -64);
-                default: return false;
+                    case Gdk.Key.plus:
+                    case Gdk.Key.equal:
+                    case Gdk.Key.KP_Add:
+                        return interactive_zoom (zoom * 1.25);
+                    case Gdk.Key.minus:
+                    case Gdk.Key.KP_Subtract:
+                        return interactive_zoom (zoom / 1.25);
+                    case 0x30:
+                    case Gdk.Key.KP_0:
+                        if (!allow_zoom) {
+                            return false;
+                        }
+                        fit_to_view ();
+                        return true;
+                    case Gdk.Key.Left:
+                        return keyboard_pan (64, 0);
+                    case Gdk.Key.Right:
+                        return keyboard_pan (-64, 0);
+                    case Gdk.Key.Up:
+                        return keyboard_pan (0, 64);
+                    case Gdk.Key.Down:
+                        return keyboard_pan (0, -64);
+                    default:
+                        return false;
                 }
             });
             add_controller (keys);
@@ -192,16 +250,19 @@ namespace ImageKit {
         }
 
         private void update_accessible_description () {
-            if (accessible_description != null && accessible_description != "")
+            if (accessible_description != null && accessible_description != "") {
                 update_property (Gtk.AccessibleProperty.DESCRIPTION, accessible_description, -1);
-            else if (texture != null)
+            } else if (texture != null) {
                 update_property (Gtk.AccessibleProperty.DESCRIPTION, _("Image preview"), -1);
-            else
+            } else {
                 reset_property (Gtk.AccessibleProperty.DESCRIPTION);
+            }
         }
 
         private bool keyboard_pan (double x, double y) {
-            if (!allow_pan) return false;
+            if (!allow_pan) {
+                return false;
+            }
             double previous_x = pan_x, previous_y = pan_y;
             pan_by (x, y);
             return pan_x != previous_x || pan_y != previous_y;
@@ -227,13 +288,17 @@ namespace ImageKit {
         }
 
         public void clear () {
-            if (!disposed) clear_request ();
+            if (!disposed) {
+                clear_request ();
+            }
         }
 
         private uint clear_request (bool take_description = false) {
             freeze_notify ();
             uint request = invalidate ();
-            if (!take_description || state != ViewState.EMPTY) accessible_description = "";
+            if (!take_description || state != ViewState.EMPTY) {
+                accessible_description = "";
+            }
             current_document = null;
             notify_property ("document");
             texture = null;
@@ -249,17 +314,25 @@ namespace ImageKit {
             turns = 0;
             flipped_x = flipped_y = false;
             pan_x = pan_y = 0;
-            if (fit_mode == FitMode.CUSTOM) fit_mode = FitMode.CONTAIN;
+            if (fit_mode == FitMode.CUSTOM) {
+                fit_mode = FitMode.CONTAIN;
+            }
             thaw_notify ();
-            if (is_current (request)) update_transform ();
+            if (is_current (request)) {
+                update_transform ();
+            }
             return request;
         }
 
         public void set_texture (Gdk.Texture value) {
-            if (disposed) return;
+            if (disposed) {
+                return;
+            }
             var retained = value;
             uint request = clear_request (true);
-            if (!is_current (request)) return;
+            if (!is_current (request)) {
+                return;
+            }
             freeze_notify ();
             texture = retained;
             image_width = retained.get_width ();
@@ -271,35 +344,49 @@ namespace ImageKit {
             publish_presentation (decision);
             state = ViewState.READY;
             thaw_notify ();
-            if (is_current (request)) update_transform ();
+            if (is_current (request)) {
+                update_transform ();
+            }
         }
 
         public void set_document (ImageDocument value) {
-            if (disposed) return;
+            if (disposed) {
+                return;
+            }
             var retained = value;
             uint request = clear_request (true);
-            if (is_current (request)) apply_document.begin (retained, request, pending);
+            if (is_current (request)) {
+                apply_document.begin (retained, request, pending);
+            }
         }
 
         private async void apply_document (ImageDocument value, uint request, Cancellable stop) {
             state = ViewState.LOADING;
             try {
                 yield present_document (value, request, stop);
+            } catch (Error e) {
+                if (is_current (request)) {
+                    show_error (e);
+                }
             }
-            catch (Error e) { if (is_current (request)) show_error (e); }
         }
 
-        private bool is_current (uint request) { return !disposed && request == generation; }
+        private bool is_current (uint request) {
+            return !disposed && request == generation;
+        }
 
         private async void present_document (ImageDocument value, uint request, Cancellable stop) throws Error {
             string animation_error = "";
             if (can_play (value) && value.mime_type == "image/apng" && value.decoder != "Glycin") {
                 try {
                     value = yield value.open_frame (value.frame, stop);
-                    if (value.decoder != "Glycin") animation_error = _("APNG animation requires Glycin.");
-                }
-                catch (Error error) {
-                    if (error is IOError.CANCELLED) throw error;
+                    if (value.decoder != "Glycin") {
+                        animation_error = _("APNG animation requires Glycin.");
+                    }
+                } catch (Error error) {
+                    if (error is IOError.CANCELLED) {
+                        throw error;
+                    }
                     animation_error = _("Animation unavailable: ") + error.message;
                 }
             }
@@ -308,8 +395,12 @@ namespace ImageKit {
                 var pixels = yield Presentation.pixels (value, decision, stop);
                 stop.set_error_if_cancelled ();
                 var latest = Presentation.inspect (this, presentation_policy, value.hdr);
-                if (decision.tone_map != latest.tone_map) continue;
-                if (is_current (request)) show_document (value, pixels, latest, animation_error);
+                if (decision.tone_map != latest.tone_map) {
+                    continue;
+                }
+                if (is_current (request)) {
+                    show_document (value, pixels, latest, animation_error);
+                }
                 return;
             }
         }
@@ -351,7 +442,9 @@ namespace ImageKit {
 
         private void update_presentation () {
             var source = frame_source ?? document;
-            if (disposed) return;
+            if (disposed) {
+                return;
+            }
             if (source == null) {
                 if (texture != null) {
                     bool external_hdr;
@@ -363,14 +456,20 @@ namespace ImageKit {
             cancel_presentation ();
             if (presented.tone_map == decision.tone_map) {
                 publish_presentation (decision);
-                if (advance_due) advance_when_ready ();
-                else schedule_frame ();
+                if (advance_due) {
+                    advance_when_ready ();
+                } else {
+                    schedule_frame ();
+                }
                 return;
             }
             tiles.reset (null);
             presentation_pending = true;
             prefetched = null;
-            if (animation_timer != 0) { Source.remove (animation_timer); animation_timer = 0; }
+            if (animation_timer != 0) {
+                Source.remove (animation_timer);
+                animation_timer = 0;
+            }
             refresh_presentation.begin (source, decision, presentation_generation, presentation_work);
         }
 
@@ -378,7 +477,9 @@ namespace ImageKit {
                                                   uint request, Cancellable stop) {
             try {
                 var pixels = yield Presentation.pixels (source, decision, stop);
-                if (disposed || stop.is_cancelled () || request != presentation_generation) return;
+                if (disposed || stop.is_cancelled () || request != presentation_generation) {
+                    return;
+                }
                 texture = texture_for_pixels (pixels);
                 publish_presentation (decision);
             } catch (Error error) {
@@ -389,8 +490,11 @@ namespace ImageKit {
             } finally {
                 if (!disposed && request == presentation_generation) {
                     presentation_pending = false;
-                    if (advance_due) advance_when_ready ();
-                    else schedule_frame ();
+                    if (advance_due) {
+                        advance_when_ready ();
+                    } else {
+                        schedule_frame ();
+                    }
                 }
             }
         }
@@ -423,21 +527,29 @@ namespace ImageKit {
             frame_delay = value.frame_duration_us;
             frames_presented = value.frame + 1;
             publish_presentation (decision);
-            state = value.raw_state == RawState.RAW_PREVIEW_AVAILABLE ? ViewState.PREVIEW_READY : ViewState.READY;
+            state = value.raw_state == RawState.RAW_PREVIEW_AVAILABLE ? ViewState.PREVIEW_READY
+                : ViewState.READY;
             thaw_notify ();
-            if (is_current (request)) update_transform ();
+            if (is_current (request)) {
+                update_transform ();
+            }
         }
 
-        public async void load_file (File file, DecodeOptions? options = null, Cancellable? cancel = null) throws Error {
+        public async void load_file (File file, DecodeOptions? options = null,
+            Cancellable? cancel = null) throws Error {
             yield load_source (new ImageSource (file), options, cancel);
         }
 
         /** Keep the supplied source alive, including privately staged stream or memory inputs. */
         public async void load_source (ImageSource source, DecodeOptions? options = null,
                                         Cancellable? cancel = null) throws Error {
-            if (disposed) throw new IOError.CLOSED ("Image view is disposed");
+            if (disposed) {
+                throw new IOError.CLOSED ("Image view is disposed");
+            }
             uint request = clear_request (true);
-            if (!is_current (request)) throw new IOError.CANCELLED ("Image request was replaced");
+            if (!is_current (request)) {
+                throw new IOError.CANCELLED ("Image request was replaced");
+            }
             var stop = pending;
             ulong handler = cancel != null ? cancel.connect (() => stop.cancel ()) : 0;
             state = ViewState.LOADING;
@@ -453,37 +565,63 @@ namespace ImageKit {
                     try {
                         preview = yield registry.open (source, fast, stop);
                         stop.set_error_if_cancelled ();
-                        if (is_current (request)) yield present_document (preview, request, stop);
-                    } catch (Error e) { stop.set_error_if_cancelled (); }
+                        if (is_current (request)) {
+                            yield present_document (preview, request, stop);
+                        }
+                    } catch (Error e) {
+                        stop.set_error_if_cancelled ();
+                    }
                 }
                 try {
                     var result = yield registry.open (source, decode, stop);
                     stop.set_error_if_cancelled ();
-                    if (is_current (request)) yield present_document (result, request, stop);
+                    if (is_current (request)) {
+                        yield present_document (result, request, stop);
+                    }
                 } catch (Error e) {
-                    if (preview == null || stop.is_cancelled ()) throw e;
-                    if (is_current (request)) warning = "Full RAW development failed: " + e.message;
+                    if (preview == null || stop.is_cancelled ()) {
+                        throw e;
+                    }
+                    if (is_current (request)) {
+                        warning = "Full RAW development failed: " + e.message;
+                    }
                 }
             } catch (Error e) {
-                if (is_current (request)) show_error (e);
+                if (is_current (request)) {
+                    show_error (e);
+                }
                 throw e;
-            } finally { if (handler != 0) cancel.disconnect (handler); }
+            } finally {
+                if (handler != 0) {
+                    cancel.disconnect (handler);
+                }
+            }
         }
 
         private void show_error (Error error) {
             freeze_notify ();
             error_message = (error is IOError.CANCELLED) ? "" : error.message;
-            if (error is IOError.CANCELLED) state = ViewState.CANCELED;
-            else if (error is ImageError.UNSUPPORTED || error is ImageError.RAW_UNSUPPORTED) state = ViewState.UNSUPPORTED;
-            else if (error is ImageError.CODEC_MISSING) state = ViewState.DECODER_UNAVAILABLE;
-            else if (error is ImageError.CORRUPT) state = ViewState.CORRUPT;
-            else state = ViewState.ERROR;
+            if (error is IOError.CANCELLED) {
+                state = ViewState.CANCELED;
+            } else if (error is ImageError.UNSUPPORTED || error is ImageError.RAW_UNSUPPORTED) {
+                state = ViewState.UNSUPPORTED;
+            } else if (error is ImageError.CODEC_MISSING) {
+                state = ViewState.DECODER_UNAVAILABLE;
+            } else if (error is ImageError.CORRUPT) {
+                state = ViewState.CORRUPT;
+            } else {
+                state = ViewState.ERROR;
+            }
             thaw_notify ();
         }
 
         public async void set_page (int page, Cancellable? cancel = null) throws Error {
-            if (disposed) throw new IOError.CLOSED ("Image view is disposed");
-            if (document == null) throw new IOError.INVALID_ARGUMENT ("No image is loaded");
+            if (disposed) {
+                throw new IOError.CLOSED ("Image view is disposed");
+            }
+            if (document == null) {
+                throw new IOError.INVALID_ARGUMENT ("No image is loaded");
+            }
             var source = document;
             freeze_notify ();
             uint request = invalidate ();
@@ -493,31 +631,51 @@ namespace ImageKit {
             thaw_notify ();
             try {
                 var result = yield source.open_page (page, stop);
-                if (is_current (request)) yield present_document (result, request, stop);
+                if (is_current (request)) {
+                    yield present_document (result, request, stop);
+                }
             } catch (Error e) {
-                if (is_current (request)) show_error (e);
+                if (is_current (request)) {
+                    show_error (e);
+                }
                 throw e;
-            } finally { if (handler != 0) cancel.disconnect (handler); }
+            } finally {
+                if (handler != 0) {
+                    cancel.disconnect (handler);
+                }
+            }
         }
 
         public void play () {
-            if (disposed || !animated) return;
+            if (disposed || !animated) {
+                return;
+            }
             playback_requested = true;
-            if (playing || !get_mapped ()) return;
+            if (playing || !get_mapped ()) {
+                return;
+            }
             playing = true;
             if (playback_finished ()) {
                 uint request = generation;
                 seek_frame.begin (0, null, (object, reply) => {
-                    try { seek_frame.end (reply); }
-                    catch (Error error) {
-                        if (is_current (request) && !(error is IOError.CANCELLED)) warning = error.message;
+                    try {
+                        seek_frame.end (reply);
+                    } catch (Error error) {
+                        if (is_current (request) && !(error is IOError.CANCELLED)) {
+                            warning = error.message;
+                        }
                     }
                 });
-            } else schedule_frame ();
+            } else {
+                schedule_frame ();
+            }
         }
 
         private void suspend_playback () {
-            if (animation_timer != 0) { Source.remove (animation_timer); animation_timer = 0; }
+            if (animation_timer != 0) {
+                Source.remove (animation_timer);
+                animation_timer = 0;
+            }
             advance_due = manual_advance = false;
             playing = false;
         }
@@ -529,7 +687,9 @@ namespace ImageKit {
 
         public void step_frame () {
             pause ();
-            if (!animated) return;
+            if (!animated) {
+                return;
+            }
             manual_advance = advance_due = true;
             advance_when_ready ();
         }
@@ -537,9 +697,13 @@ namespace ImageKit {
         /** Seek within the active timed sequence. Older frame requests are canceled. */
         public async void seek_frame (int frame, Cancellable? cancel = null) throws Error {
             var source = document;
-            if (disposed || source == null || !animated || frame < 0 || frame >= source.frame_count)
+            if (disposed || source == null || !animated || frame < 0 || frame >= source.frame_count) {
                 throw new IOError.INVALID_ARGUMENT ("Frame is outside the active sequence");
-            if (animation_timer != 0) { Source.remove (animation_timer); animation_timer = 0; }
+            }
+            if (animation_timer != 0) {
+                Source.remove (animation_timer);
+                animation_timer = 0;
+            }
             playback_generation++;
             playback.cancel ();
             playback = new Cancellable ();
@@ -552,10 +716,13 @@ namespace ImageKit {
             try {
                 var loaded = yield load_frame (source, frame, stop);
                 stop.set_error_if_cancelled ();
-                if (is_current (request) && seek == playback_generation)
+                if (is_current (request) && seek == playback_generation) {
                     show_frame (loaded, frame, frame + 1);
+                }
             } finally {
-                if (handler != 0) cancel.disconnect (handler);
+                if (handler != 0) {
+                    cancel.disconnect (handler);
+                }
                 if (is_current (request) && seek == playback_generation) {
                     frame_pending = false;
                     schedule_frame ();
@@ -569,18 +736,24 @@ namespace ImageKit {
         }
 
         private void schedule_frame () {
-            if (disposed || !playing || !get_mapped () || presentation_pending || animation_timer != 0 || advance_due) return;
+            if (disposed || !playing || !get_mapped () || presentation_pending ||
+                animation_timer != 0 || advance_due) {
+                return;
+            }
             animation_timer = Timeout.add ((uint) (frame_delay / 1000).clamp (10, uint.MAX), () => {
                 animation_timer = 0;
-                if (playback_finished ()) pause ();
-                else {
+                if (playback_finished ()) {
+                    pause ();
+                } else {
                     advance_due = true;
                     advance_when_ready ();
                 }
                 return Source.REMOVE;
             });
-            if (!playback_finished () && document != null && document.preview.bytes.get_size () <= 64 * 1024 * 1024)
+            if (!playback_finished () && document != null &&
+                document.preview.bytes.get_size () <= 64 * 1024 * 1024) {
                 prefetch.begin ();
+            }
         }
 
         private int next_frame_index () {
@@ -589,8 +762,13 @@ namespace ImageKit {
         }
 
         private void advance_when_ready () {
-            if (presentation_pending || !advance_due || (!manual_advance && (!playing || !get_mapped ()))) return;
-            if (prefetched == null) { prefetch.begin (); return; }
+            if (presentation_pending || !advance_due || (!manual_advance && (!playing || !get_mapped ()))) {
+                return;
+            }
+            if (prefetched == null) {
+                prefetch.begin ();
+                return;
+            }
             var loaded = prefetched;
             prefetched = null;
             if (loaded.source != null && loaded.source.hdr &&
@@ -612,7 +790,8 @@ namespace ImageKit {
             frame_source = loaded.source;
             texture = loaded.texture;
             if (frame_source != null && (presentation_pending ||
-                this.presented.status != loaded.decision.status || this.presented.tone_map != loaded.decision.tone_map)) {
+                this.presented.status != loaded.decision.status ||
+                    this.presented.tone_map != loaded.decision.tone_map)) {
                 cancel_presentation ();
                 publish_presentation (loaded.decision);
             }
@@ -620,14 +799,16 @@ namespace ImageKit {
             thaw_notify ();
         }
 
-        private async AnimationFrame load_frame (ImageDocument source, int index, Cancellable stop) throws Error {
+        private async AnimationFrame load_frame (ImageDocument source, int index,
+            Cancellable stop) throws Error {
             var frame = yield source.open_frame (index, stop);
             while (true) {
                 var decision = Presentation.inspect (this, presentation_policy, frame.hdr);
                 var pixels = yield Presentation.pixels (frame, decision, stop);
                 stop.set_error_if_cancelled ();
-                if (decision.tone_map != Presentation.inspect (this, presentation_policy, frame.hdr).tone_map)
+                if (decision.tone_map != Presentation.inspect (this, presentation_policy, frame.hdr).tone_map) {
                     continue;
+                }
                 var result = new AnimationFrame (texture_for_pixels (pixels), frame.frame_duration_us);
                 result.source = frame;
                 result.decision = decision;
@@ -637,14 +818,18 @@ namespace ImageKit {
 
         private async void prefetch () {
             var source = document;
-            if (source == null || prefetched != null || frame_pending) return;
+            if (source == null || prefetched != null || frame_pending) {
+                return;
+            }
             frame_pending = true;
             int index = next_frame_index ();
             uint request = generation, seek = playback_generation;
             var stop = playback;
             try {
                 var loaded = yield load_frame (source, index, stop);
-                if (is_current (request) && seek == playback_generation) prefetched = loaded;
+                if (is_current (request) && seek == playback_generation) {
+                    prefetched = loaded;
+                }
             } catch (Error error) {
                 if (!stop.is_cancelled () && is_current (request) && seek == playback_generation) {
                     pause ();
@@ -664,17 +849,28 @@ namespace ImageKit {
         }
 
         private double effective_zoom () {
-            if (texture == null || image_width < 1 || image_height < 1) return 1;
-            if (fit_mode == FitMode.CUSTOM) return custom_zoom;
-            if (get_width () < 1 || get_height () < 1) return 1;
+            if (texture == null || image_width < 1 || image_height < 1) {
+                return 1;
+            }
+            if (fit_mode == FitMode.CUSTOM) {
+                return custom_zoom;
+            }
+            if (get_width () < 1 || get_height () < 1) {
+                return 1;
+            }
             double width = (double) get_width () / (turns % 2 == 0 ? image_width : image_height);
             double height = (double) get_height () / (turns % 2 == 0 ? image_height : image_width);
             switch (fit_mode) {
-            case FitMode.WIDTH: return width;
-            case FitMode.HEIGHT: return height;
-            case FitMode.ACTUAL: return 1.0 / device_scale ();
-            case FitMode.COVER: return double.max (width, height);
-            default: return double.min (width, height);
+                case FitMode.WIDTH:
+                    return width;
+                case FitMode.HEIGHT:
+                    return height;
+                case FitMode.ACTUAL:
+                    return 1.0 / device_scale ();
+                case FitMode.COVER:
+                    return double.max (width, height);
+                default:
+                    return double.min (width, height);
             }
         }
 
@@ -685,8 +881,10 @@ namespace ImageKit {
                 return;
             }
             double scale = zoom;
-            double max_x = double.max (0, ((turns % 2 == 0 ? image_width : image_height) * scale - get_width ()) / 2);
-            double max_y = double.max (0, ((turns % 2 == 0 ? image_height : image_width) * scale - get_height ()) / 2);
+            double max_x = double.max (0, ((turns % 2 == 0 ? image_width
+                : image_height) * scale - get_width ()) / 2);
+            double max_y = double.max (0, ((turns % 2 == 0 ? image_height
+                : image_width) * scale - get_height ()) / 2);
             pan_x = pan_x.clamp (-max_x, max_x);
             pan_y = pan_y.clamp (-max_y, max_y);
             notify_property ("zoom");
@@ -706,14 +904,17 @@ namespace ImageKit {
         }
 
         private bool interactive_zoom (double value, double x = -1, double y = -1) {
-            if (!allow_zoom || texture == null || !value.is_finite () || bounded_zoom (value) == zoom)
+            if (!allow_zoom || texture == null || !value.is_finite () || bounded_zoom (value) == zoom) {
                 return false;
+            }
             zoom_to (value, x, y);
             return true;
         }
 
         public void zoom_to (double value, double x = -1, double y = -1) {
-            if (texture == null || !value.is_finite ()) return;
+            if (texture == null || !value.is_finite ()) {
+                return;
+            }
             double next = bounded_zoom (value);
             double anchor_x = x >= 0 ? x - get_width () / 2.0 : 0;
             double anchor_y = y >= 0 ? y - get_height () / 2.0 : 0;
@@ -725,27 +926,67 @@ namespace ImageKit {
             update_transform ();
         }
 
-        public void zoom_in () { zoom_to (zoom * 1.25); }
-        public void zoom_out () { zoom_to (zoom / 1.25); }
-        public void fit_to_view () { pan_x = pan_y = 0; fit_mode = FitMode.CONTAIN; update_transform (); }
-        public void actual_size () { fit_mode = FitMode.ACTUAL; update_transform (); }
+        public void zoom_in () {
+            zoom_to (zoom * 1.25);
+        }
+
+        public void zoom_out () {
+            zoom_to (zoom / 1.25);
+        }
+
+        public void fit_to_view () {
+            pan_x = pan_y = 0;
+            fit_mode = FitMode.CONTAIN;
+            update_transform ();
+        }
+
+        public void actual_size () {
+            fit_mode = FitMode.ACTUAL;
+            update_transform ();
+        }
+
         public void pan_by (double x, double y) {
-            if (!x.is_finite () || !y.is_finite ()) return;
+            if (!x.is_finite () || !y.is_finite ()) {
+                return;
+            }
             pan_x += x;
             pan_y += y;
             update_transform ();
         }
-        public void rotate_clockwise () { turns = (turns + 1) % 4; update_transform (); }
-        public void rotate_counterclockwise () { turns = (turns + 3) % 4; update_transform (); }
+
+        public void rotate_clockwise () {
+            turns = (turns + 1) % 4;
+            update_transform ();
+        }
+
+        public void rotate_counterclockwise () {
+            turns = (turns + 3) % 4;
+            update_transform ();
+        }
+
         public void flip_horizontal () {
-            if (turns % 2 == 0) flipped_x = !flipped_x; else flipped_y = !flipped_y;
+            if (turns % 2 == 0) {
+                flipped_x = !flipped_x;
+            } else {
+                flipped_y = !flipped_y;
+            }
             update_transform ();
         }
+
         public void flip_vertical () {
-            if (turns % 2 == 0) flipped_y = !flipped_y; else flipped_x = !flipped_x;
+            if (turns % 2 == 0) {
+                flipped_y = !flipped_y;
+            } else {
+                flipped_x = !flipped_x;
+            }
             update_transform ();
         }
-        public void reset_view () { turns = 0; flipped_x = flipped_y = false; fit_to_view (); }
+
+        public void reset_view () {
+            turns = 0;
+            flipped_x = flipped_y = false;
+            fit_to_view ();
+        }
 
         private Graphene.Rect bounds (double x, double y, double width, double height) {
             Graphene.Rect rect = {};
@@ -753,7 +994,9 @@ namespace ImageKit {
         }
 
         protected override void snapshot (Gtk.Snapshot snapshot) {
-            if (texture == null) return;
+            if (texture == null) {
+                return;
+            }
             double scale = zoom;
             double center_x = get_width () / 2.0 + pan_x, center_y = get_height () / 2.0 + pan_y;
             double offset_x = -image_width * scale / 2.0, offset_y = -image_height * scale / 2.0;
@@ -766,7 +1009,8 @@ namespace ImageKit {
             snapshot.rotate (90 * turns);
             snapshot.scale (flipped_x ? -1 : 1, flipped_y ? -1 : 1);
             var preview_rect = bounds (offset_x, offset_y, -2 * offset_x, -2 * offset_y);
-            if (document == null || animated || texture.get_width () >= image_width * pixel_zoom && (document == null || !document.vector)) {
+            if (document == null || animated || texture.get_width () >= image_width * pixel_zoom &&
+                (document == null || !document.vector)) {
                 snapshot.append_scaled_texture (texture, filter, preview_rect);
                 snapshot.restore ();
                 return;
@@ -776,20 +1020,33 @@ namespace ImageKit {
                 offset_x, offset_y, scale, turns, flipped_x, flipped_y);
             var visible = tiles.visible (viewport, pixel_zoom);
             bool ready = false;
-            foreach (var tile in visible) if (tile.texture != null) { ready = true; break; }
+            foreach (var tile in visible) {
+                if (tile.texture != null) {
+                    ready = true;
+                    break;
+                }
+            }
             if (ready) {
                 // Punch out tile areas so transparent pixels composite exactly once.
                 snapshot.push_mask (Gsk.MaskMode.INVERTED_ALPHA);
                 Gdk.RGBA opaque = { 0, 0, 0, 1 };
-                foreach (var tile in visible) if (tile.texture != null)
-                    snapshot.append_color (opaque, bounds (offset_x + tile.x * scale, offset_y + tile.y * scale,
-                                                          tile.width * scale, tile.height * scale));
+                foreach (var tile in visible) {
+                    if (tile.texture != null) {
+                        snapshot.append_color (opaque,
+                            bounds (offset_x + tile.x * scale, offset_y + tile.y * scale,
+                                                                  tile.width * scale, tile.height * scale));
+                    }
+                }
                 snapshot.pop ();
             }
             snapshot.append_scaled_texture (texture, filter, preview_rect);
-            if (ready) snapshot.pop ();
+            if (ready) {
+                snapshot.pop ();
+            }
             foreach (var tile in visible) {
-                if (tile.texture == null) continue;
+                if (tile.texture == null) {
+                    continue;
+                }
                 snapshot.push_clip (bounds (offset_x + tile.x * scale, offset_y + tile.y * scale,
                                             tile.width * scale, tile.height * scale));
                 snapshot.append_scaled_texture (tile.texture, filter,

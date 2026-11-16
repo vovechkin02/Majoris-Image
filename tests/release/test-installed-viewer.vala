@@ -32,7 +32,8 @@ int main (string[] args) {
         loop.quit ();
         return Source.REMOVE;
     });
-    verify_installed_viewer.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]), (obj, result) => {
+    verify_installed_viewer.begin (view, File.new_for_path (args[1]), File.new_for_path (args[2]),
+        (obj, result) => {
         Source.remove (watchdog);
         try {
             verify_installed_viewer.end (result);

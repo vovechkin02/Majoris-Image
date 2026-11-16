@@ -1,12 +1,40 @@
 namespace ImageKit {
     [Flags]
     public enum ImageCapabilities {
-        STILL = 1, ANIMATION = 2, MULTI_IMAGE = 4, HIGH_DEPTH = 8, HDR = 16,
-        REGION = 32, THUMBNAIL = 64, EMBEDDED_PREVIEW = 128, METADATA = 256,
-        ENCODE = 512, VECTOR = 1024, GAIN_MAP = 2048, COLOR_MANAGED = 4096
+        STILL = 1,
+        ANIMATION = 2,
+        MULTI_IMAGE = 4,
+        HIGH_DEPTH = 8,
+        HDR = 16,
+        REGION = 32,
+        THUMBNAIL = 64,
+        EMBEDDED_PREVIEW = 128,
+        METADATA = 256,
+        ENCODE = 512,
+        VECTOR = 1024,
+        GAIN_MAP = 2048,
+        COLOR_MANAGED = 4096,
     }
-    public enum RawState { NOT_RAW, RAW_PREVIEW_AVAILABLE, RAW_DEVELOPING, RAW_DEVELOPED, RAW_UNSUPPORTED, RAW_DEVELOPMENT_FAILED }
-    internal enum DecodeFailure { UNSUPPORTED, CODEC_MISSING, CORRUPT, CRASH, TIMEOUT, MEMORY, COLOR_PROFILE, FAILURE }
+
+    public enum RawState {
+        NOT_RAW,
+        RAW_PREVIEW_AVAILABLE,
+        RAW_DEVELOPING,
+        RAW_DEVELOPED,
+        RAW_UNSUPPORTED,
+        RAW_DEVELOPMENT_FAILED,
+    }
+
+    internal enum DecodeFailure {
+        UNSUPPORTED,
+        CODEC_MISSING,
+        CORRUPT,
+        CRASH,
+        TIMEOUT,
+        MEMORY,
+        COLOR_PROFILE,
+        FAILURE,
+    }
 
     /** An application-registered worker executable using the version 1 protocol. */
     public interface DecoderBackend : Object {
@@ -18,6 +46,11 @@ namespace ImageKit {
     }
 
     public sealed class ImageProbe : Object {
+        private const string WIRE_MANAGED = "colour-managed";
+        private const string WIRE_DIAGNOSTIC = "colour-diagnostic";
+        private const string PROPERTY_MANAGED = "color-managed";
+        private const string PROPERTY_DIAGNOSTIC = "color-diagnostic";
+
         internal int protocol_version { get; set; default = 1; }
         public int width { get; set; }
         public int height { get; set; }
@@ -43,23 +76,39 @@ namespace ImageKit {
         public bool region { get; set; }
         public string metadata { get; set; default = "{}"; }
         public string image_names { get; set; default = ""; }
-        public ImageCapabilities capabilities { get {
-            var flags = ImageCapabilities.STILL | ImageCapabilities.THUMBNAIL | ImageCapabilities.METADATA;
-            if (pages > 1 && !animated) flags |= ImageCapabilities.MULTI_IMAGE;
-            if (animated) flags |= ImageCapabilities.ANIMATION;
-            if (depth > 8) flags |= ImageCapabilities.HIGH_DEPTH;
-            if (hdr) flags |= ImageCapabilities.HDR;
-            if (color_managed) flags |= ImageCapabilities.COLOR_MANAGED;
-            if (region) flags |= ImageCapabilities.REGION;
-            if (embedded_preview) flags |= ImageCapabilities.EMBEDDED_PREVIEW;
-            if (vector) flags |= ImageCapabilities.VECTOR;
-            if (gain_map) flags |= ImageCapabilities.GAIN_MAP;
-            return flags;
-        } }
-        private const string WIRE_MANAGED = "colour-managed";
-        private const string WIRE_DIAGNOSTIC = "colour-diagnostic";
-        private const string PROPERTY_MANAGED = "color-managed";
-        private const string PROPERTY_DIAGNOSTIC = "color-diagnostic";
+        public ImageCapabilities capabilities {
+            get {
+                var flags = ImageCapabilities.STILL | ImageCapabilities.THUMBNAIL | ImageCapabilities.METADATA;
+                if (pages > 1 && !animated) {
+                    flags |= ImageCapabilities.MULTI_IMAGE;
+                }
+                if (animated) {
+                    flags |= ImageCapabilities.ANIMATION;
+                }
+                if (depth > 8) {
+                    flags |= ImageCapabilities.HIGH_DEPTH;
+                }
+                if (hdr) {
+                    flags |= ImageCapabilities.HDR;
+                }
+                if (color_managed) {
+                    flags |= ImageCapabilities.COLOR_MANAGED;
+                }
+                if (region) {
+                    flags |= ImageCapabilities.REGION;
+                }
+                if (embedded_preview) {
+                    flags |= ImageCapabilities.EMBEDDED_PREVIEW;
+                }
+                if (vector) {
+                    flags |= ImageCapabilities.VECTOR;
+                }
+                if (gain_map) {
+                    flags |= ImageCapabilities.GAIN_MAP;
+                }
+                return flags;
+            }
+        }
 
         internal string serialize () {
             var node = Json.gobject_serialize (this);
@@ -71,19 +120,23 @@ namespace ImageKit {
             generator.set_root (node);
             return generator.to_data (null);
         }
+
         internal static ImageProbe deserialize (string text) throws Error {
             var parser = new Json.Parser ();
-            try { parser.load_from_data (text); }
-            catch (Error error) {
+            try {
+                parser.load_from_data (text);
+            } catch (Error error) {
                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder manifest JSON: %s", error.message);
             }
             var root = parser.get_root ();
-            if (root == null || root.get_node_type () != Json.NodeType.OBJECT)
+            if (root == null || root.get_node_type () != Json.NodeType.OBJECT) {
                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder manifest");
+            }
             var object = root.get_object ();
             var version = object.get_member ("protocol-version");
-            if (version == null || version.get_value_type () != typeof (int64) || version.get_int () != 1)
+            if (version == null || version.get_value_type () != typeof (int64) || version.get_int () != 1) {
                 throw new ImageError.INVALID_RESPONSE ("Unsupported decoder manifest version");
+            }
             object.remove_member ("protocol-version");
             object.remove_member ("capabilities");
             rename_json_member (object, WIRE_MANAGED, PROPERTY_MANAGED);
@@ -93,18 +146,24 @@ namespace ImageKit {
             ObjectClass klass = (ObjectClass) typeof (ImageProbe).class_ref ();
             foreach (unowned string member in object.get_members ()) {
                 unowned ParamSpec? property = klass.find_property (member);
-                if (property == null) continue;
+                if (property == null) {
+                    continue;
+                }
                 var node = object.get_member (member);
                 Type expected = property.value_type == typeof (int) ? typeof (int64) : property.value_type;
                 if (node.get_node_type () != Json.NodeType.VALUE || node.get_value_type () != expected ||
-                    (property.value_type == typeof (int) && (node.get_int () < int.MIN || node.get_int () > int.MAX)))
+                    (property.value_type == typeof (int) &&
+                        (node.get_int () < int.MIN || node.get_int () > int.MAX))) {
                     throw new ImageError.INVALID_RESPONSE ("Invalid decoder manifest field: %s", member);
+                }
             }
             var result = Json.gobject_deserialize (typeof (ImageProbe), root) as ImageProbe;
             if (result == null || result.width < 1 || result.height < 1 ||
                 result.width > 1000000 || result.height > 1000000 ||
-                result.pages < 1 || result.pages > 100001 || result.depth < 1 || result.depth > 64 || result.loader == "")
+                result.pages < 1 || result.pages > 100001 || result.depth < 1 ||
+                    result.depth > 64 || result.loader == "") {
                 throw new ImageError.INVALID_RESPONSE ("Invalid image dimensions, page count, precision or decoder");
+            }
             return result;
         }
     }

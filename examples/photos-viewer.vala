@@ -1,6 +1,7 @@
 using ImageKit;
 
-private async void verify_photos_export_workflow (ImageView view, File large, File next, File destination, File? raw, string[] extra) throws Error {
+private async void verify_photos_export_workflow (ImageView view, File large, File next,
+    File destination, File? raw, string[] extra) throws Error {
     var registry = new DecoderRegistry ();
     var options = new DecodeOptions ();
     options.preview_size = 800;
@@ -86,8 +87,12 @@ private async void verify_photos_export_workflow (ImageView view, File large, Fi
         int.max (reference.width, reference.height), true);
     var actual = yield exported.render_region (0, 0, exported.width, exported.height,
         int.max (exported.width, exported.height));
-    foreach (int y in new int[] { 0, exported.height / 2, exported.height - 1 }) {
-        foreach (int x in new int[] { 0, exported.width / 2, exported.width - 1 }) {
+    foreach (int y in new int[] {
+        0, exported.height / 2, exported.height - 1
+    }) {
+        foreach (int x in new int[] {
+            0, exported.width / 2, exported.width - 1
+        }) {
             for (int band = 0; band < 4; band++) {
                 // The PNG export quantizes the linear SDR result to 16-bit sRGB.
                 double wanted = sample_float_channel (expected, x, y, band).clamp (0, 1);

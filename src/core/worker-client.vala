@@ -9,6 +9,7 @@ namespace ImageKit {
             this.backend = backend;
             this.timeout_seconds = timeout_seconds.clamp (1, 120);
         }
+
         private string executable () {
             return backend ?? Environment.get_variable ("MAJORIS_IMAGE_WORKER") ?? installed_worker ();
         }
@@ -17,27 +18,38 @@ namespace ImageKit {
             var log = new ByteArray ();
             while (true) {
                 var bytes = yield stream.read_bytes_async (16384, Priority.DEFAULT, null);
-                if (bytes.get_size () == 0) break;
+                if (bytes.get_size () == 0) {
+                    break;
+                }
                 log.append (bytes.get_data ());
-                if (log.len > 65536) log.remove_range (0, log.len - 65536);
+                if (log.len > 65536) {
+                    log.remove_range (0, log.len - 65536);
+                }
             }
             log.append ({0});
             return ((string) log.data).make_valid ();
         }
 
         internal async string run (File? source, string operation, RenderOptions? transform,
-                                   Cancellable cancel, int size = 0, DecodeOptions? options = null, ExportOptions? encoding = null, bool preload = false) throws Error {
-            if (size < 0 || size > 4096)
+                                   Cancellable cancel, int size = 0, DecodeOptions? options = null,
+                                       ExportOptions? encoding = null, bool preload = false) throws Error {
+            if (size < 0 || size > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Image output edge must be at most 4096 pixels");
-            int priority = preload ? JobScheduler.PRELOAD_PRIORITY : operation == "thumbnail" ? 2 : operation == "tile" ? 1 : 0;
+            }
+            int priority = preload ? JobScheduler.PRELOAD_PRIORITY : operation == "thumbnail" ? 2
+                : operation == "tile" ? 1 : 0;
             var scheduler = JobScheduler.shared ();
             yield scheduler.acquire (priority, cancel);
-            try { return yield execute (source, operation, transform, cancel, size, options, encoding); }
-            finally { scheduler.release (); }
+            try {
+                return yield execute (source, operation, transform, cancel, size, options, encoding);
+            } finally {
+                scheduler.release ();
+            }
         }
 
         private async string execute (File? source, string operation, RenderOptions? transform,
-                                      Cancellable cancel, int size, DecodeOptions? options, ExportOptions? encoding) throws Error {
+                                      Cancellable cancel, int size, DecodeOptions? options,
+                                          ExportOptions? encoding) throws Error {
             string job = DirUtils.make_tmp ("majoris-image-XXXXXX");
             string output = Path.build_filename (job, "output");
             string request_path = Path.build_filename (job, "request.json");
@@ -46,10 +58,12 @@ namespace ImageKit {
                 string mtime = "";
                 if (source != null) {
                     var info = yield source.query_info_async ("standard::type,standard::size,time::modified", 0, Priority.DEFAULT, cancel);
-                    if (info.get_file_type () != FileType.REGULAR)
+                    if (info.get_file_type () != FileType.REGULAR) {
                         throw new IOError.INVALID_ARGUMENT ("The image source must be a regular file");
-                    if (info.has_attribute (FileAttribute.TIME_MODIFIED))
+                    }
+                    if (info.has_attribute (FileAttribute.TIME_MODIFIED)) {
                         mtime = info.get_attribute_uint64 (FileAttribute.TIME_MODIFIED).to_string ();
+                    }
                     if (input == null) {
                         input = Path.build_filename (job, "input");
                         var stream = yield source.read_async (Priority.DEFAULT, cancel);
@@ -57,11 +71,16 @@ namespace ImageKit {
                         size_t total = 0;
                         while (true) {
                             var bytes = yield stream.read_bytes_async (256 * 1024, Priority.DEFAULT, cancel);
-                            if (bytes.get_size () == 0) break;
+                            if (bytes.get_size () == 0) {
+                                break;
+                            }
                             total += bytes.get_size ();
-                            if (total > 1073741824) throw new ImageError.MEMORY ("Remote source exceeds 1 GiB");
+                            if (total > 1073741824) {
+                                throw new ImageError.MEMORY ("Remote source exceeds 1 GiB");
+                            }
                             size_t written;
-                            yield target.write_all_async (bytes.get_data (), Priority.DEFAULT, cancel, out written);
+                            yield target.write_all_async (bytes.get_data (), Priority.DEFAULT,
+                                cancel, out written);
                         }
                         yield target.close_async (Priority.DEFAULT, cancel);
                     }
@@ -78,27 +97,44 @@ namespace ImageKit {
                 request.export_options = encoding ?? new ExportOptions ();
                 FileUtils.set_contents (request_path, request.serialize ());
 
-                string[] argv = { "bwrap", "--unshare-all", "--die-with-parent", "--new-session", "--cap-drop", "ALL",
-                    "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
+                string[] argv = { "bwrap", "--unshare-all", "--die-with-parent", "--new-session",
+                    "--cap-drop", "ALL",
+                    "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib", "/lib", "--symlink",
+                        "usr/lib64", "/lib64",
                     "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", "/etc",
-                    "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache", "--ro-bind-try", "/etc/fonts", "/etc/fonts",
-                    "--ro-bind", executable (), "/worker", "--bind", job, "/job", "--chdir", "/job", "--clearenv",
+                    "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache", "--ro-bind-try",
+                        "/etc/fonts", "/etc/fonts",
+                    "--ro-bind", executable (), "/worker", "--bind", job, "/job", "--chdir", "/job",
+                        "--clearenv",
                     "--setenv", "PATH", "/usr/bin", "--setenv", "HOME", "/tmp",
                     "--setenv", "OMP_NUM_THREADS", "2", "--setenv", "OMP_THREAD_LIMIT", "2" };
                 if (input != null) {
-                    argv += "--ro-bind"; argv += input; argv += "/source";
+                    argv += "--ro-bind";
+                    argv += input;
+                    argv += "/source";
                 }
-                foreach (string arg in new string[] { "/usr/bin/prlimit", "--as=2147483648", "--cpu=90",
+                foreach (string arg in new string[] {
+                    "/usr/bin/prlimit", "--as=2147483648", "--cpu=90",
                           "--nofile=128", "--fsize=1073741824", "--core=0",
-                          "/worker", operation, "/source", "/job/output", "/job/request.json", size.to_string () })
+                          "/worker", operation, "/source", "/job/output", "/job/request.json", size.to_string ()
+                }) {
                     argv += arg;
+                }
                 Subprocess process;
-                try { process = new Subprocess.newv (argv, SubprocessFlags.STDOUT_SILENCE | SubprocessFlags.STDERR_PIPE); }
-                catch (Error e) { throw new ImageError.SANDBOX ("Cannot start sandbox: %s", e.message); }
+                try {
+                    process = new Subprocess.newv (argv,
+                        SubprocessFlags.STDOUT_SILENCE | SubprocessFlags.STDERR_PIPE);
+                } catch (Error e) {
+                    throw new ImageError.SANDBOX ("Cannot start sandbox: %s", e.message);
+                }
                 ulong handler = cancel.connect (() => process.force_exit ());
                 bool timed_out = false;
                 var timeout = new TimeoutSource.seconds (timeout_seconds);
-                timeout.set_callback (() => { timed_out = true; process.force_exit (); return Source.REMOVE; });
+                timeout.set_callback (() => {
+                    timed_out = true;
+                    process.force_exit ();
+                    return Source.REMOVE;
+                });
                 timeout.attach (MainContext.get_thread_default ());
                 string diagnostic = "";
                 try {
@@ -113,16 +149,26 @@ namespace ImageKit {
                     timeout.destroy ();
                 }
                 cancel.set_error_if_cancelled ();
-                if (timed_out) throw new ImageError.TIMEOUT ("Image decoder exceeded its time limit");
-                if (process.get_if_signaled ()) throw new ImageError.DECODER_CRASH ("Image decoder stopped unexpectedly");
+                if (timed_out) {
+                    throw new ImageError.TIMEOUT ("Image decoder exceeded its time limit");
+                }
+                if (process.get_if_signaled ()) {
+                    throw new ImageError.DECODER_CRASH ("Image decoder stopped unexpectedly");
+                }
                 if (!process.get_successful ()) {
                     int status = process.get_exit_status ();
-                    if (status == 139 || status == 134) throw new ImageError.DECODER_CRASH ("Image decoder stopped unexpectedly");
-                    if (status == 137 || status == 152 || status == 153) throw new ImageError.MEMORY ("Decoder exceeded its resource budget");
-                    if (status == 127 && diagnostic.contains ("shared libraries"))
+                    if (status == 139 || status == 134) {
+                        throw new ImageError.DECODER_CRASH ("Image decoder stopped unexpectedly");
+                    }
+                    if (status == 137 || status == 152 || status == 153) {
+                        throw new ImageError.MEMORY ("Decoder exceeded its resource budget");
+                    }
+                    if (status == 127 && diagnostic.contains ("shared libraries")) {
                         throw new ImageError.CODEC_MISSING ("A required decoder library is missing");
-                    if (diagnostic.has_prefix ("bwrap:") || diagnostic.has_prefix ("prlimit:"))
+                    }
+                    if (diagnostic.has_prefix ("bwrap:") || diagnostic.has_prefix ("prlimit:")) {
                         throw new ImageError.SANDBOX ("%s", diagnostic.strip ());
+                    }
                     throw WorkerFailure.deserialize (diagnostic);
                 }
                 return output;
@@ -137,34 +183,47 @@ namespace ImageKit {
             try {
                 var files = Dir.open (dir);
                 string? name;
-                while ((name = files.read_name ()) != null)
+                while ((name = files.read_name ()) != null) {
                     remove_tree (Path.build_filename (dir, name));
-            } catch (Error e) { debug ("Decoder directory cleanup: %s", e.message); }
+                }
+            } catch (Error e) {
+                debug ("Decoder directory cleanup: %s", e.message);
+            }
             DirUtils.remove (dir);
         }
 
         private static void remove_tree (string path) {
-            if (FileUtils.remove (path) == 0 || FileUtils.test (path, FileTest.IS_SYMLINK)) return;
-            if (!FileUtils.test (path, FileTest.IS_DIR)) return;
+            if (FileUtils.remove (path) == 0 || FileUtils.test (path, FileTest.IS_SYMLINK)) {
+                return;
+            }
+            if (!FileUtils.test (path, FileTest.IS_DIR)) {
+                return;
+            }
             try {
                 var entries = Dir.open (path);
                 string? name;
-                while ((name = entries.read_name ()) != null) remove_tree (Path.build_filename (path, name));
+                while ((name = entries.read_name ()) != null) {
+                    remove_tree (Path.build_filename (path, name));
+                }
                 DirUtils.remove (path);
-            } catch (Error e) { debug ("Cannot clean decoder output: %s", e.message); }
+            } catch (Error e) {
+                debug ("Cannot clean decoder output: %s", e.message);
+            }
         }
 
         internal static async Bytes read_output (string path, int64 limit, Cancellable stop) throws Error {
             var file = File.new_for_path (path);
             FileInfo info;
             try {
-                info = yield file.query_info_async ("standard::type,standard::size", FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+                info = yield file.query_info_async ("standard::type,standard::size",
+                    FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
                                                     Priority.DEFAULT, stop);
             } catch (IOError.NOT_FOUND e) {
                 throw new ImageError.INVALID_RESPONSE ("Decoder did not produce an output file");
             }
-            if (info.get_file_type () != FileType.REGULAR || info.get_size () < 1 || info.get_size () > limit)
+            if (info.get_file_type () != FileType.REGULAR || info.get_size () < 1 || info.get_size () > limit) {
                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder response type or size");
+            }
             return yield file.load_bytes_async (stop, null);
         }
 
@@ -173,8 +232,9 @@ namespace ImageKit {
             unowned uint8[] data = bytes.get_data ();
             uint8[] text = new uint8[data.length + 1];
             Memory.copy (text, data, data.length);
-            if (!((string) text).validate (data.length))
+            if (!((string) text).validate (data.length)) {
                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder UTF-8 response");
+            }
             return (string) text;
         }
 
@@ -191,15 +251,19 @@ namespace ImageKit {
             var staged = yield ImageSource.from_stream (stream, stop);
             string output = yield run (staged.file,
                 "render-buffer", transform, stop, edge, options);
-            try { return yield WorkerClient.read_pixels (output, stop); }
-            finally { WorkerClient.cleanup (output); }
+            try {
+                return yield WorkerClient.read_pixels (output, stop);
+            } finally {
+                WorkerClient.cleanup (output);
+            }
         }
 
         internal static async PixelBuffer read_pixels (string path, Cancellable stop) throws Error {
             var bytes = yield read_output (path, 268435468, stop);
             unowned uint8[] data = bytes.get_data ();
-            if (data.length < 12 || data[0] != 'M' || data[1] != 'I' || data[2] != 'F' || data[3] != '1')
+            if (data.length < 12 || data[0] != 'M' || data[1] != 'I' || data[2] != 'F' || data[3] != '1') {
                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder pixel header");
+            }
             uint w = 0, h = 0;
             for (int i = 0; i < 4; i++) {
                 w = (w << 8) | data[4 + i];

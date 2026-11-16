@@ -1,6 +1,7 @@
 using ImageKit;
 
-private async void verify_files_preview_workflow (ImageView view, File image, File hdr, File? raw, string[] extra) throws Error {
+private async void verify_files_preview_workflow (ImageView view, File image, File hdr, File? raw,
+    string[] extra) throws Error {
     var registry = new DecoderRegistry ();
     var thumbnails = new ThumbnailService ();
     var options = new DecodeOptions ();
@@ -78,9 +79,12 @@ private async void verify_files_preview_workflow (ImageView view, File image, Fi
         assert (view.document.raw_state == RawState.RAW_PREVIEW_AVAILABLE);
     }
 
-    var swatch = new Bytes (new uint8[] { 32, 64, 128, 255 });
+    var swatch = new Bytes (new uint8[] {
+        32, 64, 128, 255
+    });
     view.set_texture (new Gdk.MemoryTexture (1, 1, Gdk.MemoryFormat.R8G8B8A8, swatch, 4));
-    assert (view.document == null && view.image_width == 1 && view.presentation_status == PresentationStatus.SDR);
+    assert (view.document == null && view.image_width == 1 &&
+        view.presentation_status == PresentationStatus.SDR);
 
     var non_image = yield ImageSource.from_bytes (new Bytes ("plain text".data));
     try {

@@ -16,6 +16,10 @@ worker_sources = files(
   'worker-dispatcher.vala',
 )
 
+if get_option('worker_profiling')
+  native_vala_flags += ['--define=WORKER_PROFILING']
+endif
+
 worker = executable(
   'majoris-image-worker',
   'main.vala',

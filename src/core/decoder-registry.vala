@@ -20,25 +20,30 @@ namespace ImageKit {
 
         private async WorkerClient select (ImageSource source, ImageCapabilities required,
             Cancellable stop, bool preload = false) throws Error {
+            int64 started = OperationProfile.begin ();
             DecoderBackend[] snapshot;
             lock (custom_workers) {
                 snapshot = custom_workers.to_array ();
             }
             if (snapshot.length > 0) {
-                yield source.stamp (stop);
+                yield source.validate_regular (stop);
                 int priority = preload ? Priority.LOW : Priority.DEFAULT;
                 var stream = yield source.file.read_async (priority, stop);
+                int64 header_read = OperationProfile.begin ();
                 var bytes = yield stream.read_bytes_async (65536, priority, stop);
                 yield stream.close_async (priority, stop);
+                OperationProfile.record ("source-header-read", header_read, bytes.get_size ());
                 bool uncertain;
                 string content_type = ContentType.guess (null, bytes.get_data (), out uncertain);
                 string mime = ContentType.get_mime_type (content_type);
                 foreach (var backend in snapshot) {
                     if ((backend.capabilities & required) == required && backend.accepts (mime, bytes)) {
+                        OperationProfile.record ("backend-selection", started);
                         return new WorkerClient (backend.executable, timeout_seconds);
                     }
                 }
             }
+            OperationProfile.record ("backend-selection", started);
             return new WorkerClient (null, timeout_seconds);
         }
 
@@ -105,7 +110,12 @@ namespace ImageKit {
         }
 
         public async ImageProbe inspect (ImageSource source, Cancellable? cancel = null) throws Error {
-            return yield inspect_internal (source, cancel ?? new Cancellable (), false);
+            int64 started = OperationProfile.begin ();
+            try {
+                return yield inspect_internal (source, cancel ?? new Cancellable (), false);
+            } finally {
+                OperationProfile.record ("source-inspection", started);
+            }
         }
 
         private async ImageProbe inspect_internal (ImageSource source, Cancellable stop,
@@ -131,8 +141,13 @@ namespace ImageKit {
 
         public async ImageDocument open (ImageSource source, DecodeOptions? options = null,
                                          Cancellable? cancel = null) throws Error {
-            return yield open_internal (source, (options ?? new DecodeOptions ()).copy (),
-                                        cancel ?? new Cancellable (), false);
+            int64 started = OperationProfile.begin ();
+            try {
+                return yield open_internal (source, (options ?? new DecodeOptions ()).copy (),
+                    cancel ?? new Cancellable (), false);
+            } finally {
+                OperationProfile.record ("image-open", started);
+            }
         }
 
         internal async ImageDocument open_internal (ImageSource source, DecodeOptions request,
@@ -169,12 +184,12 @@ namespace ImageKit {
         }
 
         internal static async ImageDocument open_with (WorkerClient worker, ImageSource source,
-                                                        DecodeOptions request, Cancellable stop,
-                                                            bool preload = false) throws Error {
+            DecodeOptions request, Cancellable stop, bool preload = false,
+            string? verified_identity = null) throws Error {
             if (request.preview_size < 1 || request.preview_size > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Preview edge must be between 1 and 4096");
             }
-            string identity = yield source.stamp (stop);
+            string identity = verified_identity ?? (yield source.stamp (stop));
             string output = yield worker.run (source.file, "decode", null, stop,
                 request.preview_size, request, null, preload);
             try {
@@ -188,6 +203,8 @@ namespace ImageKit {
                     throw new ImageError.INVALID_RESPONSE ("Decoder exceeded the requested image size");
                 }
                 if (identity != "" && identity != (yield source.stamp (stop))) {
+                    OperationProfile.record ("source-validation-failure",
+                        OperationProfile.begin ());
                     throw new ImageError.SOURCE_CHANGED ("Image source changed during decoding");
                 }
                 return new ImageDocument (source, probe, preview, request, worker, identity);

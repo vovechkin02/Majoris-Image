@@ -173,15 +173,54 @@ private async void run_benchmarks (File file) throws Error {
     }
 }
 
+private async void benchmark_raw_preview (File file) throws Error {
+    var window = new Gtk.Window ();
+    window.title = "RAW preview benchmark";
+    window.set_default_size (800, 600);
+    var view = new ImageView ();
+    window.child = view;
+    window.present ();
+    int64 first_preview = 0;
+    int64 started = get_monotonic_time ();
+    ulong handler = view.notify["state"].connect (() => {
+        if (view.state == ViewState.PREVIEW_READY && first_preview == 0) {
+            first_preview = get_monotonic_time () - started;
+        }
+    });
+    try {
+        yield view.load_file (file);
+        if (first_preview == 0 || view.document == null ||
+            view.document.raw_state != RawState.RAW_DEVELOPED) {
+            throw new IOError.FAILED ("RAW preview or full development was not presented");
+        }
+        stdout.printf ("ImageKit-profile gtk-preview %" + int64.FORMAT + " 1\n", first_preview);
+        stdout.printf ("ImageKit-profile workload %" + int64.FORMAT + " 1\n",
+            get_monotonic_time () - started);
+    } finally {
+        view.disconnect (handler);
+        window.destroy ();
+    }
+}
+
+private async void run_mode (string[] args) throws Error {
+    if (args.length == 3 && args[1] == "raw-first") {
+        yield benchmark_raw_preview (File.new_for_path (args[2]));
+    } else if (args.length == 2) {
+        yield run_benchmarks (File.new_for_path (args[1]));
+    } else {
+        throw new IOError.INVALID_ARGUMENT ("Expected FILE or raw-first FILE");
+    }
+}
+
 int main (string[] args) {
     if (!Gtk.init_check ()) {
         return 77;
     }
     var loop = new MainLoop ();
     int status = 0;
-    run_benchmarks.begin (File.new_for_path (args[1]), (object, response) => {
+    run_mode.begin (args, (object, response) => {
         try {
-            run_benchmarks.end (response);
+            run_mode.end (response);
         } catch (Error error) {
             stderr.printf ("%s\n", error.message);
             status = 1;

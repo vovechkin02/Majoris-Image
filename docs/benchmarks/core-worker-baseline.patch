@@ -1,0 +1,408 @@
+--- a/meson.options
++++ b/meson.options
+@@ -16,6 +16,12 @@
+   type: 'feature',
+   value: 'auto',
+   description: 'Generate GObject introspection data',
++)
++option(
++  'worker_profiling',
++  type: 'boolean',
++  value: false,
++  description: 'Emit worker phase timings in successful benchmark runs',
+ )
+ option('tests', type: 'boolean', value: true, description: 'Build verification targets')
+ option(
+--- a/src/core/decoder-registry.vala
++++ b/src/core/decoder-registry.vala
+@@ -20,6 +20,7 @@
+ 
+         private async WorkerClient select (ImageSource source, ImageCapabilities required,
+             Cancellable stop, bool preload = false) throws Error {
++            int64 started = OperationProfile.begin ();
+             DecoderBackend[] snapshot;
+             lock (custom_workers) {
+                 snapshot = custom_workers.to_array ();
+@@ -28,17 +29,21 @@
+                 yield source.stamp (stop);
+                 int priority = preload ? Priority.LOW : Priority.DEFAULT;
+                 var stream = yield source.file.read_async (priority, stop);
++                int64 header_read = OperationProfile.begin ();
+                 var bytes = yield stream.read_bytes_async (65536, priority, stop);
+                 yield stream.close_async (priority, stop);
++                OperationProfile.record ("source-header-read", header_read, bytes.get_size ());
+                 bool uncertain;
+                 string content_type = ContentType.guess (null, bytes.get_data (), out uncertain);
+                 string mime = ContentType.get_mime_type (content_type);
+                 foreach (var backend in snapshot) {
+                     if ((backend.capabilities & required) == required && backend.accepts (mime, bytes)) {
++                        OperationProfile.record ("backend-selection", started);
+                         return new WorkerClient (backend.executable, timeout_seconds);
+                     }
+                 }
+             }
++            OperationProfile.record ("backend-selection", started);
+             return new WorkerClient (null, timeout_seconds);
+         }
+ 
+@@ -105,7 +110,12 @@
+         }
+ 
+         public async ImageProbe inspect (ImageSource source, Cancellable? cancel = null) throws Error {
+-            return yield inspect_internal (source, cancel ?? new Cancellable (), false);
++            int64 started = OperationProfile.begin ();
++            try {
++                return yield inspect_internal (source, cancel ?? new Cancellable (), false);
++            } finally {
++                OperationProfile.record ("source-inspection", started);
++            }
+         }
+ 
+         private async ImageProbe inspect_internal (ImageSource source, Cancellable stop,
+@@ -131,8 +141,13 @@
+ 
+         public async ImageDocument open (ImageSource source, DecodeOptions? options = null,
+                                          Cancellable? cancel = null) throws Error {
+-            return yield open_internal (source, (options ?? new DecodeOptions ()).copy (),
+-                                        cancel ?? new Cancellable (), false);
++            int64 started = OperationProfile.begin ();
++            try {
++                return yield open_internal (source, (options ?? new DecodeOptions ()).copy (),
++                    cancel ?? new Cancellable (), false);
++            } finally {
++                OperationProfile.record ("image-open", started);
++            }
+         }
+ 
+         internal async ImageDocument open_internal (ImageSource source, DecodeOptions request,
+@@ -188,6 +203,7 @@
+                     throw new ImageError.INVALID_RESPONSE ("Decoder exceeded the requested image size");
+                 }
+                 if (identity != "" && identity != (yield source.stamp (stop))) {
++                    OperationProfile.record ("source-validation-failure", OperationProfile.begin ());
+                     throw new ImageError.SOURCE_CHANGED ("Image source changed during decoding");
+                 }
+                 return new ImageDocument (source, probe, preview, request, worker, identity);
+--- a/src/core/glycin-fallback.vala
++++ b/src/core/glycin-fallback.vala
+@@ -70,7 +70,9 @@
+         private static async string sniff (File source, Cancellable stop, bool preload) throws Error {
+             int priority = preload ? Priority.LOW : Priority.DEFAULT;
+             var stream = yield source.read_async (priority, stop);
++            int64 started = OperationProfile.begin ();
+             var prefix = yield stream.read_bytes_async (4096, priority, stop);
++            OperationProfile.record ("source-header-read", started, prefix.get_size ());
+             yield stream.close_async (priority, stop);
+             unowned uint8[] b = prefix.get_data ();
+             if (b.length >= 14 && b[0] == 'q' && b[1] == 'o' && b[2] == 'i' && b[3] == 'f') {
+@@ -82,7 +84,9 @@
+                 return mime;
+             }
+             // A TGA 2.0 footer is a content signature, even on an extensionless GFile.
++            started = OperationProfile.begin ();
+             var info = yield source.query_info_async ("standard::size", 0, priority, stop);
++            OperationProfile.record ("source-query", started);
+             if (source.is_native () && info.get_size () >= 26) {
+                 var footer = yield source.read_async (priority, stop);
+                 if (footer.can_seek () && footer.seek (-18, SeekType.END, stop)) {
+@@ -113,6 +117,7 @@
+                 (request.required_capabilities & ~supported) != 0) {
+                 throw original;
+             }
++            OperationProfile.record ("glycin-attempt", OperationProfile.begin ());
+             var identity = yield source.stamp (stop);
+             string mime = animation != null ? animation.mime : yield sniff (source.file, stop, preload);
+             if (mime == "") {
+--- a/src/core/image-document.vala
++++ b/src/core/image-document.vala
+@@ -187,6 +187,7 @@
+ 
+         private async void verify_source (Cancellable stop) throws Error {
+             if (identity != "" && identity != (yield source.stamp (stop))) {
++                OperationProfile.record ("source-validation-failure", OperationProfile.begin ());
+                 throw new ImageError.SOURCE_CHANGED ("Image source changed; reload it before rendering more regions");
+             }
+         }
+--- a/src/core/image-source.vala
++++ b/src/core/image-source.vala
+@@ -14,6 +14,7 @@
+             FileIOStream storage;
+             var file = File.new_tmp ("majoris-image-source-XXXXXX", out storage);
+             try {
++                int64 staging = OperationProfile.begin ();
+                 size_t total = 0;
+                 while (true) {
+                     var bytes = yield stream.read_bytes_async (256 * 1024, Priority.DEFAULT, cancel);
+@@ -29,6 +30,7 @@
+                         Priority.DEFAULT, cancel, out written);
+                 }
+                 yield storage.close_async (Priority.DEFAULT, cancel);
++                OperationProfile.record ("stream-staging", staging, total);
+                 var source = new ImageSource (file);
+                 source.remove_after_use = true;
+                 return source;
+@@ -43,12 +45,21 @@
+         }
+ 
+         internal async string stamp (Cancellable stop) throws Error {
+-            var info = yield file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
+-                Priority.DEFAULT, stop);
++            int64 started = OperationProfile.begin ();
++            FileInfo info = null;
++            try {
++                info = yield file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
++                    Priority.DEFAULT, stop);
++            } finally {
++                OperationProfile.record ("source-query", started);
++            }
+             if (info.get_file_type () != FileType.REGULAR) {
+                 throw new IOError.INVALID_ARGUMENT ("The image source must be a regular file");
+             }
+-            return ThumbnailService.source_stamp (file, info);
++            started = OperationProfile.begin ();
++            string stamp = ThumbnailService.source_stamp (file, info);
++            OperationProfile.record ("source-stamp", started);
++            return stamp;
+         }
+ 
+         ~ImageSource () {
+--- a/src/core/meson.build
++++ b/src/core/meson.build
+@@ -15,6 +15,7 @@
+   'preload-manager.vala',
+   'job-scheduler.vala',
+   'decode-options.vala',
++  'operation-profile.vala',
+   'worker-request.vala',
+   'worker-client.vala',
+   'worker-failure.vala',
+--- /dev/null
++++ b/src/core/operation-profile.vala
+@@ -0,0 +1,16 @@
++namespace ImageKit {
++    // Machine-readable samples for the existing benchmark runner.
++    internal class OperationProfile {
++        internal static int64 begin () {
++            return Environment.get_variable ("MAJORIS_IMAGE_PROFILE") == "1"
++                ? get_monotonic_time () : 0;
++        }
++
++        internal static void record (string stage, int64 started, uint64 count = 1) {
++            if (started != 0) {
++                stderr.printf ("ImageKit-profile %s %" + int64.FORMAT + " %" + uint64.FORMAT + "\n",
++                    stage, get_monotonic_time () - started, count);
++            }
++        }
++    }
++}
+--- a/src/core/preload-manager.vala
++++ b/src/core/preload-manager.vala
+@@ -99,9 +99,17 @@
+ 
+         private async string? key_for (ImageSource source, DecodeOptions options,
+             Cancellable stop) throws Error {
+-            var info = yield source.file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
+-                Priority.LOW, stop);
++            int64 started = OperationProfile.begin ();
++            FileInfo info = null;
++            try {
++                info = yield source.file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
++                    Priority.LOW, stop);
++            } finally {
++                OperationProfile.record ("source-query", started);
++            }
++            started = OperationProfile.begin ();
+             string stamp = ThumbnailService.source_stamp (source.file, info);
++            OperationProfile.record ("source-stamp", started);
+             if (stamp == "") {
+                 return null;
+             }
+--- a/src/core/thumbnail-service.vala
++++ b/src/core/thumbnail-service.vala
+@@ -16,8 +16,12 @@
+                 throw new IOError.INVALID_ARGUMENT ("Invalid thumbnail size or page");
+             }
+             var stop = cancel ?? new Cancellable ();
++            int64 started = OperationProfile.begin ();
+             var info = yield source.file.query_info_async (STAMP_ATTRIBUTES, 0, Priority.LOW, stop);
++            OperationProfile.record ("source-query", started);
++            started = OperationProfile.begin ();
+             string key = source_stamp (source.file, info);
++            OperationProfile.record ("source-stamp", started);
+             var directory = File.new_for_path (Path.build_filename (Environment.get_user_cache_dir (), "majoris-image", "thumbnails-v2"));
+             File? saved = null;
+             if (key != "" && DirUtils.create_with_parents (directory.get_path (), 0700) == 0) {
+--- a/src/core/worker-client.vala
++++ b/src/core/worker-client.vala
+@@ -39,7 +39,12 @@
+             int priority = preload ? JobScheduler.PRELOAD_PRIORITY : operation == "thumbnail" ? 2
+                 : operation == "tile" ? 1 : 0;
+             var scheduler = JobScheduler.shared ();
+-            yield scheduler.acquire (priority, cancel);
++            int64 admission = OperationProfile.begin ();
++            try {
++                yield scheduler.acquire (priority, cancel);
++            } finally {
++                OperationProfile.record ("scheduler-admission", admission);
++            }
+             try {
+                 return yield execute (source, operation, transform, cancel, size, options, encoding);
+             } finally {
+@@ -50,14 +55,24 @@
+         private async string execute (File? source, string operation, RenderOptions? transform,
+                                       Cancellable cancel, int size, DecodeOptions? options,
+                                           ExportOptions? encoding) throws Error {
++            int64 started = OperationProfile.begin ();
+             string job = DirUtils.make_tmp ("majoris-image-XXXXXX");
++            OperationProfile.record ("job-directory", started);
+             string output = Path.build_filename (job, "output");
+             string request_path = Path.build_filename (job, "request.json");
+             try {
+                 string? input = source?.get_path ();
+                 string mtime = "";
+                 if (source != null) {
+-                    var info = yield source.query_info_async ("standard::type,standard::size,time::modified", 0, Priority.DEFAULT, cancel);
++                    started = OperationProfile.begin ();
++                    FileInfo info = null;
++                    try {
++                        info = yield source.query_info_async (
++                            "standard::type,standard::size,time::modified", 0,
++                            Priority.DEFAULT, cancel);
++                    } finally {
++                        OperationProfile.record ("source-query", started);
++                    }
+                     if (info.get_file_type () != FileType.REGULAR) {
+                         throw new IOError.INVALID_ARGUMENT ("The image source must be a regular file");
+                     }
+@@ -65,6 +80,7 @@
+                         mtime = info.get_attribute_uint64 (FileAttribute.TIME_MODIFIED).to_string ();
+                     }
+                     if (input == null) {
++                        started = OperationProfile.begin ();
+                         input = Path.build_filename (job, "input");
+                         var stream = yield source.read_async (Priority.DEFAULT, cancel);
+                         var target = yield File.new_for_path (input).create_async (FileCreateFlags.PRIVATE, Priority.DEFAULT, cancel);
+@@ -83,8 +99,10 @@
+                                 cancel, out written);
+                         }
+                         yield target.close_async (Priority.DEFAULT, cancel);
+-                    }
+-                }
++                        OperationProfile.record ("remote-staging", started, total);
++                    }
++                }
++                started = OperationProfile.begin ();
+                 var request = new WorkerRequest ();
+                 request.transform = transform ?? new RenderOptions ();
+                 request.options = options ?? new DecodeOptions ();
+@@ -120,6 +138,8 @@
+                 }) {
+                     argv += arg;
+                 }
++                OperationProfile.record ("request-preparation", started);
++                started = OperationProfile.begin ();
+                 Subprocess process;
+                 try {
+                     process = new Subprocess.newv (argv,
+@@ -127,6 +147,8 @@
+                 } catch (Error e) {
+                     throw new ImageError.SANDBOX ("Cannot start sandbox: %s", e.message);
+                 }
++                OperationProfile.record ("sandbox-launch", started);
++                started = OperationProfile.begin ();
+                 ulong handler = cancel.connect (() => process.force_exit ());
+                 bool timed_out = false;
+                 var timeout = new TimeoutSource.seconds (timeout_seconds);
+@@ -147,6 +169,7 @@
+                 } finally {
+                     cancel.disconnect (handler);
+                     timeout.destroy ();
++                    OperationProfile.record ("sandbox-runtime", started);
+                 }
+                 cancel.set_error_if_cancelled ();
+                 if (timed_out) {
+@@ -171,6 +194,9 @@
+                     }
+                     throw WorkerFailure.deserialize (diagnostic);
+                 }
++                if (started != 0 && diagnostic.has_prefix ("ImageKit-profile worker-initialization ")) {
++                    stderr.printf ("%s", diagnostic);
++                }
+                 return output;
+             } catch (Error e) {
+                 cleanup (output);
+@@ -179,6 +205,7 @@
+         }
+ 
+         internal static void cleanup (string output) {
++            int64 started = OperationProfile.begin ();
+             string dir = Path.get_dirname (output);
+             try {
+                 var files = Dir.open (dir);
+@@ -190,6 +217,7 @@
+                 debug ("Decoder directory cleanup: %s", e.message);
+             }
+             DirUtils.remove (dir);
++            OperationProfile.record ("job-cleanup", started);
+         }
+ 
+         private static void remove_tree (string path) {
+@@ -212,6 +240,7 @@
+         }
+ 
+         internal static async Bytes read_output (string path, int64 limit, Cancellable stop) throws Error {
++            int64 started = OperationProfile.begin ();
+             var file = File.new_for_path (path);
+             FileInfo info;
+             try {
+@@ -224,7 +253,9 @@
+             if (info.get_file_type () != FileType.REGULAR || info.get_size () < 1 || info.get_size () > limit) {
+                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder response type or size");
+             }
+-            return yield file.load_bytes_async (stop, null);
++            var bytes = yield file.load_bytes_async (stop, null);
++            OperationProfile.record ("output-read", started, bytes.get_size ());
++            return bytes;
+         }
+ 
+         internal static async string read_text (string path, Cancellable stop) throws Error {
+--- a/src/worker/main.vala
++++ b/src/worker/main.vala
+@@ -1,12 +1,24 @@
+ namespace ImageKit {
+     public int main (string[] args) {
++#if WORKER_PROFILING
++        int64 started = get_monotonic_time ();
++#endif
+         if (args.length != 6 || Vips.init ("majoris-image-worker") != 0) {
+             return 2;
+         }
+         Vips.cache_set_max_mem (128 * 1024 * 1024);
+         Vips.concurrency_set (2);
+         try {
++#if WORKER_PROFILING
++            int64 initialized = get_monotonic_time ();
++#endif
+             WorkerDispatcher.run (args[1], args[2], args[3], args[4], args[5]);
++#if WORKER_PROFILING
++            stderr.printf ("ImageKit-profile worker-initialization %" + int64.FORMAT + " 1\n",
++                initialized - started);
++            stderr.printf ("ImageKit-profile worker-operation %" + int64.FORMAT + " 1\n",
++                get_monotonic_time () - initialized);
++#endif
+             return 0;
+         } catch (Error e) {
+             stderr.printf ("%s\n", WorkerFailure.serialize (e));
+--- a/src/worker/meson.build
++++ b/src/worker/meson.build
+@@ -16,6 +16,10 @@
+   'worker-dispatcher.vala',
+ )
+ 
++if get_option('worker_profiling')
++  native_vala_flags += ['--define=WORKER_PROFILING']
++endif
++
+ worker = executable(
+   'majoris-image-worker',
+   'main.vala',

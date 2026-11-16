@@ -6,6 +6,12 @@ native_benchmark = executable(
 )
 workloads = [
   'open=' + (fixture_dir / 'rgb16.png'),
+  'jpeg=' + (fixture_build_dir / 'navigation.jpg'),
+  'large-tiff=' + (fixture_build_dir / 'large.tiff'),
+  'pages=' + (fixture_dir / 'multipart.exr'),
+  'stream=' + (fixture_dir / 'rgb16.png'),
+  'custom=' + (fixture_dir / 'rgb16.png'),
+  'cancel=' + (fixture_dir / 'corrupt.bin'),
   'warm=' + (fixture_dir / 'rgb16.png'),
   'thumbnail=' + (
     fixture_dir / 'rgb16.png'
@@ -32,6 +38,9 @@ workloads = [
     fixture_build_dir / 'animated.gif'
   ),
 ]
+if get_option('glycin').enabled()
+  workloads += ['fallback=' + (fixture_build_dir / 'fallback.qoi')]
+endif
 if get_option('raw_fixtures') != ''
   workloads += [
     'raw-preview=' + (get_option('raw_fixtures') / '350D.CR2'),
@@ -52,10 +61,12 @@ benchmark(
     meson.project_build_root(),
     '--worker',
     worker,
+    '--fault-worker',
+    worker_fault,
     '--executable',
     benchmark_program,
   ] + workloads,
-  depends: [fixtures, worker],
+  depends: [fixtures, extra_formats, worker, worker_fault],
 )
 
 benchmark(
@@ -107,6 +118,13 @@ if get_option('gtk')
       'benchmark-image-view.vala',
       dependencies: gtk_api,
     )
+    view_benchmark_env = {
+      'MAJORIS_IMAGE_WORKER': worker.full_path(),
+      'G_DEBUG': 'fatal-criticals',
+      'GDK_BACKEND': 'x11',
+      'GDK_SCALE': '1',
+      'GSK_RENDERER': 'cairo',
+    }
     benchmark(
       'GTK ImageView snapshots and progressive presentation',
       python,
@@ -121,13 +139,30 @@ if get_option('gtk')
         large_tiff_fixture,
       ],
       depends: [worker, fixtures],
-      env: {
-        'MAJORIS_IMAGE_WORKER': worker.full_path(),
-        'G_DEBUG': 'fatal-criticals',
-        'GDK_BACKEND': 'x11',
-        'GDK_SCALE': '1',
-        'GSK_RENDERER': 'cairo',
-      },
+      env: view_benchmark_env,
     )
+    if get_option('raw_fixtures') != ''
+      benchmark(
+        'GTK RAW preview and full development latency',
+        python,
+        suite: 'performance',
+        timeout: 300,
+        args: isolated + [
+          xvfb.full_path(),
+          '-a',
+          python.full_path(),
+          files('run_benchmarks.py'),
+          '--build',
+          meson.project_build_root(),
+          '--worker',
+          worker,
+          '--executable',
+          image_view_benchmark,
+          'raw-first=' + (get_option('raw_fixtures') / '350D.CR2'),
+        ],
+        depends: [worker],
+        env: view_benchmark_env,
+      )
+    endif
   endif
 endif

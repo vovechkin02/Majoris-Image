@@ -33,7 +33,141 @@ private class FaultBackend : Object, DecoderBackend {
     }
 }
 
-async void verify_worker_failures_and_isolation (string worker_path) throws Error {
+private string configure_launcher_fixture () throws Error {
+    string launcher = Environment.find_program_in_path ("bwrap");
+    if (launcher == null) {
+        throw new IOError.NOT_FOUND ("Bubblewrap is required for the worker security test");
+    }
+    string directory = DirUtils.make_tmp ("launcher-test-XXXXXX");
+    string wrapper = Path.build_filename (directory, "bwrap");
+    string script = """#!/bin/sh
+if [ -f "$IMAGEKIT_LAUNCHER_TEST/arm" ]; then
+    (
+        count=0
+        while [ ! -f "$IMAGEKIT_LAUNCHER_TEST/release" ] && [ "$count" -lt 200 ]; do
+            count=$((count + 1))
+            sleep 0.02
+        done
+        : > "$IMAGEKIT_LAUNCHER_TEST/done"
+    ) &
+    : > "$IMAGEKIT_LAUNCHER_TEST/ready"
+    wait
+else
+    exec %s "$@"
+fi
+""".printf (Shell.quote (launcher));
+    FileUtils.set_contents (wrapper, script);
+    if (FileUtils.chmod (wrapper, 0700) != 0) {
+        throw new IOError.FAILED ("Cannot make the launcher fixture executable");
+    }
+    Environment.set_variable ("IMAGEKIT_LAUNCHER_TEST", directory, true);
+    Environment.set_variable ("PATH", directory + ":" + Environment.get_variable ("PATH"), true);
+    return directory;
+}
+
+private async void wait_for_pipe_holder (string path) throws Error {
+    int64 deadline = get_monotonic_time () + 5 * TimeSpan.SECOND;
+    while (!FileUtils.test (path, FileTest.EXISTS)) {
+        if (get_monotonic_time () >= deadline) {
+            throw new IOError.TIMED_OUT ("The launcher fixture did not release its diagnostic pipe");
+        }
+        Timeout.add (5, () => {
+            wait_for_pipe_holder.callback ();
+            return Source.REMOVE;
+        });
+        yield;
+    }
+}
+
+private async void verify_launcher_cancellation (DecoderRegistry registry, ImageSource source,
+    string directory) throws Error {
+    string arm = Path.build_filename (directory, "arm");
+    string ready = Path.build_filename (directory, "ready");
+    string released = Path.build_filename (directory, "release");
+    string done = Path.build_filename (directory, "done");
+    FileUtils.set_contents (arm, "");
+    var cancel = new Cancellable ();
+    int64 deadline = get_monotonic_time () + 2 * TimeSpan.SECOND;
+    bool canceled = false;
+    uint timer = Timeout.add (5, () => {
+        if (!canceled &&
+            (FileUtils.test (ready, FileTest.EXISTS) || get_monotonic_time () >= deadline)) {
+            canceled = true;
+            cancel.cancel ();
+        }
+        return Source.CONTINUE;
+    });
+    try {
+        yield registry.inspect (source, cancel);
+        assert_not_reached ();
+    } catch (IOError.CANCELLED error) {
+        assert (FileUtils.test (ready, FileTest.EXISTS));
+        // The canceled request must complete while the helper still owns the pipe.
+        assert (!FileUtils.test (done, FileTest.EXISTS));
+    } finally {
+        Source.remove (timer);
+        FileUtils.unlink (arm);
+        try {
+            FileUtils.set_contents (released, "");
+            yield wait_for_pipe_holder (done);
+        } catch (Error cleanup_error) {
+            GLib.error ("%s", cleanup_error.message);
+        }
+    }
+}
+
+private async void verify_replacement_during_decode (DecoderRegistry registry, ImageSource source)
+    throws Error {
+    string path = source.file.get_path ();
+    FileUtils.set_contents (path, "H");
+    bool replaced = false;
+    Error? mutation_error = null;
+    var deadline = get_monotonic_time () + 3 * TimeSpan.SECOND;
+    var cancel = new Cancellable ();
+    uint timer = Timeout.add (5, () => {
+        if (replaced || mutation_error != null) {
+            return Source.CONTINUE;
+        }
+        if (get_monotonic_time () >= deadline) {
+            mutation_error = new IOError.TIMED_OUT ("The worker did not signal decode readiness");
+            cancel.cancel ();
+            return Source.CONTINUE;
+        }
+        try {
+            var directory = Dir.open (Environment.get_tmp_dir ());
+            string? name;
+            while ((name = directory.read_name ()) != null) {
+                if (!name.has_prefix ("majoris-image-")) {
+                    continue;
+                }
+                string job = Path.build_filename (Environment.get_tmp_dir (), name);
+                if (FileUtils.test (Path.build_filename (job, "ready"), FileTest.EXISTS)) {
+                    FileUtils.set_contents (path, "Y");
+                    FileUtils.set_contents (Path.build_filename (job, "release"), "");
+                    replaced = true;
+                    break;
+                }
+            }
+        } catch (Error error) {
+            mutation_error = error;
+            cancel.cancel ();
+        }
+        return Source.CONTINUE;
+    });
+    try {
+        yield registry.open (source, null, cancel);
+        throw new IOError.FAILED ("The replacement was accepted as the decoded source");
+    } catch (ImageError.SOURCE_CHANGED error) {
+        assert (replaced);
+    } catch (IOError.CANCELLED error) {
+        throw mutation_error ?? error;
+    } finally {
+        Source.remove (timer);
+    }
+}
+
+async void verify_worker_failures_and_isolation (string worker_path, string launcher_directory)
+    throws Error {
     var registry = new DecoderRegistry ();
     registry.timeout_seconds = 1;
     registry.register_backend (new FaultBackend (worker_path));
@@ -133,6 +267,9 @@ async void verify_worker_failures_and_isolation (string worker_path) throws Erro
         FileUtils.set_contents (input, "Y");
         var document = yield registry.open (source);
         assert (document.preview.width == 1 && document.preview.stride == 16);
+        registry.timeout_seconds = 5;
+        yield verify_launcher_cancellation (registry, source, launcher_directory);
+        yield verify_replacement_during_decode (registry, source);
         var unavailable = new DecoderRegistry ();
         unavailable.register_backend (new FaultBackend (Path.build_filename (dir, "nonexistent-worker")));
         try {
@@ -171,7 +308,14 @@ int main (string[] args) {
     }
     var loop = new MainLoop ();
     int result = 0;
-    verify_worker_failures_and_isolation.begin (args[1], (obj, response) => {
+    string launcher_directory;
+    try {
+        launcher_directory = configure_launcher_fixture ();
+    } catch (Error error) {
+        stderr.printf ("%s\n", error.message);
+        return 1;
+    }
+    verify_worker_failures_and_isolation.begin (args[1], launcher_directory, (obj, response) => {
         try {
             verify_worker_failures_and_isolation.end (response);
         } catch (Error e) {

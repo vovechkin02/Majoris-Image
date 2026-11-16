@@ -16,8 +16,12 @@ namespace ImageKit {
                 throw new IOError.INVALID_ARGUMENT ("Invalid thumbnail size or page");
             }
             var stop = cancel ?? new Cancellable ();
+            int64 started = OperationProfile.begin ();
             var info = yield source.file.query_info_async (STAMP_ATTRIBUTES, 0, Priority.LOW, stop);
+            OperationProfile.record ("source-query", started);
+            started = OperationProfile.begin ();
             string key = source_stamp (source.file, info);
+            OperationProfile.record ("source-stamp", started);
             var directory = File.new_for_path (Path.build_filename (Environment.get_user_cache_dir (), "majoris-image", "thumbnails-v2"));
             File? saved = null;
             if (key != "" && DirUtils.create_with_parents (directory.get_path (), 0700) == 0) {

@@ -61,6 +61,12 @@ int main(int argc, char **argv)
     if (mode == 'C') {
         raise(SIGSEGV);
     }
+    if (mode == 'T' || mode == 'H') {
+        FILE *ready = fopen("/job/ready", "w");
+        if (!ready || fclose(ready)) {
+            return 2;
+        }
+    }
     if (mode == 'T') {
         sleep(10);
         return 1;
@@ -92,6 +98,16 @@ int main(int argc, char **argv)
             fclose(partial);
         }
         raise(SIGSEGV);
+    }
+    if (mode == 'H') {
+        int remaining = 3000;
+        while (access("/job/release", F_OK) != 0 && remaining-- > 0) {
+            usleep(1000);
+        }
+        if (remaining < 0) {
+            return 2;
+        }
+        mode = 'Y';
     }
     if (mode == 'S' || mode == 'Y' || mode == 'L') {
         FILE *manifest = fopen("/job/image.json", "wb");

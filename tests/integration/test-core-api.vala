@@ -1,6 +1,122 @@
 using ImageKit;
 
+private class FailingInputStream : InputStream {
+    private bool delivered;
+    private bool cancel_read;
+
+    public FailingInputStream (bool cancel_read) {
+        this.cancel_read = cancel_read;
+    }
+
+    public override bool close (Cancellable? cancellable = null) throws IOError {
+        return true;
+    }
+
+    public override ssize_t read (uint8[] buffer, Cancellable? cancellable = null) throws IOError {
+        if (!delivered) {
+            delivered = true;
+            buffer[0] = 137;
+            return 1;
+        }
+        if (cancel_read) {
+            cancellable.cancel ();
+            throw new IOError.CANCELLED ("Injected cancellation on the second read");
+        }
+        throw new IOError.FAILED ("Injected failure on the second read");
+    }
+}
+
+private async void verify_failed_stream_ownership () throws Error {
+    foreach (bool cancel_read in new bool[] { false, true }) {
+        var stream = new FailingInputStream (cancel_read);
+        try {
+            yield ImageSource.from_stream (stream, new Cancellable ());
+            assert_not_reached ();
+        } catch (Error error) {
+            if (cancel_read) {
+                assert (error is IOError.CANCELLED);
+            } else {
+                assert (error is IOError.FAILED);
+                assert (error.message == "Injected failure on the second read");
+            }
+        }
+        assert (!stream.is_closed ());
+        yield stream.close_async ();
+        var temporary = Dir.open (Environment.get_tmp_dir ());
+        string? entry;
+        while ((entry = temporary.read_name ()) != null) {
+            assert (!entry.has_prefix ("majoris-image-source-"));
+        }
+    }
+}
+
+private async File verify_staged_document (DecoderRegistry registry, ImageSource fixture)
+    throws Error {
+    var bytes = yield fixture.file.load_bytes_async (null, null);
+    ImageSource? staged = yield ImageSource.from_bytes (bytes);
+    var file = staged.file;
+    var info = yield file.query_info_async (FileAttribute.UNIX_MODE, 0);
+    assert ((info.get_attribute_uint32 (FileAttribute.UNIX_MODE) & 0777) == 0600);
+    var document = yield registry.open (staged);
+    staged = null;
+    assert (file.query_exists ());
+    var first = yield document.render_region (0, 0, 1, 1, 1);
+    var second = yield document.render_region (0, 0, 1, 1, 1);
+    assert (first.bytes.compare (second.bytes) == 0);
+    assert ((yield document.open_page (1)).page == 1);
+    info = yield file.query_info_async ("standard::size,time::modified", 0);
+    file.set_attribute_uint64 (FileAttribute.TIME_MODIFIED,
+        info.get_attribute_uint64 (FileAttribute.TIME_MODIFIED) - 10, FileQueryInfoFlags.NONE);
+    assert ((yield file.query_info_async (FileAttribute.STANDARD_SIZE, 0)).get_size () ==
+        info.get_size ());
+    try {
+        yield document.open_page (1);
+        assert_not_reached ();
+    } catch (ImageError.SOURCE_CHANGED error) {
+        // Each page request must validate the retained source again.
+    }
+    try {
+        yield document.render_region (0, 0, 1, 1, 1);
+        assert_not_reached ();
+    } catch (ImageError.SOURCE_CHANGED error) {
+        // Previously rendered tiles do not authorize another read.
+    }
+    return file;
+}
+
+private async void verify_source_replacement (DecoderRegistry registry, ImageSource first,
+    ImageSource second) throws Error {
+    string directory = DirUtils.make_tmp ("majoris-source-test-XXXXXX");
+    var path = File.new_for_path (Path.build_filename (directory, "image"));
+    var source = new ImageSource (path);
+    try {
+        yield first.file.copy_async (path, FileCopyFlags.NONE);
+        assert ((yield registry.inspect (source)).depth == 16);
+        path.delete ();
+        try {
+            yield registry.open (source);
+            assert_not_reached ();
+        } catch (IOError.NOT_FOUND error) {
+            // Inspection does not authorize a later open.
+        }
+        yield second.file.copy_async (path, FileCopyFlags.NONE);
+        assert ((yield registry.open (source)).bit_depth == 8);
+        path.delete ();
+        assert (DirUtils.create (path.get_path (), 0700) == 0);
+        try {
+            yield registry.open (source);
+            assert_not_reached ();
+        } catch (IOError.INVALID_ARGUMENT error) {
+            // Directory replacements still require regular-file validation.
+        }
+    } finally {
+        FileUtils.remove (path.get_path ());
+        DirUtils.remove (directory);
+    }
+}
+
 async void verify_headless_core_api (string directory, string large_path) throws Error {
+    yield verify_failed_stream_ownership ();
     var recipe = RenderOptions.deserialize ("{\"version\":2,\"nearest-neighbour\":true}");
     assert (recipe.nearest_neighbor);
     string saved = recipe.serialize ();
@@ -15,6 +131,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     assert (document.preview.bytes.get_size () == (size_t) document.preview.stride * document.preview.height);
     var rgb8 = yield registry.open (new ImageSource (File.new_for_path (Path.build_filename (directory, "rgb8.png"))));
     assert (rgb8.bit_depth == 8);
+    yield verify_source_replacement (registry, source, rgb8.source);
     var pixels = yield document.render_region (0, 0, 1, 1, 1);
     assert (pixels.width == 1 && pixels.height == 1 && pixels.bytes.get_size () == 16);
     // Hold the expired entry open while the actual cache maintenance runs.
@@ -54,8 +171,17 @@ async void verify_headless_core_api (string directory, string large_path) throws
     var exr = yield registry.open (multipart);
     assert (exr.hdr && exr.bit_depth == 32 && exr.page_count >= 2);
     yield verify_jxl_export (registry, multipart, exr.preview);
+    var released = yield verify_staged_document (registry, multipart);
+    // The completed coroutine releases its local document after resuming its caller.
+    Idle.add (() => {
+        verify_headless_core_api.callback ();
+        return Source.REMOVE;
+    });
+    yield;
+    assert (!released.query_exists ());
     var exr_stream = yield multipart.file.read_async ();
     var staged = yield ImageSource.from_stream (exr_stream);
+    assert (!exr_stream.is_closed ());
     yield exr_stream.close_async ();
     var retained = yield registry.open (staged);
     assert (staged.file.delete ());

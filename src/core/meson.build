@@ -15,6 +15,7 @@ core_sources = files(
   'preload-manager.vala',
   'job-scheduler.vala',
   'decode-options.vala',
+  'operation-profile.vala',
   'worker-request.vala',
   'worker-client.vala',
   'worker-failure.vala',

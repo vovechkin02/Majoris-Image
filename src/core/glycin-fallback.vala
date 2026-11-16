@@ -70,7 +70,9 @@ namespace ImageKit {
         private static async string sniff (File source, Cancellable stop, bool preload) throws Error {
             int priority = preload ? Priority.LOW : Priority.DEFAULT;
             var stream = yield source.read_async (priority, stop);
+            int64 started = OperationProfile.begin ();
             var prefix = yield stream.read_bytes_async (4096, priority, stop);
+            OperationProfile.record ("source-header-read", started, prefix.get_size ());
             yield stream.close_async (priority, stop);
             unowned uint8[] b = prefix.get_data ();
             if (b.length >= 14 && b[0] == 'q' && b[1] == 'o' && b[2] == 'i' && b[3] == 'f') {
@@ -82,7 +84,9 @@ namespace ImageKit {
                 return mime;
             }
             // A TGA 2.0 footer is a content signature, even on an extensionless GFile.
+            started = OperationProfile.begin ();
             var info = yield source.query_info_async ("standard::size", 0, priority, stop);
+            OperationProfile.record ("source-query", started);
             if (source.is_native () && info.get_size () >= 26) {
                 var footer = yield source.read_async (priority, stop);
                 if (footer.can_seek () && footer.seek (-18, SeekType.END, stop)) {
@@ -113,6 +117,7 @@ namespace ImageKit {
                 (request.required_capabilities & ~supported) != 0) {
                 throw original;
             }
+            OperationProfile.record ("glycin-attempt", OperationProfile.begin ());
             var identity = yield source.stamp (stop);
             string mime = animation != null ? animation.mime : yield sniff (source.file, stop, preload);
             if (mime == "") {

@@ -127,7 +127,9 @@ namespace ImageKit {
             if (animated && index == frame) {
                 return this;
             }
-            return yield DecoderRegistry.open_with (worker, source, requested, stop);
+            // This request already verified the document stamp before choosing the page path.
+            return yield DecoderRegistry.open_with (worker, source, requested, stop, false,
+                identity == "" ? null : identity);
         }
 
         /** Render presentation pixels from the existing preview when possible. */
@@ -187,6 +189,7 @@ namespace ImageKit {
 
         private async void verify_source (Cancellable stop) throws Error {
             if (identity != "" && identity != (yield source.stamp (stop))) {
+                OperationProfile.record ("source-validation-failure", OperationProfile.begin ());
                 throw new ImageError.SOURCE_CHANGED ("Image source changed; reload it before rendering more regions");
             }
         }

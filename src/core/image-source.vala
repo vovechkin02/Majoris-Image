@@ -3,6 +3,7 @@ namespace ImageKit {
     /** The original file or GVfs URI. The decoder receives a read-only mount. */
     public sealed class ImageSource : Object {
         public File file { get; construct; }
+        // The last ImageSource reference releases storage owned by stream and memory sources.
         private bool remove_after_use;
         public ImageSource (File file) {
             Object (file: file);
@@ -14,6 +15,7 @@ namespace ImageKit {
             FileIOStream storage;
             var file = File.new_tmp ("majoris-image-source-XXXXXX", out storage);
             try {
+                int64 staging = OperationProfile.begin ();
                 size_t total = 0;
                 while (true) {
                     var bytes = yield stream.read_bytes_async (256 * 1024, Priority.DEFAULT, cancel);
@@ -28,11 +30,21 @@ namespace ImageKit {
                     yield storage.output_stream.write_all_async (bytes.get_data (),
                         Priority.DEFAULT, cancel, out written);
                 }
-                yield storage.close_async (Priority.DEFAULT, cancel);
+                cancel?.set_error_if_cancelled ();
+                yield storage.close_async (Priority.DEFAULT, null);
+                cancel?.set_error_if_cancelled ();
+                OperationProfile.record ("stream-staging", staging, total);
                 var source = new ImageSource (file);
                 source.remove_after_use = true;
                 return source;
             } catch (Error e) {
+                if (!storage.is_closed ()) {
+                    try {
+                        yield storage.close_async (Priority.DEFAULT, null);
+                    } catch (Error close_error) {
+                        debug ("Cannot close image source storage: %s", close_error.message);
+                    }
+                }
                 FileUtils.unlink (file.get_path ());
                 throw e;
             }
@@ -42,13 +54,32 @@ namespace ImageKit {
             return yield from_stream (new MemoryInputStream.from_bytes (bytes), cancel);
         }
 
+        internal async void validate_regular (Cancellable stop) throws Error {
+            yield query_regular_info (FileAttribute.STANDARD_TYPE, stop);
+        }
+
         internal async string stamp (Cancellable stop) throws Error {
-            var info = yield file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
-                Priority.DEFAULT, stop);
+            var info = yield query_regular_info (ThumbnailService.STAMP_ATTRIBUTES, stop);
+            int64 started = OperationProfile.begin ();
+            string stamp = ThumbnailService.source_stamp (file, info);
+            OperationProfile.record ("source-stamp", started);
+            return stamp;
+        }
+
+        private async FileInfo query_regular_info (string attributes, Cancellable stop)
+            throws Error {
+            int64 started = OperationProfile.begin ();
+            FileInfo info = null;
+            try {
+                info = yield file.query_info_async (attributes, 0,
+                    Priority.DEFAULT, stop);
+            } finally {
+                OperationProfile.record ("source-query", started);
+            }
             if (info.get_file_type () != FileType.REGULAR) {
                 throw new IOError.INVALID_ARGUMENT ("The image source must be a regular file");
             }
-            return ThumbnailService.source_stamp (file, info);
+            return info;
         }
 
         ~ImageSource () {

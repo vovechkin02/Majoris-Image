@@ -142,6 +142,43 @@ For a standalone baseline, pass the built benchmark and worker to
 with the same fixture hash. Cross-machine timings do not gate functional tests.
 For scheduled comparisons use the same runner and build settings.
 
+For Core and sandbox timing, configure both comparison builds with
+`-Dworker_profiling=true`. The runner enables `MAJORIS_IMAGE_PROFILE=1` in
+the benchmark process. Ordinary builds default to worker profiling disabled.
+JSON samples include stage durations in microseconds and event or byte counts.
+Sandbox runtime includes Bubblewrap startup, worker initialization, operation
+execution, diagnostics, and reaping. The worker reports initialization and
+operation timing separately. Lazy decoders can do work while materializing the
+output, so worker operation time includes output serialization.
+
+For a real non-native GIO source, run the existing runner under a session bus
+with the GVfs HTTP backend available. The loopback server exercises the GVfs
+transport and WorkerClient staging without reaching outside the machine.
+
+```sh
+dbus-run-session -- python3 tests/benchmarks/run_benchmarks.py --build build \
+  --worker build/src/worker/majoris-image-worker \
+  --executable build/tests/benchmarks/majoris-image-benchmark --loopback-gvfs \
+  gvfs=tests/fixtures/rgb16.png gvfs-cancel=tests/fixtures/rgb16.png \
+  gvfs-write-error=tests/fixtures/rgb16.png
+```
+
+The cancellation case interrupts the next read after a partial file appears.
+The write failure case uses `prlimit` to force a short write followed by a
+write error. Both cases check that the temporary directory is clean and the
+sandbox never starts. Both use synthetic HTTP payloads. Add
+`gvfs-limit=tests/fixtures/rgb16.png` to test rejection of a 1 GiB plus one-byte
+source. The limit case needs at least 1 GiB of temporary storage per sample. Pass `--remote-uri`
+with `gvfs=REFERENCE_FILE` to measure another GVfs URI serving the reference
+bytes. Record the scenario as unavailable if the backend cannot open the URI.
+
+To measure the first presented RAW preview, use the same runner with
+`majoris-image-view-benchmark` as the executable and run it under
+`xvfb-run -a` with `GDK_BACKEND=x11 GDK_SCALE=1 GSK_RENDERER=cairo`.
+Pass `raw-first=/path/to/350D.CR2`. The `gtk-preview` phase measures the
+first `PREVIEW_READY` notification and the workload ends after the developed
+document is presented. See the [Core and worker verification report](verification-core-worker.md).
+
 The native benchmark calls the production MIF1 writer and JPEG XL encoder.
 It uses five samples each for the first and second operation in separate
 processes. JSON reports operation timing and CPU time, fixture time, process

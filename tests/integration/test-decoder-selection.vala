@@ -9,12 +9,20 @@ private float sample_float_channel (PixelBuffer data, int x, int channel) {
 
 private class MissingFixtureCodec : Object, DecoderBackend {
     private string path;
-    public MissingFixtureCodec (string path) {
+    private string backend_id;
+    private ImageCapabilities features;
+    public int acceptance_checks { get; private set; }
+
+    public MissingFixtureCodec (string path, string backend_id = "test-missing-fixture",
+        ImageCapabilities features = ImageCapabilities.STILL | ImageCapabilities.METADATA |
+            ImageCapabilities.COLOR_MANAGED) {
         this.path = path;
+        this.backend_id = backend_id;
+        this.features = features;
     }
     public string id {
         get {
-            return "test-missing-fixture";
+            return backend_id;
         }
     }
     public string executable {
@@ -24,7 +32,7 @@ private class MissingFixtureCodec : Object, DecoderBackend {
     }
     public ImageCapabilities capabilities {
         get {
-            return ImageCapabilities.STILL | ImageCapabilities.METADATA | ImageCapabilities.COLOR_MANAGED;
+            return features;
         }
     }
     public string[] mime_types {
@@ -35,6 +43,8 @@ private class MissingFixtureCodec : Object, DecoderBackend {
     }
 
     public bool accepts (string mime, Bytes signature) {
+        acceptance_checks++;
+        assert (signature.get_size () <= 65536);
         unowned uint8[] data = signature.get_data ();
         if (data.length < 4) {
             return false;
@@ -51,6 +61,30 @@ private class MissingFixtureCodec : Object, DecoderBackend {
             return true;
         }
         return data[0] == 0 && data[1] == 0 && (data[2] == 1 || data[2] == 2);
+    }
+}
+
+private async void verify_custom_backend_order (string directory) throws Error {
+    var registry = new DecoderRegistry ();
+    string worker = Environment.get_variable ("MAJORIS_IMAGE_WORKER");
+    string missing = File.new_for_path (directory).get_child ("unavailable-worker").get_path ();
+    var metadata = new MissingFixtureCodec (missing, "metadata", ImageCapabilities.METADATA);
+    var still = new MissingFixtureCodec (worker, "still");
+    var later = new MissingFixtureCodec (missing, "later");
+    registry.register_backend (metadata);
+    registry.register_backend (still);
+    registry.register_backend (later);
+    var file = File.new_for_path (directory).get_child ("profiled.png");
+    var source = new ImageSource (file);
+    var result = yield registry.open (source);
+    assert (result.decoder == "pngload");
+    assert (metadata.acceptance_checks == 0 && still.acceptance_checks == 1 &&
+        later.acceptance_checks == 0);
+    try {
+        yield registry.inspect (source);
+        assert_not_reached ();
+    } catch (ImageError.SANDBOX error) {
+        assert (metadata.acceptance_checks == 1 && still.acceptance_checks == 1);
     }
 }
 
@@ -75,6 +109,7 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
         }
     }
     string generated_directory = Path.get_dirname (args[1]);
+    yield verify_custom_backend_order (generated_directory);
     foreach (string name in new string[] {
         "navigation.jpg", "still.webp", "jpeg2000.jp2", "animated.gif", "animated.webp"
     }) {

@@ -14,10 +14,10 @@ namespace ImageKit {
             return backend ?? Environment.get_variable ("MAJORIS_IMAGE_WORKER") ?? installed_worker ();
         }
 
-        private async string read_diagnostics (InputStream stream) throws Error {
+        private async string read_diagnostics (InputStream stream, Cancellable stop) throws Error {
             var log = new ByteArray ();
             while (true) {
-                var bytes = yield stream.read_bytes_async (16384, Priority.DEFAULT, null);
+                var bytes = yield stream.read_bytes_async (16384, Priority.DEFAULT, stop);
                 if (bytes.get_size () == 0) {
                     break;
                 }
@@ -39,7 +39,12 @@ namespace ImageKit {
             int priority = preload ? JobScheduler.PRELOAD_PRIORITY : operation == "thumbnail" ? 2
                 : operation == "tile" ? 1 : 0;
             var scheduler = JobScheduler.shared ();
-            yield scheduler.acquire (priority, cancel);
+            int64 admission = OperationProfile.begin ();
+            try {
+                yield scheduler.acquire (priority, cancel);
+            } finally {
+                OperationProfile.record ("scheduler-admission", admission);
+            }
             try {
                 return yield execute (source, operation, transform, cancel, size, options, encoding);
             } finally {
@@ -50,47 +55,44 @@ namespace ImageKit {
         private async string execute (File? source, string operation, RenderOptions? transform,
                                       Cancellable cancel, int size, DecodeOptions? options,
                                           ExportOptions? encoding) throws Error {
+            int64 started = OperationProfile.begin ();
             string job = DirUtils.make_tmp ("majoris-image-XXXXXX");
+            OperationProfile.record ("job-directory", started);
             string output = Path.build_filename (job, "output");
             string request_path = Path.build_filename (job, "request.json");
             try {
                 string? input = source?.get_path ();
+                bool thumbnail = operation == "thumbnail";
                 string mtime = "";
                 if (source != null) {
-                    var info = yield source.query_info_async ("standard::type,standard::size,time::modified", 0, Priority.DEFAULT, cancel);
+                    started = OperationProfile.begin ();
+                    FileInfo info = null;
+                    try {
+                        string attributes = thumbnail ? "standard::type,time::modified"
+                            : FileAttribute.STANDARD_TYPE;
+                        info = yield source.query_info_async (attributes, 0, Priority.DEFAULT,
+                            cancel);
+                    } finally {
+                        OperationProfile.record ("source-query", started);
+                    }
                     if (info.get_file_type () != FileType.REGULAR) {
                         throw new IOError.INVALID_ARGUMENT ("The image source must be a regular file");
                     }
-                    if (info.has_attribute (FileAttribute.TIME_MODIFIED)) {
+                    if (thumbnail && info.has_attribute (FileAttribute.TIME_MODIFIED)) {
                         mtime = info.get_attribute_uint64 (FileAttribute.TIME_MODIFIED).to_string ();
                     }
                     if (input == null) {
                         input = Path.build_filename (job, "input");
-                        var stream = yield source.read_async (Priority.DEFAULT, cancel);
-                        var target = yield File.new_for_path (input).create_async (FileCreateFlags.PRIVATE, Priority.DEFAULT, cancel);
-                        size_t total = 0;
-                        while (true) {
-                            var bytes = yield stream.read_bytes_async (256 * 1024, Priority.DEFAULT, cancel);
-                            if (bytes.get_size () == 0) {
-                                break;
-                            }
-                            total += bytes.get_size ();
-                            if (total > 1073741824) {
-                                throw new ImageError.MEMORY ("Remote source exceeds 1 GiB");
-                            }
-                            size_t written;
-                            yield target.write_all_async (bytes.get_data (), Priority.DEFAULT,
-                                cancel, out written);
-                        }
-                        yield target.close_async (Priority.DEFAULT, cancel);
+                        yield stage_remote_source (source, File.new_for_path (input), cancel);
                     }
                 }
+                started = OperationProfile.begin ();
                 var request = new WorkerRequest ();
                 request.transform = transform ?? new RenderOptions ();
                 request.options = options ?? new DecodeOptions ();
                 request.hdr_hint = request.options.source_hdr;
                 request.sequence_frames = request.options.sequence_frames;
-                if (operation == "thumbnail" && source != null) {
+                if (thumbnail && source != null) {
                     request.thumbnail_uri = source.get_uri ();
                     request.thumbnail_mtime = mtime;
                 }
@@ -120,6 +122,8 @@ namespace ImageKit {
                 }) {
                     argv += arg;
                 }
+                OperationProfile.record ("request-preparation", started);
+                started = OperationProfile.begin ();
                 Subprocess process;
                 try {
                     process = new Subprocess.newv (argv,
@@ -127,18 +131,33 @@ namespace ImageKit {
                 } catch (Error e) {
                     throw new ImageError.SANDBOX ("Cannot start sandbox: %s", e.message);
                 }
-                ulong handler = cancel.connect (() => process.force_exit ());
+                OperationProfile.record ("sandbox-launch", started);
+                started = OperationProfile.begin ();
+                // A launch helper can still hold the stderr pipe after the direct child exits.
+                var diagnostic_stop = new Cancellable ();
+                ulong handler = cancel.connect (() => {
+                    process.force_exit ();
+                    diagnostic_stop.cancel ();
+                });
                 bool timed_out = false;
                 var timeout = new TimeoutSource.seconds (timeout_seconds);
                 timeout.set_callback (() => {
                     timed_out = true;
                     process.force_exit ();
+                    diagnostic_stop.cancel ();
                     return Source.REMOVE;
                 });
                 timeout.attach (MainContext.get_thread_default ());
                 string diagnostic = "";
                 try {
-                    diagnostic = yield read_diagnostics (process.get_stderr_pipe ());
+                    try {
+                        diagnostic = yield read_diagnostics (process.get_stderr_pipe (),
+                            diagnostic_stop);
+                    } catch (IOError.CANCELLED error) {
+                        if (!diagnostic_stop.is_cancelled ()) {
+                            throw error;
+                        }
+                    }
                     yield process.wait_async (null);
                 } catch (Error e) {
                     process.force_exit ();
@@ -147,6 +166,7 @@ namespace ImageKit {
                 } finally {
                     cancel.disconnect (handler);
                     timeout.destroy ();
+                    OperationProfile.record ("sandbox-runtime", started);
                 }
                 cancel.set_error_if_cancelled ();
                 if (timed_out) {
@@ -171,6 +191,10 @@ namespace ImageKit {
                     }
                     throw WorkerFailure.deserialize (diagnostic);
                 }
+                if (started != 0 &&
+                    diagnostic.has_prefix ("ImageKit-profile worker-initialization ")) {
+                    stderr.printf ("%s", diagnostic);
+                }
                 return output;
             } catch (Error e) {
                 cleanup (output);
@@ -178,7 +202,52 @@ namespace ImageKit {
             }
         }
 
+        // The job unlinks its private file after both streams close.
+        private static async void stage_remote_source (File source, File target,
+            Cancellable cancel) throws Error {
+            int64 started = OperationProfile.begin ();
+            var input = yield source.read_async (Priority.DEFAULT, cancel);
+            FileOutputStream? output = null;
+            size_t total = 0;
+            try {
+                output = yield target.create_async (FileCreateFlags.PRIVATE, Priority.DEFAULT,
+                    cancel);
+                while (true) {
+                    var bytes = yield input.read_bytes_async (256 * 1024, Priority.DEFAULT, cancel);
+                    size_t length = bytes.get_size ();
+                    if (length == 0) {
+                        break;
+                    }
+                    if (length > 1073741824 - total) {
+                        throw new ImageError.MEMORY ("Remote source exceeds 1 GiB");
+                    }
+                    size_t written;
+                    yield output.write_all_async (bytes.get_data (), Priority.DEFAULT, cancel,
+                        out written);
+                    total += written;
+                }
+                cancel.set_error_if_cancelled ();
+                yield output.close_async (Priority.DEFAULT, null);
+            } finally {
+                if (output != null && !output.is_closed ()) {
+                    try {
+                        yield output.close_async (Priority.DEFAULT, null);
+                    } catch (Error error) {
+                        debug ("Cannot close remote staging output: %s", error.message);
+                    }
+                }
+                try {
+                    yield input.close_async (Priority.DEFAULT, null);
+                } catch (Error error) {
+                    debug ("Cannot close remote staging input: %s", error.message);
+                }
+                OperationProfile.record ("remote-staging", started, total);
+            }
+            cancel.set_error_if_cancelled ();
+        }
+
         internal static void cleanup (string output) {
+            int64 started = OperationProfile.begin ();
             string dir = Path.get_dirname (output);
             try {
                 var files = Dir.open (dir);
@@ -190,6 +259,7 @@ namespace ImageKit {
                 debug ("Decoder directory cleanup: %s", e.message);
             }
             DirUtils.remove (dir);
+            OperationProfile.record ("job-cleanup", started);
         }
 
         private static void remove_tree (string path) {
@@ -212,6 +282,7 @@ namespace ImageKit {
         }
 
         internal static async Bytes read_output (string path, int64 limit, Cancellable stop) throws Error {
+            int64 started = OperationProfile.begin ();
             var file = File.new_for_path (path);
             FileInfo info;
             try {
@@ -224,7 +295,9 @@ namespace ImageKit {
             if (info.get_file_type () != FileType.REGULAR || info.get_size () < 1 || info.get_size () > limit) {
                 throw new ImageError.INVALID_RESPONSE ("Invalid decoder response type or size");
             }
-            return yield file.load_bytes_async (stop, null);
+            var bytes = yield file.load_bytes_async (stop, null);
+            OperationProfile.record ("output-read", started, bytes.get_size ());
+            return bytes;
         }
 
         internal static async string read_text (string path, Cancellable stop) throws Error {

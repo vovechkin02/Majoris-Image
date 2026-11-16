@@ -1,0 +1,1956 @@
+{
+  "aggregation": "Medians of per-sample totals. Null means no RSS observation. Missing stages were not reported.",
+  "bubblewrap_version": "bubblewrap 0.12.0",
+  "build_options": {
+    "b_sanitize": "none",
+    "buildtype": "release",
+    "glycin": "enabled",
+    "gtk": true,
+    "introspection": "enabled",
+    "sequence": "enabled",
+    "ultrahdr": "enabled",
+    "worker_profiling": true
+  },
+  "codecs": {
+    "gio-2.0": "2.84.4",
+    "glib-2.0": "2.84.4",
+    "glycin-1": "1.2.1",
+    "lcms2": "2.16",
+    "libavif": "1.2.1",
+    "libheif": "1.23.6",
+    "libjxl": "0.11.2",
+    "libraw": "0.21.4",
+    "libuhdr": "2.0.2",
+    "vips": "8.16.1"
+  },
+  "compilers": {
+    "build": {
+      "c": {
+        "default_suffix": "c",
+        "exelist": [
+          "cc"
+        ],
+        "file_suffixes": [
+          "c"
+        ],
+        "full_version": "cc (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "cc"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "cpp": {
+        "default_suffix": "cpp",
+        "exelist": [
+          "c++"
+        ],
+        "file_suffixes": [
+          "cpp",
+          "cppm",
+          "cc",
+          "cp",
+          "cxx",
+          "c++",
+          "hh",
+          "hp",
+          "hpp",
+          "ipp",
+          "hxx",
+          "h++",
+          "ino",
+          "ixx",
+          "CPP",
+          "C",
+          "HPP",
+          "H"
+        ],
+        "full_version": "c++ (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "c++"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "vala": {
+        "default_suffix": "vala",
+        "exelist": [
+          "valac"
+        ],
+        "file_suffixes": [
+          "vala",
+          "vapi",
+          "gs"
+        ],
+        "full_version": null,
+        "id": "valac",
+        "linker_exelist": [
+          "valac"
+        ],
+        "linker_id": "valac",
+        "version": "0.56.18"
+      }
+    },
+    "host": {
+      "c": {
+        "default_suffix": "c",
+        "exelist": [
+          "cc"
+        ],
+        "file_suffixes": [
+          "c"
+        ],
+        "full_version": "cc (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "cc"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "cpp": {
+        "default_suffix": "cpp",
+        "exelist": [
+          "c++"
+        ],
+        "file_suffixes": [
+          "cpp",
+          "cppm",
+          "cc",
+          "cp",
+          "cxx",
+          "c++",
+          "hh",
+          "hp",
+          "hpp",
+          "ipp",
+          "hxx",
+          "h++",
+          "ino",
+          "ixx",
+          "CPP",
+          "C",
+          "HPP",
+          "H"
+        ],
+        "full_version": "c++ (Debian 14.2.0-19) 14.2.0",
+        "id": "gcc",
+        "linker_exelist": [
+          "c++"
+        ],
+        "linker_id": "ld.bfd",
+        "version": "14.2.0"
+      },
+      "vala": {
+        "default_suffix": "vala",
+        "exelist": [
+          "valac"
+        ],
+        "file_suffixes": [
+          "vala",
+          "vapi",
+          "gs"
+        ],
+        "full_version": null,
+        "id": "valac",
+        "linker_exelist": [
+          "valac"
+        ],
+        "linker_id": "valac",
+        "version": "0.56.18"
+      }
+    }
+  },
+  "environment": {
+    "cpu": "x86_64",
+    "system": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.41"
+  },
+  "interleaved_control": {
+    "animation": {
+      "mad_us": 2035,
+      "median_us": 151721,
+      "samples_us": [
+        149426,
+        151158,
+        153192,
+        155529,
+        155531,
+        153756,
+        147806,
+        149730,
+        151721
+      ]
+    },
+    "custom": {
+      "mad_us": 1434,
+      "median_us": 102149,
+      "samples_us": [
+        102258,
+        103112,
+        99242,
+        102149,
+        103056,
+        103583,
+        100676,
+        100699,
+        99156
+      ]
+    },
+    "open": {
+      "mad_us": 375,
+      "median_us": 51729,
+      "samples_us": [
+        51710,
+        54548,
+        52993,
+        51581,
+        50948,
+        51729,
+        51909,
+        52104,
+        50868
+      ]
+    },
+    "pages": {
+      "mad_us": 1565,
+      "median_us": 103962,
+      "samples_us": [
+        107119,
+        107371,
+        103962,
+        104189,
+        102430,
+        104975,
+        102104,
+        102092,
+        102397
+      ]
+    }
+  },
+  "interleaved_large_control": {
+    "large-tiff": {
+      "mad_us": 3457.0,
+      "median_us": 2078591.0,
+      "samples_us": [
+        2131431,
+        2078087,
+        2068763,
+        2074548,
+        2079095,
+        2081462
+      ]
+    },
+    "raw-develop": {
+      "mad_us": 18070.5,
+      "median_us": 831821.0,
+      "samples_us": [
+        845176,
+        862991,
+        887262,
+        818466,
+        812631,
+        814870
+      ]
+    },
+    "raw-preview": {
+      "mad_us": 3686.0,
+      "median_us": 419017.5,
+      "samples_us": [
+        419522,
+        424470,
+        452577,
+        416298,
+        414365,
+        418513
+      ]
+    }
+  },
+  "meson_version": "1.7.0",
+  "platform": "Debian 13.5 on WSL2",
+  "revision": "911600e0f4cc40126519acf729b0b5a33e4324b2",
+  "sample_mode": "fresh process and job storage, OS caches retained",
+  "temporary_storage": "/tmp",
+  "version": "2.0.0",
+  "workloads": {
+    "animation": {
+      "count": 9,
+      "fixture": "animated.gif",
+      "fixture_sha256": "451679977cf2000bf04c117991f83571b29e3d91779ef4e3c99fea3c21680f7a",
+      "mad_seconds": 0.0017250000000000043,
+      "max_seconds": 0.152581,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 50244
+        },
+        "job-cleanup": {
+          "events": 3,
+          "quantity": 3,
+          "us": 118
+        },
+        "job-directory": {
+          "events": 3,
+          "quantity": 3,
+          "us": 31
+        },
+        "output-read": {
+          "events": 6,
+          "quantity": 6609,
+          "us": 2414
+        },
+        "request-preparation": {
+          "events": 3,
+          "quantity": 3,
+          "us": 280
+        },
+        "sandbox-launch": {
+          "events": 3,
+          "quantity": 3,
+          "us": 1933
+        },
+        "sandbox-runtime": {
+          "events": 3,
+          "quantity": 3,
+          "us": 142802
+        },
+        "scheduler-admission": {
+          "events": 3,
+          "quantity": 3,
+          "us": 44
+        },
+        "source-query": {
+          "events": 11,
+          "quantity": 11,
+          "us": 881
+        },
+        "source-stamp": {
+          "events": 8,
+          "quantity": 8,
+          "us": 29
+        },
+        "worker-initialization": {
+          "events": 3,
+          "quantity": 3,
+          "us": 35913
+        },
+        "worker-operation": {
+          "events": 3,
+          "quantity": 3,
+          "us": 15315
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 149676
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.017609,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 9036,
+        "sampled_temp_and_cache_bytes": 2446,
+        "sampled_worker_peak_kib": 42172,
+        "wall_seconds": 0.16472786900703795,
+        "warm_open_seconds": null,
+        "worker_launches": 3
+      },
+      "median_seconds": 0.149676,
+      "min_seconds": 0.146824,
+      "p95_seconds": 0.152581,
+      "source": "/tmp/imagekit-core-perf.33MnOi/before/tests/animated.gif",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "cancel": {
+      "count": 9,
+      "fixture": "worker-fault stall token",
+      "fixture_sha256": "e632b7095b0bf32c260fa4c539e9fd7b852d0de454e9be26f24d0d6f91d069d3",
+      "mad_seconds": 0.00013699999999999997,
+      "max_seconds": 0.011558,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 22
+        },
+        "cancellation-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 675
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10890
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 30
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10
+        },
+        "request-preparation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 130
+        },
+        "sandbox-launch": {
+          "events": 1,
+          "quantity": 1,
+          "us": 578
+        },
+        "sandbox-runtime": {
+          "events": 1,
+          "quantity": 1,
+          "us": 9728
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 17
+        },
+        "source-query": {
+          "events": 2,
+          "quantity": 2,
+          "us": 178
+        },
+        "source-stamp": {
+          "events": 1,
+          "quantity": 1,
+          "us": 8
+        },
+        "stream-staging": {
+          "events": 1,
+          "quantity": 1,
+          "us": 303
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 11328
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.008036999999999999,
+        "sampled_concurrent_workers": 0,
+        "sampled_host_peak_kib": 100,
+        "sampled_temp_and_cache_bytes": 0,
+        "sampled_worker_peak_kib": null,
+        "wall_seconds": 0.020522411999991164,
+        "warm_open_seconds": null,
+        "worker_launches": 1
+      },
+      "median_seconds": 0.011328,
+      "min_seconds": 0.011112,
+      "p95_seconds": 0.011558,
+      "source": "/tmp/imagekit-core-perf.33MnOi/src/tests/fixtures/corrupt.bin",
+      "source_type": "stream",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/tests/security/worker-fault",
+      "worker_sha256": "52831aa7628079eecdd9ef061283cf39cdb918f9154d5a909a17698db2cb09dd"
+    },
+    "custom": {
+      "count": 9,
+      "fixture": "rgb16.png",
+      "fixture_sha256": "b7f778c09d3e4198e84085cc49835abce71253f55dca60beaebe86c4f9f38c5f",
+      "mad_seconds": 0.0005129999999999996,
+      "max_seconds": 0.103583,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 2,
+          "quantity": 2,
+          "us": 893
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 52224
+        },
+        "job-cleanup": {
+          "events": 2,
+          "quantity": 2,
+          "us": 79
+        },
+        "job-directory": {
+          "events": 2,
+          "quantity": 2,
+          "us": 21
+        },
+        "output-read": {
+          "events": 3,
+          "quantity": 8214,
+          "us": 1193
+        },
+        "request-preparation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 214
+        },
+        "sandbox-launch": {
+          "events": 2,
+          "quantity": 2,
+          "us": 1284
+        },
+        "sandbox-runtime": {
+          "events": 2,
+          "quantity": 2,
+          "us": 97410
+        },
+        "scheduler-admission": {
+          "events": 2,
+          "quantity": 2,
+          "us": 32
+        },
+        "source-header-read": {
+          "events": 2,
+          "quantity": 1634,
+          "us": 242
+        },
+        "source-inspection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 49904
+        },
+        "source-query": {
+          "events": 6,
+          "quantity": 6,
+          "us": 568
+        },
+        "source-stamp": {
+          "events": 4,
+          "quantity": 4,
+          "us": 19
+        },
+        "worker-initialization": {
+          "events": 2,
+          "quantity": 2,
+          "us": 24119
+        },
+        "worker-operation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 9947
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 102137
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.013930999999999999,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 9104,
+        "sampled_temp_and_cache_bytes": 234,
+        "sampled_worker_peak_kib": 41268,
+        "wall_seconds": 0.12340746600239072,
+        "warm_open_seconds": null,
+        "worker_launches": 2
+      },
+      "median_seconds": 0.102137,
+      "min_seconds": 0.100144,
+      "p95_seconds": 0.103583,
+      "source": "/tmp/imagekit-core-perf.33MnOi/src/tests/fixtures/rgb16.png",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "fallback": {
+      "count": 9,
+      "fixture": "fallback.qoi",
+      "fixture_sha256": "9f86e3454bb76f4b67de89ac6980466cf10e801a5a4e13f101e9c3c11a6be80b",
+      "mad_seconds": 0.00039900000000000005,
+      "max_seconds": 0.034952,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "glycin-attempt": {
+          "events": 1,
+          "quantity": 1,
+          "us": 0
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 21476
+        },
+        "job-cleanup": {
+          "events": 2,
+          "quantity": 2,
+          "us": 58
+        },
+        "job-directory": {
+          "events": 2,
+          "quantity": 2,
+          "us": 18
+        },
+        "request-preparation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 198
+        },
+        "sandbox-launch": {
+          "events": 2,
+          "quantity": 2,
+          "us": 1179
+        },
+        "sandbox-runtime": {
+          "events": 2,
+          "quantity": 2,
+          "us": 11244
+        },
+        "scheduler-admission": {
+          "events": 2,
+          "quantity": 2,
+          "us": 25
+        },
+        "source-header-read": {
+          "events": 1,
+          "quantity": 32,
+          "us": 59
+        },
+        "source-query": {
+          "events": 5,
+          "quantity": 5,
+          "us": 546
+        },
+        "source-stamp": {
+          "events": 3,
+          "quantity": 3,
+          "us": 15
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 21572
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.016878,
+        "sampled_concurrent_workers": 0,
+        "sampled_host_peak_kib": 10728,
+        "sampled_temp_and_cache_bytes": 0,
+        "sampled_worker_peak_kib": null,
+        "wall_seconds": 0.04082621799898334,
+        "warm_open_seconds": null,
+        "worker_launches": 2
+      },
+      "median_seconds": 0.021572,
+      "min_seconds": 0.020619,
+      "p95_seconds": 0.034952,
+      "source": "/tmp/imagekit-core-perf.33MnOi/before/tests/fallback.qoi",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/tests/security/worker-fault",
+      "worker_sha256": "b0f6846ea05f06b51bf7608db6440ee60d6be0df231ce058ba121ab38c64f8fc"
+    },
+    "gvfs": {
+      "count": 9,
+      "fixture": "rgb16.png",
+      "fixture_sha256": "b7f778c09d3e4198e84085cc49835abce71253f55dca60beaebe86c4f9f38c5f",
+      "mad_seconds": 0.0008139999999999953,
+      "max_seconds": 0.130736,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 2,
+          "quantity": 2,
+          "us": 24
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 56418
+        },
+        "job-cleanup": {
+          "events": 2,
+          "quantity": 2,
+          "us": 83
+        },
+        "job-directory": {
+          "events": 2,
+          "quantity": 2,
+          "us": 19
+        },
+        "output-read": {
+          "events": 3,
+          "quantity": 8214,
+          "us": 1279
+        },
+        "remote-staging": {
+          "events": 2,
+          "quantity": 1634,
+          "us": 2618
+        },
+        "request-preparation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 204
+        },
+        "sandbox-launch": {
+          "events": 2,
+          "quantity": 2,
+          "us": 1299
+        },
+        "sandbox-runtime": {
+          "events": 2,
+          "quantity": 2,
+          "us": 97609
+        },
+        "scheduler-admission": {
+          "events": 2,
+          "quantity": 2,
+          "us": 30
+        },
+        "source-inspection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 53633
+        },
+        "source-query": {
+          "events": 4,
+          "quantity": 4,
+          "us": 5787
+        },
+        "source-stamp": {
+          "events": 2,
+          "quantity": 2,
+          "us": 117
+        },
+        "worker-initialization": {
+          "events": 2,
+          "quantity": 2,
+          "us": 23932
+        },
+        "worker-operation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 9887
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 110453
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.016276,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 9144,
+        "sampled_temp_and_cache_bytes": 1051,
+        "sampled_worker_peak_kib": 35672,
+        "wall_seconds": 0.1235312870121561,
+        "warm_open_seconds": null,
+        "worker_launches": 2
+      },
+      "median_seconds": 0.110453,
+      "min_seconds": 0.10939,
+      "p95_seconds": 0.130736,
+      "source": "http://127.0.0.1:39805/gvfs",
+      "source_type": "GVfs",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "gvfs-cancel": {
+      "count": 9,
+      "fixture": "256 KiB zero-filled HTTP body",
+      "fixture_sha256": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90",
+      "mad_seconds": 0.00010800000000088517,
+      "max_seconds": 10.008039,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "cancellation-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 9995490
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10005591
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 89
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 23
+        },
+        "source-query": {
+          "events": 2,
+          "quantity": 2,
+          "us": 4024
+        },
+        "source-stamp": {
+          "events": 1,
+          "quantity": 1,
+          "us": 71
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10005703
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.035580999999999995,
+        "sampled_concurrent_workers": 0,
+        "sampled_host_peak_kib": 9016,
+        "sampled_temp_and_cache_bytes": 262144,
+        "sampled_worker_peak_kib": null,
+        "wall_seconds": 10.022790037997765,
+        "warm_open_seconds": null,
+        "worker_launches": 0
+      },
+      "median_seconds": 10.005703,
+      "min_seconds": 10.005595,
+      "p95_seconds": 10.008039,
+      "source": "http://127.0.0.1:40049/gvfs-cancel",
+      "source_type": "GVfs",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "gvfs-write-error": {
+      "count": 9,
+      "fixture": "256 KiB zero-filled HTTP body",
+      "fixture_sha256": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90",
+      "mad_seconds": 7.900000000000008e-05,
+      "max_seconds": 0.008112,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 15
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 5667
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 20
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 9
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 19
+        },
+        "source-query": {
+          "events": 2,
+          "quantity": 2,
+          "us": 3725
+        },
+        "source-stamp": {
+          "events": 1,
+          "quantity": 1,
+          "us": 68
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 5750
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.007908,
+        "sampled_concurrent_workers": 0,
+        "sampled_host_peak_kib": 84,
+        "sampled_temp_and_cache_bytes": 0,
+        "sampled_worker_peak_kib": null,
+        "wall_seconds": 0.020560482997098006,
+        "warm_open_seconds": null,
+        "worker_launches": 0
+      },
+      "median_seconds": 0.00575,
+      "min_seconds": 0.005568,
+      "p95_seconds": 0.008112,
+      "source": "http://127.0.0.1:43357/gvfs-write-error",
+      "source_type": "GVfs",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "jpeg": {
+      "count": 9,
+      "fixture": "navigation.jpg",
+      "fixture_sha256": "63cec494c62577861781b93913cf5de310ace8c8ddff7d2cba3cc7d6c0463304",
+      "mad_seconds": 0.0006339999999999957,
+      "max_seconds": 0.051835,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 18
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 50391
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 43
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 11
+        },
+        "output-read": {
+          "events": 2,
+          "quantity": 2027,
+          "us": 793
+        },
+        "request-preparation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 151
+        },
+        "sandbox-launch": {
+          "events": 1,
+          "quantity": 1,
+          "us": 629
+        },
+        "sandbox-runtime": {
+          "events": 1,
+          "quantity": 1,
+          "us": 48123
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 19
+        },
+        "source-query": {
+          "events": 3,
+          "quantity": 3,
+          "us": 356
+        },
+        "source-stamp": {
+          "events": 2,
+          "quantity": 2,
+          "us": 13
+        },
+        "worker-initialization": {
+          "events": 1,
+          "quantity": 1,
+          "us": 11760
+        },
+        "worker-operation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 5634
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 50488
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.009489000000000001,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 8948,
+        "sampled_temp_and_cache_bytes": 234,
+        "sampled_worker_peak_kib": 33420,
+        "wall_seconds": 0.06173979399318341,
+        "warm_open_seconds": null,
+        "worker_launches": 1
+      },
+      "median_seconds": 0.050488,
+      "min_seconds": 0.049641,
+      "p95_seconds": 0.051835,
+      "source": "/tmp/imagekit-core-perf.33MnOi/before/tests/navigation.jpg",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "large-tiff": {
+      "count": 9,
+      "fixture": "large.tiff",
+      "fixture_sha256": "f72d65df106a1b1b44009fa2d6e45453ba0142ad8177aa70fcc3fa3e4facfa61",
+      "mad_seconds": 0.0073590000000001154,
+      "max_seconds": 2.051236,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 18
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 2039474
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 1695
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10
+        },
+        "output-read": {
+          "events": 2,
+          "quantity": 20480705,
+          "us": 143444
+        },
+        "request-preparation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 131
+        },
+        "sandbox-launch": {
+          "events": 1,
+          "quantity": 1,
+          "us": 626
+        },
+        "sandbox-runtime": {
+          "events": 1,
+          "quantity": 1,
+          "us": 1892453
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "source-query": {
+          "events": 3,
+          "quantity": 3,
+          "us": 376
+        },
+        "source-stamp": {
+          "events": 2,
+          "quantity": 2,
+          "us": 12
+        },
+        "worker-initialization": {
+          "events": 1,
+          "quantity": 1,
+          "us": 12071
+        },
+        "worker-operation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 1846034
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 2040803
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.14728,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 28080,
+        "sampled_temp_and_cache_bytes": 20480939,
+        "sampled_worker_peak_kib": 113776,
+        "wall_seconds": 2.0647897930030013,
+        "warm_open_seconds": null,
+        "worker_launches": 1
+      },
+      "median_seconds": 2.040803,
+      "min_seconds": 2.012704,
+      "p95_seconds": 2.051236,
+      "source": "/tmp/imagekit-core-perf.33MnOi/before/tests/large.tiff",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "navigate": {
+      "count": 9,
+      "fixture": "rgb16.png",
+      "fixture_sha256": "b7f778c09d3e4198e84085cc49835abce71253f55dca60beaebe86c4f9f38c5f",
+      "mad_seconds": 0.00034900000000001596,
+      "max_seconds": 0.156635,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 3,
+          "quantity": 3,
+          "us": 27
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 51276
+        },
+        "job-cleanup": {
+          "events": 3,
+          "quantity": 3,
+          "us": 122
+        },
+        "job-directory": {
+          "events": 3,
+          "quantity": 3,
+          "us": 30
+        },
+        "output-read": {
+          "events": 6,
+          "quantity": 23649,
+          "us": 2445
+        },
+        "request-preparation": {
+          "events": 3,
+          "quantity": 3,
+          "us": 271
+        },
+        "sandbox-launch": {
+          "events": 3,
+          "quantity": 3,
+          "us": 1999
+        },
+        "sandbox-runtime": {
+          "events": 3,
+          "quantity": 3,
+          "us": 146762
+        },
+        "scheduler-admission": {
+          "events": 3,
+          "quantity": 3,
+          "us": 35
+        },
+        "source-query": {
+          "events": 27,
+          "quantity": 27,
+          "us": 1896
+        },
+        "source-stamp": {
+          "events": 24,
+          "quantity": 24,
+          "us": 71
+        },
+        "worker-initialization": {
+          "events": 3,
+          "quantity": 3,
+          "us": 35794
+        },
+        "worker-operation": {
+          "events": 3,
+          "quantity": 3,
+          "us": 17545
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 154900
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.019364,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 9036,
+        "sampled_temp_and_cache_bytes": 234,
+        "sampled_worker_peak_kib": 40968,
+        "wall_seconds": 0.16447929799323902,
+        "warm_open_seconds": null,
+        "worker_launches": 3
+      },
+      "median_seconds": 0.1549,
+      "min_seconds": 0.152875,
+      "p95_seconds": 0.156635,
+      "source": "/tmp/imagekit-core-perf.33MnOi/src/tests/fixtures/rgb16.png",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "open": {
+      "count": 9,
+      "fixture": "rgb16.png",
+      "fixture_sha256": "b7f778c09d3e4198e84085cc49835abce71253f55dca60beaebe86c4f9f38c5f",
+      "mad_seconds": 0.0010700000000000015,
+      "max_seconds": 0.085698,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 15
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 51611
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 40
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10
+        },
+        "output-read": {
+          "events": 2,
+          "quantity": 7185,
+          "us": 785
+        },
+        "request-preparation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 135
+        },
+        "sandbox-launch": {
+          "events": 1,
+          "quantity": 1,
+          "us": 633
+        },
+        "sandbox-runtime": {
+          "events": 1,
+          "quantity": 1,
+          "us": 49328
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "source-query": {
+          "events": 3,
+          "quantity": 3,
+          "us": 368
+        },
+        "source-stamp": {
+          "events": 2,
+          "quantity": 2,
+          "us": 15
+        },
+        "worker-initialization": {
+          "events": 1,
+          "quantity": 1,
+          "us": 12411
+        },
+        "worker-operation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 6415
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 51727
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.009656,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 8892,
+        "sampled_temp_and_cache_bytes": 234,
+        "sampled_worker_peak_kib": 33500,
+        "wall_seconds": 0.06169178200070746,
+        "warm_open_seconds": null,
+        "worker_launches": 1
+      },
+      "median_seconds": 0.051727,
+      "min_seconds": 0.050657,
+      "p95_seconds": 0.085698,
+      "source": "/tmp/imagekit-core-perf.33MnOi/src/tests/fixtures/rgb16.png",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "pages": {
+      "count": 9,
+      "fixture": "multipart.exr",
+      "fixture_sha256": "5f9a8e10b6a169e1a19cf1a30ffb5649e09c0730d5f2fbad8266a50149eb79d3",
+      "mad_seconds": 0.0016250000000000014,
+      "max_seconds": 0.115531,
+      "median_phase_totals": {
+        "additional-page": {
+          "events": 1,
+          "quantity": 1,
+          "us": 51925
+        },
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 15
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 51595
+        },
+        "job-cleanup": {
+          "events": 2,
+          "quantity": 2,
+          "us": 85
+        },
+        "job-directory": {
+          "events": 2,
+          "quantity": 2,
+          "us": 20
+        },
+        "output-read": {
+          "events": 4,
+          "quantity": 18553,
+          "us": 1857
+        },
+        "request-preparation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 209
+        },
+        "sandbox-launch": {
+          "events": 2,
+          "quantity": 2,
+          "us": 1270
+        },
+        "sandbox-runtime": {
+          "events": 2,
+          "quantity": 2,
+          "us": 99663
+        },
+        "scheduler-admission": {
+          "events": 2,
+          "quantity": 2,
+          "us": 30
+        },
+        "source-query": {
+          "events": 7,
+          "quantity": 7,
+          "us": 630
+        },
+        "source-stamp": {
+          "events": 5,
+          "quantity": 5,
+          "us": 23
+        },
+        "worker-initialization": {
+          "events": 2,
+          "quantity": 2,
+          "us": 23814
+        },
+        "worker-operation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 9743
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 104258
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.013918,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 9064,
+        "sampled_temp_and_cache_bytes": 243,
+        "sampled_worker_peak_kib": 39248,
+        "wall_seconds": 0.12335855100536719,
+        "warm_open_seconds": null,
+        "worker_launches": 2
+      },
+      "median_seconds": 0.104258,
+      "min_seconds": 0.101118,
+      "p95_seconds": 0.115531,
+      "source": "/tmp/imagekit-core-perf.33MnOi/src/tests/fixtures/multipart.exr",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "raw-develop": {
+      "count": 9,
+      "fixture": "350D.CR2",
+      "fixture_sha256": "8cbb84e04d93b005fe082da9c954122a612b5281af00aa088d767850f343fd38",
+      "mad_seconds": 0.003369999999999984,
+      "max_seconds": 0.817347,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 15
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 776447
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 6117
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 11
+        },
+        "output-read": {
+          "events": 2,
+          "quantity": 27291131,
+          "us": 194330
+        },
+        "request-preparation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 133
+        },
+        "sandbox-launch": {
+          "events": 1,
+          "quantity": 1,
+          "us": 649
+        },
+        "sandbox-runtime": {
+          "events": 1,
+          "quantity": 1,
+          "us": 578077
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 19
+        },
+        "source-query": {
+          "events": 3,
+          "quantity": 3,
+          "us": 367
+        },
+        "source-stamp": {
+          "events": 2,
+          "quantity": 2,
+          "us": 13
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 777928
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.199034,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 35388,
+        "sampled_temp_and_cache_bytes": 75526253,
+        "sampled_worker_peak_kib": 148300,
+        "wall_seconds": 0.802068386998144,
+        "warm_open_seconds": null,
+        "worker_launches": 1
+      },
+      "median_seconds": 0.777928,
+      "min_seconds": 0.774558,
+      "p95_seconds": 0.817347,
+      "source": "/tmp/majoris-raw-fixtures.sAAnY8/350D.CR2",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "raw-first": {
+      "count": 9,
+      "fixture": "350D.CR2",
+      "fixture_sha256": "8cbb84e04d93b005fe082da9c954122a612b5281af00aa088d767850f343fd38",
+      "mad_seconds": 0.012311000000000183,
+      "max_seconds": 1.288158,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 3,
+          "quantity": 3,
+          "us": 41
+        },
+        "gtk-preview": {
+          "events": 1,
+          "quantity": 1,
+          "us": 444729
+        },
+        "image-open": {
+          "events": 2,
+          "quantity": 2,
+          "us": 1199493
+        },
+        "job-cleanup": {
+          "events": 3,
+          "quantity": 3,
+          "us": 8984
+        },
+        "job-directory": {
+          "events": 3,
+          "quantity": 3,
+          "us": 43
+        },
+        "output-read": {
+          "events": 5,
+          "quantity": 54609353,
+          "us": 402276
+        },
+        "request-preparation": {
+          "events": 3,
+          "quantity": 3,
+          "us": 474
+        },
+        "sandbox-launch": {
+          "events": 3,
+          "quantity": 3,
+          "us": 7636
+        },
+        "sandbox-runtime": {
+          "events": 3,
+          "quantity": 3,
+          "us": 813328
+        },
+        "scheduler-admission": {
+          "events": 3,
+          "quantity": 3,
+          "us": 5701
+        },
+        "source-inspection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 60809
+        },
+        "source-query": {
+          "events": 7,
+          "quantity": 7,
+          "us": 17855
+        },
+        "source-stamp": {
+          "events": 4,
+          "quantity": 4,
+          "us": 27
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 1262671
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.589217,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 185856,
+        "sampled_temp_and_cache_bytes": 76868818,
+        "sampled_worker_peak_kib": 148360,
+        "wall_seconds": 1.359012637010892,
+        "warm_open_seconds": null,
+        "worker_launches": 3
+      },
+      "median_seconds": 1.262671,
+      "min_seconds": 1.24518,
+      "p95_seconds": 1.288158,
+      "source": "/tmp/majoris-raw-fixtures.sAAnY8/350D.CR2",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "raw-preview": {
+      "count": 9,
+      "fixture": "350D.CR2",
+      "fixture_sha256": "8cbb84e04d93b005fe082da9c954122a612b5281af00aa088d767850f343fd38",
+      "mad_seconds": 0.0025490000000000235,
+      "max_seconds": 0.378434,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 373546
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 2658
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 11
+        },
+        "output-read": {
+          "events": 2,
+          "quantity": 27316703,
+          "us": 189981
+        },
+        "request-preparation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 134
+        },
+        "sandbox-launch": {
+          "events": 1,
+          "quantity": 1,
+          "us": 615
+        },
+        "sandbox-runtime": {
+          "events": 1,
+          "quantity": 1,
+          "us": 178876
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "source-query": {
+          "events": 3,
+          "quantity": 3,
+          "us": 361
+        },
+        "source-stamp": {
+          "events": 2,
+          "quantity": 2,
+          "us": 13
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 375477
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.193095,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 34824,
+        "sampled_temp_and_cache_bytes": 30660827,
+        "sampled_worker_peak_kib": 126696,
+        "wall_seconds": 0.3893791830050759,
+        "warm_open_seconds": null,
+        "worker_launches": 1
+      },
+      "median_seconds": 0.375477,
+      "min_seconds": 0.370028,
+      "p95_seconds": 0.378434,
+      "source": "/tmp/majoris-raw-fixtures.sAAnY8/350D.CR2",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "stream": {
+      "count": 9,
+      "fixture": "rgb16.png",
+      "fixture_sha256": "b7f778c09d3e4198e84085cc49835abce71253f55dca60beaebe86c4f9f38c5f",
+      "mad_seconds": 0.0004890000000000033,
+      "max_seconds": 0.053752,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 23
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 51908
+        },
+        "job-cleanup": {
+          "events": 1,
+          "quantity": 1,
+          "us": 38
+        },
+        "job-directory": {
+          "events": 1,
+          "quantity": 1,
+          "us": 10
+        },
+        "output-read": {
+          "events": 2,
+          "quantity": 7185,
+          "us": 750
+        },
+        "request-preparation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 125
+        },
+        "sandbox-launch": {
+          "events": 1,
+          "quantity": 1,
+          "us": 630
+        },
+        "sandbox-runtime": {
+          "events": 1,
+          "quantity": 1,
+          "us": 49707
+        },
+        "scheduler-admission": {
+          "events": 1,
+          "quantity": 1,
+          "us": 16
+        },
+        "source-query": {
+          "events": 3,
+          "quantity": 3,
+          "us": 225
+        },
+        "source-stamp": {
+          "events": 2,
+          "quantity": 2,
+          "us": 12
+        },
+        "stream-staging": {
+          "events": 1,
+          "quantity": 817,
+          "us": 260
+        },
+        "worker-initialization": {
+          "events": 1,
+          "quantity": 1,
+          "us": 12083
+        },
+        "worker-operation": {
+          "events": 1,
+          "quantity": 1,
+          "us": 6741
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 52609
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.009813,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 8912,
+        "sampled_temp_and_cache_bytes": 1051,
+        "sampled_worker_peak_kib": 32720,
+        "wall_seconds": 0.061783224999089725,
+        "warm_open_seconds": null,
+        "worker_launches": 1
+      },
+      "median_seconds": 0.052609,
+      "min_seconds": 0.051845,
+      "p95_seconds": 0.053752,
+      "source": "/tmp/imagekit-core-perf.33MnOi/src/tests/fixtures/rgb16.png",
+      "source_type": "stream",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "tiles": {
+      "count": 9,
+      "fixture": "large.tiff",
+      "fixture_sha256": "f72d65df106a1b1b44009fa2d6e45453ba0142ad8177aa70fcc3fa3e4facfa61",
+      "mad_seconds": 0.008995000000000086,
+      "max_seconds": 2.783954,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 1,
+          "quantity": 1,
+          "us": 18
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 2034872
+        },
+        "job-cleanup": {
+          "events": 9,
+          "quantity": 9,
+          "us": 5079
+        },
+        "job-directory": {
+          "events": 9,
+          "quantity": 9,
+          "us": 131
+        },
+        "output-read": {
+          "events": 10,
+          "quantity": 54035233,
+          "us": 380898
+        },
+        "region": {
+          "events": 8,
+          "quantity": 8,
+          "us": 701306
+        },
+        "request-preparation": {
+          "events": 9,
+          "quantity": 9,
+          "us": 852
+        },
+        "sandbox-launch": {
+          "events": 9,
+          "quantity": 9,
+          "us": 10279
+        },
+        "sandbox-runtime": {
+          "events": 9,
+          "quantity": 9,
+          "us": 2342465
+        },
+        "scheduler-admission": {
+          "events": 9,
+          "quantity": 9,
+          "us": 136
+        },
+        "source-query": {
+          "events": 27,
+          "quantity": 27,
+          "us": 1900
+        },
+        "source-stamp": {
+          "events": 18,
+          "quantity": 18,
+          "us": 79
+        },
+        "worker-initialization": {
+          "events": 9,
+          "quantity": 9,
+          "us": 109114
+        },
+        "worker-operation": {
+          "events": 9,
+          "quantity": 9,
+          "us": 1925685
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 2743239
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.401427,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 33180,
+        "sampled_temp_and_cache_bytes": 20480939,
+        "sampled_worker_peak_kib": 113808,
+        "wall_seconds": 2.761601548001636,
+        "warm_open_seconds": null,
+        "worker_launches": 9
+      },
+      "median_seconds": 2.743239,
+      "min_seconds": 2.713055,
+      "p95_seconds": 2.783954,
+      "source": "/tmp/imagekit-core-perf.33MnOi/before/tests/large.tiff",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    },
+    "warm": {
+      "count": 9,
+      "fixture": "rgb16.png",
+      "fixture_sha256": "b7f778c09d3e4198e84085cc49835abce71253f55dca60beaebe86c4f9f38c5f",
+      "mad_seconds": 3.649999999999994e-06,
+      "max_seconds": 8.685e-05,
+      "median_phase_totals": {
+        "backend-selection": {
+          "events": 2,
+          "quantity": 2,
+          "us": 22
+        },
+        "image-open": {
+          "events": 1,
+          "quantity": 1,
+          "us": 53315
+        },
+        "job-cleanup": {
+          "events": 2,
+          "quantity": 2,
+          "us": 82
+        },
+        "job-directory": {
+          "events": 2,
+          "quantity": 2,
+          "us": 21
+        },
+        "output-read": {
+          "events": 4,
+          "quantity": 14370,
+          "us": 1531
+        },
+        "request-preparation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 217
+        },
+        "sandbox-launch": {
+          "events": 2,
+          "quantity": 2,
+          "us": 1322
+        },
+        "sandbox-runtime": {
+          "events": 2,
+          "quantity": 2,
+          "us": 101657
+        },
+        "scheduler-admission": {
+          "events": 2,
+          "quantity": 2,
+          "us": 27
+        },
+        "source-query": {
+          "events": 29,
+          "quantity": 29,
+          "us": 2039
+        },
+        "source-stamp": {
+          "events": 27,
+          "quantity": 27,
+          "us": 75
+        },
+        "worker-initialization": {
+          "events": 2,
+          "quantity": 2,
+          "us": 24999
+        },
+        "worker-operation": {
+          "events": 2,
+          "quantity": 2,
+          "us": 13208
+        },
+        "workload": {
+          "events": 1,
+          "quantity": 1,
+          "us": 108065
+        }
+      },
+      "median_sample_metrics": {
+        "cpu_seconds_process_and_waited_children": 0.015813,
+        "sampled_concurrent_workers": 1,
+        "sampled_host_peak_kib": 9084,
+        "sampled_temp_and_cache_bytes": 234,
+        "sampled_worker_peak_kib": 37676,
+        "wall_seconds": 0.1235565620008856,
+        "warm_open_seconds": 8.255e-05,
+        "worker_launches": 2
+      },
+      "median_seconds": 8.255e-05,
+      "min_seconds": 7.555e-05,
+      "p95_seconds": 8.685e-05,
+      "source": "/tmp/imagekit-core-perf.33MnOi/src/tests/fixtures/rgb16.png",
+      "source_type": "local",
+      "worker": "/tmp/imagekit-core-perf.33MnOi/before/src/worker/majoris-image-worker",
+      "worker_sha256": "a164e3bacb9330f6d45c40dcf29e4d14ab8b033fc05f53877c244ec4b0dfc5f9"
+    }
+  }
+}

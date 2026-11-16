@@ -13,7 +13,13 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Event, Thread
+
+GVFS_CHUNK_SIZE = 256 * 1024
+GVFS_SOURCE_LIMIT = 1024**3
 
 NATIVE_WORKLOADS = {
     **{
@@ -122,9 +128,63 @@ def disk_usage(root: Path) -> int:
     return total
 
 
+@contextmanager
+def loopback_fixture(fixture: Path) -> Iterator[str]:
+    png = fixture.read_bytes()
+    chunk = bytes(GVFS_CHUNK_SIZE)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_HEAD(self) -> None:
+            self.respond(False)
+
+        def do_GET(self) -> None:
+            self.respond(True)
+
+        def log_message(self, _format: str, *args: object) -> None:
+            pass
+
+        def respond(self, send_body: bool) -> None:
+            data = png if self.path == "/gvfs" else chunk
+            slow = self.path == "/gvfs-cancel"
+            oversize = self.path == "/gvfs-limit"
+            length = (
+                GVFS_SOURCE_LIMIT + 1 if oversize else len(data) * (2 if slow else 1)
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(length))
+            self.send_header("Last-Modified", "Mon, 01 Jan 2024 00:00:00 GMT")
+            self.end_headers()
+            if send_body:
+                try:
+                    if oversize:
+                        for _ in range(GVFS_SOURCE_LIMIT // len(chunk)):
+                            self.wfile.write(chunk)
+                        self.wfile.write(b"\0")
+                    else:
+                        self.wfile.write(data)
+                    if slow:
+                        self.wfile.flush()
+                        # The client cancels its second read while this body is incomplete.
+                        closed.wait(10)
+                except OSError:
+                    pass  # The client may cancel before receiving the complete body.
+
+    closed = Event()
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_port}"
+        finally:
+            closed.set()
+            server.shutdown()
+            thread.join()
+
+
 def measure(
-    executable: Path, operation: str, fixture: Path, root: Path, worker: Path
-) -> dict[str, int | float | None]:
+    executable: Path, operation: str, source: str, root: Path, worker: Path
+) -> dict:
     cache = root / "sample-cache"
     cache.mkdir()
     staging = root / "sample-tmp"
@@ -136,12 +196,21 @@ def measure(
         XDG_CACHE_HOME=str(cache),
         TMPDIR=str(staging),
         IMAGEKIT_WORKER_STARTS=str(starts),
+        MAJORIS_IMAGE_WORKER=str(worker),
+        MAJORIS_IMAGE_PROFILE="1",
     )
+    command = [executable, operation, source]
+    if operation == "gvfs-write-error":
+        command = ["prlimit", "--fsize=131072:131072", "--", *command]
     host_peak = worker_peak = concurrency = temporary_bytes = 0
     with tempfile.TemporaryFile(mode="w+") as log:
         began = time.monotonic()
         with subprocess.Popen(
-            [executable, operation, fixture], stdout=log, stderr=log, env=env
+            command,
+            stdout=log,
+            stderr=log,
+            env=env,
+            restore_signals=operation != "gvfs-write-error",
         ) as process:
             try:
                 while True:
@@ -171,6 +240,8 @@ def measure(
         output = log.read()
         if process.returncode:
             raise RuntimeError(f"{operation} failed ({process.returncode}): {output}")
+    if any(staging.iterdir()):
+        raise RuntimeError(f"{operation} left temporary files or job directories")
     shutil.rmtree(cache)
     shutil.rmtree(staging)
     measured = next(
@@ -181,13 +252,30 @@ def measure(
         ),
         None,
     )
+    phases = {}
+    for line in output.splitlines():
+        if line.startswith("ImageKit-profile "):
+            _, stage, elapsed, quantity = line.split()
+            total = phases.setdefault(stage, {"events": 0, "us": 0, "quantity": 0})
+            total["events"] += 1
+            total["us"] += int(elapsed)
+            total["quantity"] += int(quantity)
+    worker_launches = len(starts.read_text().splitlines())
+    if operation == "cancel" and worker_launches != 1:
+        raise RuntimeError("Worker cancellation requires exactly one sandbox launch")
+    if (
+        operation in {"gvfs-cancel", "gvfs-write-error", "gvfs-limit"}
+        and worker_launches
+    ):
+        raise RuntimeError(f"{operation} launched a worker after incomplete staging")
     return {
+        "phases": phases,
         "wall_seconds": wall,
         "warm_open_seconds": measured,
         "cpu_seconds_process_and_waited_children": usage.ru_utime + usage.ru_stime,
         "sampled_host_peak_kib": host_peak or None,
         "sampled_worker_peak_kib": worker_peak or None,
-        "worker_launches": len(starts.read_text().splitlines()),
+        "worker_launches": worker_launches,
         "sampled_concurrent_workers": concurrency,
         "sampled_temp_and_cache_bytes": temporary_bytes,
     }
@@ -196,6 +284,8 @@ def measure(
 def codec_versions() -> dict[str, str]:
     result = {}
     for name in (
+        "glib-2.0",
+        "gio-2.0",
         "vips",
         "lcms2",
         "libheif",
@@ -221,6 +311,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--worker", type=Path)
+    parser.add_argument("--fault-worker", type=Path)
+    remote = parser.add_mutually_exclusive_group()
+    remote.add_argument("--remote-uri", help="GVfs URI serving the gvfs= fixture bytes")
+    remote.add_argument(
+        "--loopback-gvfs", action="store_true", help="Serve GVfs fixtures locally"
+    )
+    parser.add_argument("--revision", help="Source revision when using a staged tree")
     parser.add_argument("--executable", type=Path, required=True)
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--samples", type=int, default=5)
@@ -247,7 +344,8 @@ def main() -> int:
     options = json.loads((info / "intro-buildoptions.json").read_text())
     result = {
         "version": project["version"],
-        "revision": subprocess.run(
+        "revision": args.revision
+        or subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=source_root,
             capture_output=True,
@@ -268,6 +366,7 @@ def main() -> int:
                 "sequence",
                 "ultrahdr",
                 "buildtype",
+                "worker_profiling",
                 "b_sanitize",
             }
         },
@@ -315,29 +414,84 @@ def main() -> int:
         )
         wrapper.chmod(0o700)
         os.environ["PATH"] = f"{root}:{os.environ['PATH']}"
-        os.environ["MAJORIS_IMAGE_WORKER"] = str(args.worker.resolve())
+        result["bubblewrap_version"] = subprocess.check_output(
+            [real_bwrap, "--version"], text=True, timeout=5
+        ).strip()
+        result["temporary_storage"] = str(root.parent.resolve())
+        result["sample_mode"] = "fresh process and job storage, OS caches retained"
         for workload in args.workload:
             mode, marker, name = workload.partition("=")
             if not mode or not marker or not Path(name).is_file():
                 parser.error(f"Missing or invalid workload fixture: {workload}")
             fixture = Path(name).resolve()
-            with fixture.open("rb") as source:
-                digest = hashlib.file_digest(source, "sha256").hexdigest()
-            samples = [
-                measure(args.executable.resolve(), mode, fixture, root, args.worker)
-                for _ in range(args.samples)
-            ]
+            fixture_identity = fixture.name
+            if mode == "cancel":
+                fixture_identity = "worker-fault stall token"
+                digest = hashlib.sha256(b"T").hexdigest()
+            elif mode == "gvfs-limit":
+                fixture_identity = "1 GiB plus one byte, all zero (synthetic)"
+                digest = hashlib.sha256(
+                    f"zero-filled:{GVFS_SOURCE_LIMIT + 1}".encode()
+                ).hexdigest()
+            elif mode in {"gvfs-cancel", "gvfs-write-error"}:
+                fixture_identity = "256 KiB zero-filled HTTP body"
+                digest = hashlib.sha256(bytes(GVFS_CHUNK_SIZE)).hexdigest()
+            else:
+                with fixture.open("rb") as input_file:
+                    digest = hashlib.file_digest(input_file, "sha256").hexdigest()
+            if mode == "gvfs" and not (args.remote_uri or args.loopback_gvfs):
+                parser.error("gvfs workload requires --remote-uri or --loopback-gvfs")
+            if (
+                mode in {"gvfs-cancel", "gvfs-write-error", "gvfs-limit"}
+                and not args.loopback_gvfs
+            ):
+                parser.error(f"{mode} requires --loopback-gvfs")
+            if mode == "cancel" and not args.fault_worker:
+                parser.error("cancel workload requires --fault-worker")
+            worker = (
+                args.fault_worker
+                if mode in {"fallback", "cancel"} and args.fault_worker
+                else args.worker
+            ).resolve()
+            source = args.remote_uri if mode == "gvfs" else str(fixture)
+            if mode.startswith("gvfs") and args.loopback_gvfs:
+                with loopback_fixture(fixture) as address:
+                    source = f"{address}/{mode}"
+                    samples = [
+                        measure(args.executable.resolve(), mode, source, root, worker)
+                        for _ in range(args.samples)
+                    ]
+            else:
+                samples = [
+                    measure(args.executable.resolve(), mode, source, root, worker)
+                    for _ in range(args.samples)
+                ]
             key = "warm_open_seconds" if mode == "warm" else "wall_seconds"
-            durations = sorted(sample[key] for sample in samples)
+            durations = sorted(
+                sample[key]
+                if mode == "warm"
+                else sample["phases"].get("workload", {}).get("us", 0) / 1e6
+                or sample[key]
+                for sample in samples
+            )
             median = statistics.median(durations)
             stats = {
-                "fixture": fixture.name,
+                "fixture": fixture_identity,
                 "fixture_sha256": digest,
+                "source": source,
+                "source_type": "GVfs"
+                if mode.startswith("gvfs")
+                else ("stream" if mode in {"stream", "cancel"} else "local"),
+                "worker": str(worker),
+                "worker_sha256": hashlib.sha256(worker.read_bytes()).hexdigest(),
                 "count": len(durations),
                 "median_seconds": median,
                 "p95_seconds": durations[math.ceil(len(durations) * 0.95) - 1],
                 "min_seconds": durations[0],
                 "max_seconds": durations[-1],
+                "mad_seconds": statistics.median(
+                    abs(value - median) for value in durations
+                ),
                 "samples": samples,
             }
             base = old.get("workloads", {}).get(mode)

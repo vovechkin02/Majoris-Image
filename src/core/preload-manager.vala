@@ -99,9 +99,17 @@ namespace ImageKit {
 
         private async string? key_for (ImageSource source, DecodeOptions options,
             Cancellable stop) throws Error {
-            var info = yield source.file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
-                Priority.LOW, stop);
+            int64 started = OperationProfile.begin ();
+            FileInfo info = null;
+            try {
+                info = yield source.file.query_info_async (ThumbnailService.STAMP_ATTRIBUTES, 0,
+                    Priority.LOW, stop);
+            } finally {
+                OperationProfile.record ("source-query", started);
+            }
+            started = OperationProfile.begin ();
             string stamp = ThumbnailService.source_stamp (source.file, info);
+            OperationProfile.record ("source-stamp", started);
             if (stamp == "") {
                 return null;
             }

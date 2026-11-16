@@ -17,6 +17,12 @@ option(
   value: 'auto',
   description: 'Generate GObject introspection data',
 )
+option(
+  'worker_profiling',
+  type: 'boolean',
+  value: false,
+  description: 'Emit worker phase timings in successful benchmark runs',
+)
 option('tests', type: 'boolean', value: true, description: 'Build verification targets')
 option(
   'raw_fixtures',

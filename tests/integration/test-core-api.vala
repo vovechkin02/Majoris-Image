@@ -285,6 +285,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
         } catch (IOError.INVALID_ARGUMENT error) {
             assert (error.message.contains ("separate destination"));
         }
+        yield verify_export_alias (encoder, source, temp);
         var transform = new RenderOptions ();
         transform.turns = 1;
         yield encoder.encode (source, target, new ExportOptions (), transform);
@@ -306,6 +307,35 @@ async void verify_headless_core_api (string directory, string large_path) throws
     } finally {
         FileUtils.unlink (target.get_path ());
         DirUtils.remove (temp);
+    }
+}
+
+private async void verify_export_alias (EncoderRegistry encoder, ImageSource source,
+                                        string directory) throws Error {
+    string alias_path = Path.build_filename (directory, "source-link");
+    assert (FileUtils.symlink (source.file.get_path (), alias_path) == 0);
+    var alias = File.new_for_path (alias_path);
+    string attributes = "unix::device,unix::inode";
+    var original = yield source.file.query_info_async (attributes, FileQueryInfoFlags.NONE);
+    var before = yield source.file.load_bytes_async (null, null);
+    try {
+        try {
+            yield encoder.encode (source, alias, new ExportOptions ());
+            assert_not_reached ();
+        } catch (IOError.INVALID_ARGUMENT error) {
+            assert (error.message.contains ("separate destination"));
+        }
+        var current = yield alias.query_info_async (attributes, FileQueryInfoFlags.NONE);
+        assert (original.get_attribute_uint32 ("unix::device") ==
+            current.get_attribute_uint32 ("unix::device"));
+        assert (original.get_attribute_uint64 ("unix::inode") ==
+            current.get_attribute_uint64 ("unix::inode"));
+        assert (FileUtils.read_link (alias_path) == source.file.get_path ());
+        var after = yield source.file.load_bytes_async (null, null);
+        assert (Checksum.compute_for_bytes (ChecksumType.SHA256, before) ==
+            Checksum.compute_for_bytes (ChecksumType.SHA256, after));
+    } finally {
+        FileUtils.unlink (alias_path);
     }
 }
 

@@ -6,7 +6,8 @@ Build-Depends: debhelper-compat (= 13), meson (>= 1.4), ninja-build, valac, pkgc
  libglib2.0-dev, libgee-0.8-dev, libjson-glib-dev, zlib1g-dev,
  libgtk-4-dev (>= 4.16), libglycin-1-dev, glycin-loaders,
  libvips-dev, libraw-dev, liblcms2-dev, libheif-dev, libjxl-dev, libopenexr-dev,
- librsvg2-dev, libgexiv2-dev, bubblewrap, xvfb, xauth, libxtst-dev <!nocheck>, girepository-tools,
+ librsvg2-dev, libgexiv2-dev, bubblewrap (>= 0.10.0), xvfb, xauth, libxtst-dev <!nocheck>,
+ girepository-tools,
  libheif-plugin-libde265, libheif-plugin-dav1d,
  libavif-dev <!pkg.majoris-image.nosequence>,
  libuhdr-dev (>= 2.0.2) <pkg.majoris-image.gainmap>
@@ -38,7 +39,7 @@ Description: reusable Majoris Image GTK4 widget
 Package: majoris-image-worker
 Architecture: any
 Multi-Arch: foreign
-Depends: ${shlibs:Depends}, ${misc:Depends}, bubblewrap
+Depends: ${shlibs:Depends}, ${misc:Depends}, bubblewrap (>= 0.10.0)
 Recommends: libheif-plugin-libde265, libheif-plugin-dav1d
 Suggests: gvfs-backends
 Description: isolated Majoris Image decoding worker

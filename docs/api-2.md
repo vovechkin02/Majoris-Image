@@ -70,12 +70,36 @@ completed export to a separate destination using the chosen container,
 quality, bit depth, color profile and metadata policy.
 
 The encoded worker output must be a nonempty regular file of at most 256 MiB.
-For a native destination, Core copies it into private staging on the destination
-filesystem and publishes it with a rename after validation and successful close.
-Cancellation before publication discards staging. A cancellation observed after
-the rename leaves the successful export in place. A destination symlink is
-followed to its referent. Atomic replacement updates the destination directory
-entry and leaves any other hard links referring to the original inode.
+Core rejects an identical source and destination. For two native files, it also
+rejects paths, symlinks, and hard links that refer to the same source inode.
+Bubblewrap binds that inode read-only for encoding. The caller's source path
+must still identify the same inode at publication.
+
+For a native destination, Core copies the encoded bytes through a buffer of at
+most 256 KiB into private staging on the destination filesystem. It follows
+destination symlinks to their referent, including a dangling final link. It
+rechecks the resolved directory, link chain, and destination entry before
+publishing, and fails if it detects a change. Creation uses an atomic no-clobber
+rename and requires filesystem support for that operation. Replacement of an
+existing file uses a descriptor-relative rename. Linux performs that rename
+atomically but provides no inode-conditioned replacement, so a competing
+directory entry change can still occur between the final check and the rename.
+Other hard links to a replaced inode retain their previous contents.
+
+A replacement requires write access to the existing file as well as permission
+to stage and rename in its directory. Core preserves owner, group, ordinary
+mode bits, and the Linux POSIX access ACL, and fails before publication if it
+cannot apply required metadata. Replacement drops set-user-ID, set-group-ID,
+and sticky bits. It discards old `user.*` attributes, file capabilities, and
+security labels. The new inode uses filesystem-assigned security metadata.
+New files use the process umask or the
+directory's default ACL under the filesystem's usual creation rules.
+
+Core synchronizes the staged file and checks its close before the rename.
+Cancellation before publication discards staging. Cancellation after the
+rename leaves the successful export in place. The rename provides atomic
+visibility where supported. Synchronization covers the staged file. The directory
+entry can still be lost after sudden power loss.
 
 For other `GFile` backends, Core validates a complete in-memory payload before
 requesting the backend's normal GIO replacement. The backend determines atomicity

@@ -4,8 +4,11 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <unistd.h>
 
 #include <glib/gstdio.h>
@@ -14,12 +17,39 @@
 
 #define EXPORT_CHUNK_BYTES (256 * 1024)
 #define MAX_DESTINATION_SYMLINKS 40
+#define ACCESS_ACL "system.posix_acl_access"
+
+struct _ExportSource {
+    char *path;
+    int fd;
+    struct stat identity;
+};
 
 typedef struct {
     char *path;
     GFile *destination;
+    const ExportSource *source;
     gint64 limit;
 } ExportTransfer;
+
+typedef struct {
+    struct stat directory;
+    struct stat entry;
+} DestinationLink;
+
+typedef struct {
+    int directory;
+    int file;
+    char *name;
+    struct stat parent;
+    struct stat existing;
+    GArray *links;
+} Destination;
+
+typedef struct {
+    char *source;
+    char *destination;
+} ExportPreparation;
 
 static void record_phase(const char *phase, gint64 started, guint64 count)
 {
@@ -47,6 +77,40 @@ static void invalid_output(GError **error, const char *message)
 {
     g_set_error_literal(error, IMAGE_KIT_IMAGE_ERROR, IMAGE_KIT_IMAGE_ERROR_INVALID_RESPONSE,
                         message);
+}
+
+static gboolean same_inode(const struct stat *first, const struct stat *second)
+{
+    return first->st_dev == second->st_dev && first->st_ino == second->st_ino;
+}
+
+static gboolean same_entry(const struct stat *first, const struct stat *second)
+{
+    return same_inode(first, second) &&
+        first->st_size == second->st_size && first->st_mode == second->st_mode &&
+        first->st_uid == second->st_uid && first->st_gid == second->st_gid &&
+        first->st_nlink == second->st_nlink &&
+        first->st_mtim.tv_sec == second->st_mtim.tv_sec &&
+        first->st_mtim.tv_nsec == second->st_mtim.tv_nsec &&
+        first->st_ctim.tv_sec == second->st_ctim.tv_sec &&
+        first->st_ctim.tv_nsec == second->st_ctim.tv_nsec;
+}
+
+static void destination_changed(GError **error)
+{
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_BUSY,
+                        "Export destination changed during transfer");
+}
+
+static gboolean check_source_alias(const ExportSource *source, const struct stat *entry,
+                                   GError **error)
+{
+    if (source != NULL && same_inode(&source->identity, entry)) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "Choose a separate destination for image export");
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static int open_output(const char *path, gint64 limit, struct stat *initial, GError **error)
@@ -171,69 +235,209 @@ static gboolean close_file(int *fd, const char *operation, GError **error)
     return TRUE;
 }
 
-/* FileCreateFlags.NONE follows a final destination symlink, including a dangling one. */
-static gboolean resolve_destination(char **path, struct stat *info, gboolean *exists,
-                                    GError **error)
+static void clear_destination(Destination *destination)
 {
+    if (destination->file >= 0) {
+        close(destination->file);
+    }
+    if (destination->directory >= 0) {
+        close(destination->directory);
+    }
+    g_free(destination->name);
+    g_clear_pointer(&destination->links, g_array_unref);
+}
+
+G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC(Destination, clear_destination)
+
+/* Follow final links, including a dangling link, as GIO does with FileCreateFlags.NONE.
+ * Read each link via its descriptor so its identity and contents describe the same inode. */
+static gboolean resolve_destination(const char *path, Destination *destination, GError **error)
+{
+    g_autofree char *target = g_strdup(path);
     for (guint links = 0; links <= MAX_DESTINATION_SYMLINKS; links++) {
-        if (lstat(*path, info) < 0) {
+        g_autofree char *parent = g_path_get_dirname(target);
+        g_autofree char *name = g_path_get_basename(target);
+        if (g_str_has_suffix(target, "/") || g_str_equal(name, ".") || g_str_equal(name, "..")) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY,
+                                "Export destination must be a regular file");
+            return FALSE;
+        }
+
+        destination->directory = open(parent, O_PATH | O_DIRECTORY | O_CLOEXEC);
+        if (destination->directory < 0 || fstat(destination->directory, &destination->parent) < 0) {
+            set_io_error(error, "Cannot inspect export destination directory", errno);
+            return FALSE;
+        }
+        destination->file = openat(destination->directory, name, O_PATH | O_NOFOLLOW | O_CLOEXEC);
+        if (destination->file < 0) {
             if (errno == ENOENT) {
-                *exists = FALSE;
+                destination->name = g_steal_pointer(&name);
                 return TRUE;
             }
+            set_io_error(error, "Cannot open export destination", errno);
+            return FALSE;
+        }
+        struct stat info;
+        if (fstat(destination->file, &info) < 0) {
             set_io_error(error, "Cannot inspect export destination", errno);
             return FALSE;
         }
-        if (!S_ISLNK(info->st_mode)) {
-            if (!S_ISREG(info->st_mode)) {
-                g_set_error_literal(error, G_IO_ERROR,
-                                    S_ISDIR(info->st_mode) ? G_IO_ERROR_IS_DIRECTORY
-                                                          : G_IO_ERROR_NOT_REGULAR_FILE,
-                                    "Export destination must be a regular file");
-                return FALSE;
-            }
-            if (faccessat(AT_FDCWD, *path, W_OK, AT_EACCESS) < 0) {
-                set_io_error(error, "Cannot write export destination", errno);
-                return FALSE;
-            }
-            *exists = TRUE;
+        if (S_ISREG(info.st_mode)) {
+            destination->existing = info;
+            destination->name = g_steal_pointer(&name);
             return TRUE;
+        }
+        if (!S_ISLNK(info.st_mode)) {
+            g_set_error_literal(error, G_IO_ERROR,
+                                S_ISDIR(info.st_mode) ? G_IO_ERROR_IS_DIRECTORY
+                                                      : G_IO_ERROR_NOT_REGULAR_FILE,
+                                "Export destination must be a regular file");
+            return FALSE;
         }
         if (links == MAX_DESTINATION_SYMLINKS) {
             break;
         }
-        g_autoptr(GError) link_error = NULL;
-        g_autofree char *target = g_file_read_link(*path, &link_error);
-        if (target == NULL) {
-            GIOErrorEnum code = G_IO_ERROR_FAILED;
-            if (g_error_matches(link_error, G_FILE_ERROR, G_FILE_ERROR_NOENT)) {
-                code = G_IO_ERROR_NOT_FOUND;
-            } else if (g_error_matches(link_error, G_FILE_ERROR, G_FILE_ERROR_ACCES)) {
-                code = G_IO_ERROR_PERMISSION_DENIED;
-            }
-            g_set_error_literal(error, G_IO_ERROR, code, "Cannot resolve export destination link");
+
+        char link[PATH_MAX + 1];
+        ssize_t length = readlinkat(destination->file, "", link, sizeof link);
+        if (length < 0 || (gsize)length == sizeof link) {
+            set_io_error(error, "Cannot resolve export destination link",
+                         length < 0 ? errno : ENAMETOOLONG);
             return FALSE;
         }
-        g_autofree char *directory = g_path_get_dirname(*path);
-        g_free(*path);
-        *path = g_path_is_absolute(target) ? g_steal_pointer(&target)
-                                          : g_build_filename(directory, target, NULL);
+        link[length] = '\0';
+        if (destination->links == NULL) {
+            destination->links = g_array_new(FALSE, FALSE, sizeof(DestinationLink));
+        }
+        DestinationLink entry = {destination->parent, info};
+        g_array_append_val(destination->links, entry);
+        close(destination->file);
+        close(destination->directory);
+        destination->file = -1;
+        destination->directory = -1;
+        g_free(target);
+        target = g_path_is_absolute(link) ? g_strdup(link) : g_strconcat(parent, "/", link, NULL);
     }
     set_io_error(error, "Cannot resolve export destination", ELOOP);
     return FALSE;
 }
 
-static gboolean finalize_staging(int output, const struct stat *existing, GError **error)
+static gboolean same_links(const GArray *first, const GArray *second)
 {
-    if (existing != NULL) {
-        struct stat staging;
-        if (fstat(output, &staging) < 0 ||
-            ((staging.st_uid != existing->st_uid || staging.st_gid != existing->st_gid) &&
-             fchown(output, existing->st_uid, existing->st_gid) < 0) ||
-            fchmod(output, existing->st_mode & 0777) < 0) {
-            set_io_error(error, "Cannot preserve export destination permissions", errno);
+    if (first == NULL || second == NULL) {
+        return first == second;
+    }
+    if (first->len != second->len) {
+        return FALSE;
+    }
+    for (guint index = 0; index < first->len; index++) {
+        const DestinationLink *before = &g_array_index(first, DestinationLink, index);
+        const DestinationLink *after = &g_array_index(second, DestinationLink, index);
+        if (!same_inode(&before->directory, &after->directory) ||
+            !same_entry(&before->entry, &after->entry)) {
             return FALSE;
         }
+    }
+    return TRUE;
+}
+
+static gboolean validate_destination(const char *path, const Destination *initial,
+                                     const ExportSource *source, GError **error)
+{
+    if (source != NULL) {
+        struct stat current;
+        if (stat(source->path, &current) < 0 || !same_inode(&source->identity, &current)) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_BUSY,
+                                "Image source identity changed during export");
+            return FALSE;
+        }
+    }
+
+    g_auto(Destination) current = {.directory = -1, .file = -1};
+    if (!resolve_destination(path, &current, NULL)) {
+        destination_changed(error);
+        return FALSE;
+    }
+    if (current.file >= 0 && !check_source_alias(source, &current.existing, error)) {
+        return FALSE;
+    }
+    if (!same_inode(&initial->parent, &current.parent) ||
+        !g_str_equal(initial->name, current.name) || !same_links(initial->links, current.links) ||
+        (initial->file < 0) != (current.file < 0)) {
+        destination_changed(error);
+        return FALSE;
+    }
+
+    /* Check the actual rename parent and name after rewalking the caller's path. */
+    struct stat entry;
+    if (fstatat(initial->directory, initial->name, &entry, AT_SYMLINK_NOFOLLOW) == 0) {
+        if (!check_source_alias(source, &entry, error)) {
+            return FALSE;
+        }
+        if (initial->file >= 0 && same_entry(&initial->existing, &current.existing) &&
+            same_entry(&initial->existing, &entry)) {
+            return TRUE;
+        }
+    } else if (errno == ENOENT && initial->file < 0) {
+        return TRUE;
+    }
+    destination_changed(error);
+    return FALSE;
+}
+
+static gboolean preserve_permissions(int output, const Destination *destination, GError **error)
+{
+    const struct stat *existing = &destination->existing;
+    struct stat staging;
+    if (fstat(output, &staging) < 0) {
+        set_io_error(error, "Cannot inspect export staging file", errno);
+        return FALSE;
+    }
+    uid_t owner = staging.st_uid == existing->st_uid ? (uid_t)-1 : existing->st_uid;
+    gid_t group = staging.st_gid == existing->st_gid ? (gid_t)-1 : existing->st_gid;
+    if ((owner != (uid_t)-1 || group != (gid_t)-1) && fchown(output, owner, group) < 0) {
+        set_io_error(error, "Cannot preserve export destination ownership", errno);
+        return FALSE;
+    }
+
+    /* The access ACL and ordinary mode bits describe the same access policy.
+     * Read only this attribute through the pinned inode. Linux bounds xattr sizes. */
+    g_autofree char *handle = g_strdup_printf("/proc/self/fd/%d", destination->file);
+    ssize_t size = getxattr(handle, ACCESS_ACL, NULL, 0);
+    if (size < 0 && errno != ENODATA && errno != ENOTSUP) {
+        set_io_error(error, "Cannot inspect export destination ACL", errno);
+        return FALSE;
+    }
+    if (size > 0) {
+        g_autofree guint8 *acl = g_malloc(size);
+        ssize_t length = getxattr(handle, ACCESS_ACL, acl, size);
+        if (length < 0) {
+            set_io_error(error, "Cannot read export destination ACL", errno);
+            return FALSE;
+        }
+        if (length != size) {
+            destination_changed(error);
+            return FALSE;
+        }
+        if (fsetxattr(output, ACCESS_ACL, acl, length, 0) < 0) {
+            set_io_error(error, "Cannot preserve export destination ACL", errno);
+            return FALSE;
+        }
+    } else if (fremovexattr(output, ACCESS_ACL) < 0 && errno != ENODATA && errno != ENOTSUP) {
+        set_io_error(error, "Cannot remove inherited export staging ACL", errno);
+        return FALSE;
+    }
+    if (fchmod(output, existing->st_mode & 0777) < 0) {
+        set_io_error(error, "Cannot preserve export destination mode", errno);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static gboolean finalize_staging(int output, const Destination *destination, GError **error)
+{
+    if (destination->file >= 0 && !preserve_permissions(output, destination, error)) {
+        return FALSE;
     }
     if (fsync(output) < 0) {
         set_io_error(error, "Cannot sync export staging file", errno);
@@ -242,69 +446,48 @@ static gboolean finalize_staging(int output, const struct stat *existing, GError
     return TRUE;
 }
 
-static gboolean replace_native(int *input, const struct stat *initial, const char *path,
-                               GCancellable *cancel, GError **error)
+static void remove_staging_directory(int parent, const char *name, const struct stat *created)
 {
-    struct stat existing;
-    gboolean exists;
-    g_autofree char *target = g_strdup(path);
-    if (!resolve_destination(&target, &existing, &exists, error)) {
-        return FALSE;
+    struct stat current;
+    if (fstatat(parent, name, &current, AT_SYMLINK_NOFOLLOW) == 0 &&
+        S_ISDIR(current.st_mode) && same_inode(created, &current) &&
+        unlinkat(parent, name, AT_REMOVEDIR) < 0) {
+        g_debug("Cannot remove export staging directory: %s", g_strerror(errno));
     }
-    g_autofree char *parent = g_path_get_dirname(target);
-    g_autofree char *name = g_path_get_basename(target);
-    int directory = open(parent, O_PATH | O_DIRECTORY | O_CLOEXEC);
-    if (directory < 0) {
-        set_io_error(error, "Cannot open export destination directory", errno);
-        return FALSE;
-    }
+}
 
-    /* Anchor staging, commit and cleanup to the same directory. The private
-     * directory protects the staged bytes even when the final mode is public. */
-    g_autofree char *staging =
-        g_strdup_printf("/proc/self/fd/%d/.majoris-export-XXXXXX", directory);
-    if (g_mkdtemp(staging) == NULL) {
-        set_io_error(error, "Cannot create export staging directory", errno);
-        close(directory);
-        return FALSE;
-    }
-
-    int staging_directory = open(staging, O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    struct stat staging_info;
-    if (staging_directory < 0 || fstat(staging_directory, &staging_info) < 0) {
-        set_io_error(error, "Cannot open export staging directory", errno);
-        if (staging_directory >= 0) {
-            close(staging_directory);
-        }
-        g_rmdir(staging);
-        close(directory);
-        return FALSE;
-    }
-    if (staging_info.st_uid != geteuid() || (staging_info.st_mode & 0077) != 0) {
-        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
-                            "Export staging directory is not private");
-        close(staging_directory);
-        close(directory);
-        return FALSE;
-    }
-
+static gboolean copy_and_publish(int *input, const struct stat *initial, const char *path,
+                                 const Destination *destination, const ExportSource *source,
+                                 int staging_directory, GCancellable *cancel, GError **error)
+{
     int output = openat(staging_directory, "output", O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
-    gboolean committed = FALSE;
-    gint64 copy_started = g_get_monotonic_time();
     if (output < 0) {
         set_io_error(error, "Cannot create export staging file", errno);
-    } else if (transfer_output(*input, initial, output, NULL, cancel, error) &&
-               close_file(input, "Cannot close encoded output", error)) {
+        return FALSE;
+    }
+
+    gboolean committed = FALSE;
+    gint64 copy_started = g_get_monotonic_time();
+    if (transfer_output(*input, initial, output, NULL, cancel, error) &&
+        close_file(input, "Cannot close encoded output", error)) {
         record_phase("export-copy", copy_started, initial->st_size);
         gint64 commit_started = g_get_monotonic_time();
         if (!g_cancellable_set_error_if_cancelled(cancel, error) &&
-            finalize_staging(output, exists ? &existing : NULL, error) &&
+            finalize_staging(output, destination, error) &&
             close_file(&output, "Cannot close export staging file", error) &&
+            !g_cancellable_set_error_if_cancelled(cancel, error) &&
+            validate_destination(path, destination, source, error) &&
             !g_cancellable_set_error_if_cancelled(cancel, error)) {
-            if (renameat(staging_directory, "output", directory, name) == 0) {
+            /* NOREPLACE checks absence atomically. Linux has no equivalent
+             * rename that requires an existing destination to match an inode. */
+            int result = destination->file < 0
+                ? renameat2(staging_directory, "output", destination->directory, destination->name,
+                            RENAME_NOREPLACE)
+                : renameat(staging_directory, "output", destination->directory, destination->name);
+            if (result == 0) {
                 committed = TRUE;
             } else {
-                set_io_error(error, "Cannot replace export destination", errno);
+                set_io_error(error, "Cannot publish export destination", errno);
             }
         }
         record_phase("export-commit", commit_started, committed ? initial->st_size : 0);
@@ -316,14 +499,141 @@ static gboolean replace_native(int *input, const struct stat *initial, const cha
     if (!committed && unlinkat(staging_directory, "output", 0) < 0 && errno != ENOENT) {
         g_debug("Cannot unlink export staging file: %s", g_strerror(errno));
     }
-    struct stat current;
-    if (lstat(staging, &current) == 0 && current.st_dev == staging_info.st_dev &&
-        current.st_ino == staging_info.st_ino && g_rmdir(staging) < 0) {
-        g_debug("Cannot remove export staging directory: %s", g_strerror(errno));
-    }
-    close(staging_directory);
-    close(directory);
     return committed;
+}
+
+static gboolean replace_native(int *input, const struct stat *initial, const char *path,
+                               const ExportSource *source, GCancellable *cancel, GError **error)
+{
+    g_auto(Destination) destination = {.directory = -1, .file = -1};
+    if (!resolve_destination(path, &destination, error)) {
+        return FALSE;
+    }
+    if (destination.file >= 0) {
+        if (!check_source_alias(source, &destination.existing, error)) {
+            return FALSE;
+        }
+        if (faccessat(destination.file, "", W_OK, AT_EMPTY_PATH | AT_EACCESS) < 0) {
+            set_io_error(error, "Cannot write export destination", errno);
+            return FALSE;
+        }
+    }
+
+    /* Keep staging, publication and cleanup anchored to the validated directory. */
+    int directory = destination.directory;
+    g_autofree char *staging =
+        g_strdup_printf("/proc/self/fd/%d/.majoris-export-XXXXXX", directory);
+    if (g_mkdtemp(staging) == NULL) {
+        set_io_error(error, "Cannot create export staging directory", errno);
+        return FALSE;
+    }
+
+    const char *name = strrchr(staging, '/') + 1;
+    struct stat created;
+    if (fstatat(directory, name, &created, AT_SYMLINK_NOFOLLOW) < 0) {
+        /* Without the created identity, deleting by name could remove a substitute. */
+        set_io_error(error, "Cannot identify newly created export staging directory", errno);
+        return FALSE;
+    }
+    int staging_directory = openat(directory, name, O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    struct stat opened;
+    gboolean committed = FALSE;
+    if (staging_directory < 0 || fstat(staging_directory, &opened) < 0) {
+        set_io_error(error, "Cannot inspect export staging directory", errno);
+    } else if (!same_inode(&created, &opened) || opened.st_uid != geteuid() ||
+               (opened.st_mode & 0077) != 0) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+                            "Export staging directory is not private");
+    } else {
+        committed = copy_and_publish(input, initial, path, &destination, source,
+                                     staging_directory, cancel, error);
+    }
+
+    remove_staging_directory(directory, name, &created);
+    if (staging_directory >= 0) {
+        close(staging_directory);
+    }
+    return committed;
+}
+
+void image_export_source_free(ExportSource *source)
+{
+    if (source == NULL) {
+        return;
+    }
+    if (source->fd >= 0) {
+        close(source->fd);
+    }
+    g_free(source->path);
+    g_free(source);
+}
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(ExportSource, image_export_source_free)
+
+int image_export_source_dup(const ExportSource *source, GError **error)
+{
+    int fd = fcntl(source->fd, F_DUPFD_CLOEXEC, 3);
+    if (fd < 0) {
+        set_io_error(error, "Cannot duplicate image source descriptor", errno);
+    }
+    return fd;
+}
+
+static void release_preparation(gpointer data)
+{
+    ExportPreparation *preparation = data;
+    g_free(preparation->source);
+    g_free(preparation->destination);
+    g_free(preparation);
+}
+
+static void run_preparation(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
+{
+    (void)object;
+    (void)cancel;
+    const ExportPreparation *preparation = data;
+    if (g_task_return_error_if_cancelled(task)) {
+        return;
+    }
+    if (preparation->source == NULL || preparation->destination == NULL) {
+        g_task_return_pointer(task, NULL, NULL);
+        return;
+    }
+
+    g_autoptr(ExportSource) source = g_new0(ExportSource, 1);
+    source->path = g_strdup(preparation->source);
+    source->fd = open(source->path, O_PATH | O_CLOEXEC);
+    g_autoptr(GError) error = NULL;
+    g_auto(Destination) destination = {.directory = -1, .file = -1};
+    if (source->fd < 0 || fstat(source->fd, &source->identity) < 0) {
+        set_io_error(&error, "Cannot inspect image source", errno);
+    } else if (!S_ISREG(source->identity.st_mode)) {
+        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                            "The image source must be a regular file");
+    } else if (resolve_destination(preparation->destination, &destination, &error) &&
+               (destination.file < 0 ||
+                check_source_alias(source, &destination.existing, &error))) {
+        g_task_return_pointer(task, g_steal_pointer(&source),
+                              (GDestroyNotify)image_export_source_free);
+        return;
+    }
+    g_task_return_error(task, g_steal_pointer(&error));
+}
+
+void image_export_prepare_async(GFile *source, GFile *destination, GCancellable *cancel,
+                                GAsyncReadyCallback callback, gpointer user_data)
+{
+    g_autoptr(GTask) task = g_task_new(NULL, cancel, callback, user_data);
+    ExportPreparation *preparation = g_new(ExportPreparation, 1);
+    preparation->source = g_file_is_native(source) ? g_file_get_path(source) : NULL;
+    preparation->destination = g_file_is_native(destination) ? g_file_get_path(destination) : NULL;
+    g_task_set_task_data(task, preparation, release_preparation);
+    g_task_run_in_thread(task, run_preparation);
+}
+
+ExportSource *image_export_prepare_finish(GAsyncResult *result, GError **error)
+{
+    return g_task_propagate_pointer(G_TASK(result), error);
 }
 
 static void run_transfer(GTask *task, gpointer source, gpointer task_data, GCancellable *cancel)
@@ -343,7 +653,7 @@ static void run_transfer(GTask *task, gpointer source, gpointer task_data, GCanc
         g_autofree char *path = g_file_is_native(transfer->destination)
             ? g_file_get_path(transfer->destination) : NULL;
         if (path != NULL) {
-            replace_native(&input, &initial, path, cancel, &error);
+            replace_native(&input, &initial, path, transfer->source, cancel, &error);
         } else {
             g_autofree guint8 *bytes = g_malloc(initial.st_size);
             if (transfer_output(input, &initial, -1, bytes, cancel, &error) &&
@@ -362,7 +672,8 @@ static void run_transfer(GTask *task, gpointer source, gpointer task_data, GCanc
     }
 }
 
-void image_export_transfer_async(const char *path, GFile *destination, gint64 limit,
+void image_export_transfer_async(const char *path, GFile *destination,
+                                 const ExportSource *source, gint64 limit,
                                  GCancellable *cancel, GAsyncReadyCallback callback,
                                  gpointer user_data)
 {
@@ -370,6 +681,7 @@ void image_export_transfer_async(const char *path, GFile *destination, gint64 li
     ExportTransfer *transfer = g_new(ExportTransfer, 1);
     transfer->path = g_strdup(path);
     transfer->destination = g_object_ref(destination);
+    transfer->source = source;
     transfer->limit = limit;
     g_task_set_task_data(task, transfer, release_transfer);
     /* A cancellation after the rename must not turn a successful commit into an error. */

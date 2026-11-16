@@ -29,7 +29,7 @@ MAJORIS_IMAGE_WORKER="$PWD/build/src/worker/majoris-image-worker" \
 
 On an installed system, the core finds the worker in Meson's configured
 `libexecdir`. Use `meson install -C build` for a local install. The headless
-library requires the worker, Bubblewrap, and `prlimit`. Debian supplies
+library requires the worker, Bubblewrap 0.10.0 or later, and `prlimit`. Debian supplies
 `prlimit` through its Essential util-linux package.
 
 Build the five stock Debian 13 packages with `dpkg-buildpackage -us -uc -b`.

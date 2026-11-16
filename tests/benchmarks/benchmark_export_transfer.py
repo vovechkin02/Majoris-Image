@@ -46,13 +46,13 @@ def summarize(samples: list[dict], size: int) -> dict:
     }
 
 
-def compare(executable: Path, root: Path, size: int, count: int) -> dict:
+def compare(executable: Path, root: Path, size: int, count: int, suffix: str = "") -> dict:
     fixture = root / "encoded"
     digest = make_fixture(fixture, size)
     samples = {"transfer-baseline": [], "transfer-stream": []}
     for _ in range(count):
         for mode in samples:
-            sample = measure(executable, mode, str(fixture), root, executable)
+            sample = measure(executable, mode + suffix, str(fixture), root, executable)
             if sample["bytes_transferred"] != size or sample["output_sha256"] != digest:
                 raise RuntimeError(f"{mode} changed the {size}-byte fixture")
             samples[mode].append(sample)
@@ -95,6 +95,10 @@ def main() -> int:
             "codecs": codec_versions(),
             "temporary_storage": str(root.parent),
             "sample_mode": "fresh process, warm fixture, OS caches retained",
+            "destinations": {
+                kind: compare(executable, root, 1024**2, args.samples, f"-{kind}")
+                for kind in ("new", "symlink")
+            },
             "workloads": {
                 str(size): compare(executable, root, size, args.samples)
                 for size in [1024, *(mib * 1024**2 for mib in (1, 16, 64, 128, 256))]

@@ -1,7 +1,12 @@
+#define _GNU_SOURCE
+
 #include <errno.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <unistd.h>
 
 #include <glib/gstdio.h>
@@ -26,12 +31,31 @@ typedef enum {
     COMMIT_ERROR,
     CANCEL_BEFORE_COMMIT,
     CANCEL_AFTER_COMMIT,
+    STAGING_OPEN_ERROR,
+    STAGING_STAT_ERROR,
+    STAGING_OWNER_ERROR,
+    STAGING_MODE_ERROR,
+    STAGING_CREATE_ERROR,
+    CHOWN_ERROR,
+    CHMOD_ERROR,
+    REPLACE_DURING_COPY,
+    DELETE_AFTER_SYNC,
+    CHANGE_MODE_AFTER_SYNC,
+    SYMLINK_AFTER_SYNC,
+    RETARGET_BEFORE_VALIDATION,
+    CREATE_AFTER_RESOLUTION,
+    CREATE_AT_PUBLICATION,
+    SOURCE_ALIAS_DURING_COPY,
+    SUBSTITUTE_PARENT,
+    SUBSTITUTE_STAGING,
 } TransferFault;
 
 typedef struct {
     char *directory;
     char *input;
     char *output;
+    char *source_path;
+    ExportSource *source;
     GCancellable *cancel;
     GMainLoop *loop;
     GError *error;
@@ -42,6 +66,24 @@ static TransferFixture *active_fixture;
 static TransferFault fault;
 static guint reads;
 static guint closes;
+static int staging_fd;
+static int output_fd;
+
+#if defined(_FILE_OFFSET_BITS) && _FILE_OFFSET_BITS == 64
+#define __real_openat __real_openat64
+#define __wrap_openat __wrap_openat64
+#define __real_fstat __real_fstat64
+#define __wrap_fstat __wrap_fstat64
+#endif
+
+int __real_openat(int fd, const char *path, int flags, ...);
+int __wrap_openat(int fd, const char *path, int flags, ...);
+int __real_fstat(int fd, struct stat *info);
+int __wrap_fstat(int fd, struct stat *info);
+int __real_fchown(int fd, uid_t owner, gid_t group);
+int __wrap_fchown(int fd, uid_t owner, gid_t group);
+int __real_fchmod(int fd, mode_t mode);
+int __wrap_fchmod(int fd, mode_t mode);
 
 ssize_t __real_read(int fd, void *buffer, size_t size);
 ssize_t __real_write(int fd, const void *buffer, size_t size);
@@ -53,6 +95,80 @@ ssize_t __wrap_write(int fd, const void *buffer, size_t size);
 int __wrap_fsync(int fd);
 gboolean __wrap_g_close(gint fd, GError **error);
 int __wrap_renameat(int old_dir, const char *old_path, int new_dir, const char *new_path);
+int __real_renameat2(int old_dir, const char *old_path, int new_dir, const char *new_path,
+                    unsigned int flags);
+int __wrap_renameat2(int old_dir, const char *old_path, int new_dir, const char *new_path,
+                    unsigned int flags);
+
+static void create_competing_file(void)
+{
+    g_assert_true(g_file_set_contents(active_fixture->output, "competing export", -1, NULL));
+}
+
+int __wrap_openat(int fd, const char *path, int flags, ...)
+{
+    if (g_str_has_prefix(path, ".majoris-export-") && (flags & O_DIRECTORY) != 0) {
+        if (fault == CREATE_AFTER_RESOLUTION) {
+            create_competing_file();
+        } else if (fault == SUBSTITUTE_STAGING) {
+            g_assert_cmpint(renameat(fd, path, fd, "moved-staging"), ==, 0);
+            g_assert_cmpint(mkdirat(fd, path, 0700), ==, 0);
+        } else if (fault == STAGING_OPEN_ERROR) {
+            errno = EACCES;
+            return -1;
+        }
+        staging_fd = __real_openat(fd, path, flags);
+        return staging_fd;
+    }
+    if ((flags & O_CREAT) != 0) {
+        va_list arguments;
+        va_start(arguments, flags);
+        int mode = va_arg(arguments, int);
+        va_end(arguments);
+        if (fault == STAGING_CREATE_ERROR) {
+            errno = ENOSPC;
+            return -1;
+        }
+        output_fd = __real_openat(fd, path, flags, mode);
+        return output_fd;
+    }
+    return __real_openat(fd, path, flags);
+}
+
+int __wrap_fstat(int fd, struct stat *info)
+{
+    if (fd == staging_fd && fault == STAGING_STAT_ERROR) {
+        errno = EIO;
+        return -1;
+    }
+    int result = __real_fstat(fd, info);
+    if (result == 0 && fd == staging_fd && fault == STAGING_OWNER_ERROR) {
+        info->st_uid ^= 1;
+    } else if (result == 0 && fd == staging_fd && fault == STAGING_MODE_ERROR) {
+        info->st_mode |= 0040;
+    } else if (result == 0 && fd == output_fd && fault == CHOWN_ERROR) {
+        info->st_gid ^= 1;
+    }
+    return result;
+}
+
+int __wrap_fchown(int fd, uid_t owner, gid_t group)
+{
+    if (fault == CHOWN_ERROR) {
+        errno = EPERM;
+        return -1;
+    }
+    return __real_fchown(fd, owner, group);
+}
+
+int __wrap_fchmod(int fd, mode_t mode)
+{
+    if (fault == CHMOD_ERROR) {
+        errno = EPERM;
+        return -1;
+    }
+    return __real_fchmod(fd, mode);
+}
 
 ssize_t __wrap_read(int fd, void *buffer, size_t size)
 {
@@ -75,6 +191,13 @@ ssize_t __wrap_read(int fd, void *buffer, size_t size)
         }
         case CANCEL_TRANSFER:
             g_cancellable_cancel(active_fixture->cancel);
+            break;
+        case REPLACE_DURING_COPY:
+            create_competing_file();
+            break;
+        case SOURCE_ALIAS_DURING_COPY:
+            g_assert_cmpint(g_remove(active_fixture->output), ==, 0);
+            g_assert_cmpint(link(active_fixture->source_path, active_fixture->output), ==, 0);
             break;
         default:
             break;
@@ -101,6 +224,13 @@ int __wrap_fsync(int fd)
     int result = __real_fsync(fd);
     if (fault == CANCEL_BEFORE_COMMIT) {
         g_cancellable_cancel(active_fixture->cancel);
+    } else if (fault == DELETE_AFTER_SYNC || fault == SYMLINK_AFTER_SYNC) {
+        g_assert_cmpint(g_remove(active_fixture->output), ==, 0);
+        if (fault == SYMLINK_AFTER_SYNC) {
+            g_assert_cmpint(symlink("encoded", active_fixture->output), ==, 0);
+        }
+    } else if (fault == CHANGE_MODE_AFTER_SYNC) {
+        g_assert_cmpint(g_chmod(active_fixture->output, 0641), ==, 0);
     }
     return result;
 }
@@ -108,13 +238,37 @@ int __wrap_fsync(int fd)
 gboolean __wrap_g_close(gint fd, GError **error)
 {
     gboolean closed = __real_g_close(fd, error);
-    if (fault == CLOSE_ERROR) {
-        if (++closes == 2) {
+    if (++closes == 2) {
+        if (fault == CLOSE_ERROR) {
             errno = EIO;
             return FALSE;
         }
+        if (fault == RETARGET_BEFORE_VALIDATION) {
+            g_autofree char *hop = g_build_filename(active_fixture->directory, "hop", NULL);
+            g_assert_cmpint(g_remove(hop), ==, 0);
+            g_assert_cmpint(symlink("second", hop), ==, 0);
+        } else if (fault == SUBSTITUTE_PARENT) {
+            g_autofree char *parent = g_path_get_dirname(active_fixture->output);
+            g_autofree char *moved = g_build_filename(active_fixture->directory, "moved", NULL);
+            g_assert_cmpint(g_rename(parent, moved), ==, 0);
+            g_assert_cmpint(g_mkdir(parent, 0700), ==, 0);
+            create_competing_file();
+        }
     }
     return closed;
+}
+
+int __wrap_renameat2(int old_dir, const char *old_path, int new_dir, const char *new_path,
+                    unsigned int flags)
+{
+    if (fault == CREATE_AT_PUBLICATION) {
+        create_competing_file();
+    }
+    int result = __real_renameat2(old_dir, old_path, new_dir, new_path, flags);
+    if (fault == CANCEL_AFTER_COMMIT && result == 0) {
+        g_cancellable_cancel(active_fixture->cancel);
+    }
+    return result;
 }
 
 int __wrap_renameat(int old_dir, const char *old_path, int new_dir, const char *new_path)
@@ -143,6 +297,8 @@ static void setup_fixture(TransferFixture *fixture, gconstpointer data)
     fault = NO_FAULT;
     reads = 0;
     closes = 0;
+    staging_fd = -1;
+    output_fd = -1;
     active_fixture = fixture;
 }
 
@@ -160,6 +316,8 @@ static void teardown_fixture(TransferFixture *fixture, gconstpointer data)
     g_free(fixture->directory);
     g_free(fixture->input);
     g_free(fixture->output);
+    g_free(fixture->source_path);
+    g_clear_pointer(&fixture->source, image_export_source_free);
     g_clear_error(&fixture->error);
     g_clear_pointer(&fixture->payload, g_bytes_unref);
     g_object_unref(fixture->cancel);
@@ -175,11 +333,32 @@ static void transfer_done(GObject *source, GAsyncResult *result, gpointer data)
     g_main_loop_quit(fixture->loop);
 }
 
+static void preparation_done(GObject *source, GAsyncResult *result, gpointer data)
+{
+    (void)source;
+    TransferFixture *fixture = data;
+    fixture->source = image_export_prepare_finish(result, &fixture->error);
+    g_main_loop_quit(fixture->loop);
+}
+
+static void prepare_source_at(TransferFixture *fixture, const char *path)
+{
+    g_autoptr(GFile) source = g_file_new_for_path(path);
+    g_autoptr(GFile) destination = g_file_new_for_path(fixture->output);
+    image_export_prepare_async(source, destination, fixture->cancel, preparation_done, fixture);
+    g_main_loop_run(fixture->loop);
+}
+
+static void prepare_source(TransferFixture *fixture)
+{
+    prepare_source_at(fixture, fixture->source_path);
+}
+
 static void run_transfer(TransferFixture *fixture)
 {
     g_autoptr(GFile) target = g_file_new_for_path(fixture->output);
-    image_export_transfer_async(fixture->input, target, LIMIT_BYTES, fixture->cancel,
-                                transfer_done, fixture);
+    image_export_transfer_async(fixture->input, target, fixture->source, LIMIT_BYTES,
+                                fixture->cancel, transfer_done, fixture);
     g_main_loop_run(fixture->loop);
     g_assert_null(fixture->payload);
 }
@@ -234,6 +413,9 @@ static void test_copy(TransferFixture *fixture, gconstpointer data)
     }
     run_transfer(fixture);
     g_assert_no_error(fixture->error);
+    if (fault == CANCEL_AFTER_COMMIT) {
+        g_assert_true(g_cancellable_is_cancelled(fixture->cancel));
+    }
     assert_checksum(fixture->output, expected);
     if (size == CHUNK_BYTES) {
         GStatBuf info;
@@ -283,6 +465,377 @@ static void test_destination_link_limit(TransferFixture *fixture, gconstpointer 
     }
 }
 
+static void test_destination_cycle(TransferFixture *fixture, gconstpointer data)
+{
+    (void)data;
+    g_autofree char *expected = make_pattern(fixture->input, 1051);
+    g_assert_cmpint(symlink("destination", fixture->output), ==, 0);
+    run_transfer(fixture);
+    g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_TOO_MANY_LINKS);
+    g_assert_true(g_file_test(fixture->output, G_FILE_TEST_IS_SYMLINK));
+    assert_checksum(fixture->input, expected);
+}
+
+static void assert_same_inode(const struct stat *before, const struct stat *after)
+{
+    g_assert_cmpuint(after->st_dev, ==, before->st_dev);
+    g_assert_cmpuint(after->st_ino, ==, before->st_ino);
+}
+
+static void test_source_alias(TransferFixture *fixture, gconstpointer data)
+{
+    const char *kind = data;
+    fixture->source_path = g_build_filename(fixture->directory, "source", NULL);
+    g_autofree char *expected = make_pattern(fixture->source_path, 113);
+    g_autofree char *parent_link = NULL;
+    if (g_str_equal(kind, "hard-link")) {
+        g_assert_cmpint(link(fixture->source_path, fixture->output), ==, 0);
+    } else if (g_str_equal(kind, "symlink")) {
+        g_assert_cmpint(symlink("source", fixture->output), ==, 0);
+    } else if (g_str_equal(kind, "chain")) {
+        g_autofree char *middle = g_build_filename(fixture->directory, "middle", NULL);
+        g_assert_cmpint(symlink("source", middle), ==, 0);
+        g_assert_cmpint(symlink("middle", fixture->output), ==, 0);
+    } else if (g_str_equal(kind, "parent-link")) {
+        parent_link = g_build_filename(fixture->directory, "parent-link", NULL);
+        g_assert_cmpint(symlink(".", parent_link), ==, 0);
+        g_free(fixture->output);
+        fixture->output = g_build_filename(parent_link, "source", NULL);
+    } else {
+        g_free(fixture->output);
+        fixture->output = g_build_filename(fixture->directory, ".", "source", NULL);
+    }
+    struct stat source_before;
+    struct stat destination_before;
+    struct stat after;
+    g_assert_cmpint(stat(fixture->source_path, &source_before), ==, 0);
+    g_assert_cmpint(lstat(fixture->output, &destination_before), ==, 0);
+    if (g_str_equal(kind, "relative")) {
+        g_autofree char *working_directory = g_get_current_dir();
+        g_assert_cmpint(g_chdir(fixture->directory), ==, 0);
+        prepare_source_at(fixture, "source");
+        g_assert_cmpint(g_chdir(working_directory), ==, 0);
+    } else {
+        prepare_source(fixture);
+    }
+    g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+    g_assert_null(fixture->source);
+    g_assert_cmpint(stat(fixture->source_path, &after), ==, 0);
+    assert_same_inode(&source_before, &after);
+    g_assert_cmpint(lstat(fixture->output, &after), ==, 0);
+    assert_same_inode(&destination_before, &after);
+    assert_checksum(fixture->source_path, expected);
+    g_assert_cmpint(stat(fixture->output, &after), ==, 0);
+    assert_same_inode(&source_before, &after);
+}
+
+static void assert_contents(const char *path, const char *expected)
+{
+    g_autofree char *contents = NULL;
+    g_assert_true(g_file_get_contents(path, &contents, NULL, NULL));
+    g_assert_cmpstr(contents, ==, expected);
+}
+
+static void test_destination_mutation(TransferFixture *fixture, gconstpointer data)
+{
+    fault = GPOINTER_TO_INT(data);
+    g_autofree char *expected = make_pattern(fixture->input, 3 * CHUNK_BYTES);
+    g_autofree char *first = g_build_filename(fixture->directory, "first", NULL);
+    g_autofree char *second = g_build_filename(fixture->directory, "second", NULL);
+    g_autofree char *parent = g_build_filename(fixture->directory, "parent", NULL);
+    if (fault == RETARGET_BEFORE_VALIDATION) {
+        g_autofree char *hop = g_build_filename(fixture->directory, "hop", NULL);
+        g_assert_true(g_file_set_contents(first, "first export", -1, NULL));
+        g_assert_true(g_file_set_contents(second, "second export", -1, NULL));
+        g_assert_cmpint(symlink("first", hop), ==, 0);
+        g_assert_cmpint(symlink("hop", fixture->output), ==, 0);
+    } else {
+        if (fault == SUBSTITUTE_PARENT) {
+            g_assert_cmpint(g_mkdir(parent, 0700), ==, 0);
+            g_free(fixture->output);
+            fixture->output = g_build_filename(parent, "destination", NULL);
+        }
+        if (fault != CREATE_AFTER_RESOLUTION && fault != CREATE_AT_PUBLICATION) {
+            g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+        }
+    }
+
+    struct stat source_before;
+    g_autofree char *source_hash = NULL;
+    if (fault == SOURCE_ALIAS_DURING_COPY) {
+        fixture->source_path = g_build_filename(fixture->directory, "source", NULL);
+        source_hash = make_pattern(fixture->source_path, 113);
+        g_assert_cmpint(stat(fixture->source_path, &source_before), ==, 0);
+        prepare_source(fixture);
+        g_assert_no_error(fixture->error);
+        g_assert_nonnull(fixture->source);
+    }
+
+    run_transfer(fixture);
+    switch (fault) {
+    case CREATE_AT_PUBLICATION:
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_EXISTS);
+        assert_contents(fixture->output, "competing export");
+        break;
+    case REPLACE_DURING_COPY:
+    case CREATE_AFTER_RESOLUTION:
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+        assert_contents(fixture->output, "competing export");
+        break;
+    case DELETE_AFTER_SYNC:
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+        g_assert_false(g_file_test(fixture->output, G_FILE_TEST_EXISTS));
+        break;
+    case CHANGE_MODE_AFTER_SYNC: {
+        struct stat info;
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+        g_assert_cmpint(stat(fixture->output, &info), ==, 0);
+        g_assert_cmpuint(info.st_mode & 0777, ==, 0641);
+        assert_contents(fixture->output, "previous export");
+        break;
+    }
+    case SYMLINK_AFTER_SYNC:
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+        g_assert_true(g_file_test(fixture->output, G_FILE_TEST_IS_SYMLINK));
+        assert_checksum(fixture->output, expected);
+        break;
+    case RETARGET_BEFORE_VALIDATION:
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+        g_assert_true(g_file_test(fixture->output, G_FILE_TEST_IS_SYMLINK));
+        assert_contents(fixture->output, "second export");
+        assert_contents(first, "first export");
+        assert_contents(second, "second export");
+        break;
+    case SOURCE_ALIAS_DURING_COPY: {
+        struct stat after;
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+        g_assert_cmpint(stat(fixture->source_path, &after), ==, 0);
+        assert_same_inode(&source_before, &after);
+        g_assert_cmpint(stat(fixture->output, &after), ==, 0);
+        assert_same_inode(&source_before, &after);
+        assert_checksum(fixture->output, source_hash);
+        break;
+    }
+    case SUBSTITUTE_PARENT: {
+        g_autofree char *moved = g_build_filename(fixture->directory, "moved", NULL);
+        g_autofree char *old = g_build_filename(moved, "destination", NULL);
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+        assert_contents(fixture->output, "competing export");
+        assert_contents(old, "previous export");
+        g_assert_cmpint(g_remove(old), ==, 0);
+        g_assert_cmpint(g_rmdir(moved), ==, 0);
+        g_assert_cmpint(g_remove(fixture->output), ==, 0);
+        g_assert_cmpint(g_rmdir(parent), ==, 0);
+        break;
+    }
+    default:
+        g_assert_not_reached();
+    }
+}
+
+static void test_replacement_metadata(TransferFixture *fixture, gconstpointer data)
+{
+    (void)data;
+    g_autofree char *other_link = g_build_filename(fixture->directory, "other-link", NULL);
+    g_autofree char *expected = make_pattern(fixture->input, 1051);
+    g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+    g_assert_cmpint(g_chmod(fixture->output, 07750), ==, 0);
+    g_assert_cmpint(link(fixture->output, other_link), ==, 0);
+    struct stat before;
+    struct stat after;
+    g_assert_cmpint(stat(fixture->output, &before), ==, 0);
+    run_transfer(fixture);
+    g_assert_no_error(fixture->error);
+    g_assert_cmpint(stat(fixture->output, &after), ==, 0);
+    g_assert_cmpuint(after.st_uid, ==, before.st_uid);
+    g_assert_cmpuint(after.st_gid, ==, before.st_gid);
+    g_assert_cmpuint(after.st_mode & 07777, ==, 0750);
+    g_assert_cmpuint(after.st_ino, !=, before.st_ino);
+    g_assert_cmpint(stat(other_link, &after), ==, 0);
+    assert_same_inode(&before, &after);
+    assert_contents(other_link, "previous export");
+    assert_checksum(fixture->output, expected);
+}
+
+static void test_preserve_different_group(TransferFixture *fixture, gconstpointer data)
+{
+    (void)data;
+    int count = getgroups(0, NULL);
+    g_assert_cmpint(count, >=, 0);
+    g_autofree gid_t *groups = g_new(gid_t, count);
+    g_assert_cmpint(getgroups(count, groups), ==, count);
+    gid_t group = (gid_t)-1;
+    for (int index = 0; index < count; index++) {
+        if (groups[index] != getegid()) {
+            group = groups[index];
+            break;
+        }
+    }
+    if (group == (gid_t)-1) {
+        g_test_skip("A supplementary group is required to test changing the staged group");
+        return;
+    }
+
+    g_autofree char *expected = make_pattern(fixture->input, 1051);
+    g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+    int result = chown(fixture->output, (uid_t)-1, group);
+    if (result < 0 && (errno == EPERM || errno == ENOTSUP)) {
+        g_test_skip("The test filesystem does not permit changing to a supplementary group");
+        return;
+    }
+    g_assert_cmpint(result, ==, 0);
+    run_transfer(fixture);
+    g_assert_no_error(fixture->error);
+    struct stat published;
+    g_assert_cmpint(stat(fixture->output, &published), ==, 0);
+    g_assert_cmpuint(published.st_gid, ==, group);
+    assert_checksum(fixture->output, expected);
+}
+
+static void test_pinned_source(TransferFixture *fixture, gconstpointer data)
+{
+    (void)data;
+    fixture->source_path = g_build_filename(fixture->directory, "source", NULL);
+    g_autofree char *original = g_build_filename(fixture->directory, "original", NULL);
+    g_autofree char *expected = make_pattern(fixture->source_path, 1051);
+    g_autofree char *encoded = make_pattern(fixture->input, 1067);
+    g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+    struct stat before;
+    g_assert_cmpint(stat(fixture->source_path, &before), ==, 0);
+    prepare_source(fixture);
+    g_assert_no_error(fixture->error);
+    g_assert_cmpint(g_rename(fixture->source_path, original), ==, 0);
+    g_assert_true(g_file_set_contents(fixture->source_path, "substitute", -1, NULL));
+
+    int fd = image_export_source_dup(fixture->source, &fixture->error);
+    g_assert_no_error(fixture->error);
+    g_assert_cmpint(fd, >=, 0);
+    struct stat pinned;
+    g_assert_cmpint(fstat(fd, &pinned), ==, 0);
+    assert_same_inode(&before, &pinned);
+    g_assert_cmpint(close(fd), ==, 0);
+    run_transfer(fixture);
+    g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+    assert_contents(fixture->output, "previous export");
+    assert_contents(fixture->source_path, "substitute");
+    assert_checksum(original, expected);
+    assert_checksum(fixture->input, encoded);
+}
+
+static void test_permissions(TransferFixture *fixture, gconstpointer data)
+{
+    const char *kind = data;
+    g_autofree char *expected = make_pattern(fixture->input, 1051);
+    if (g_str_equal(kind, "umask")) {
+        mode_t original_mode = umask(0027);
+        run_transfer(fixture);
+        umask(original_mode);
+        g_assert_no_error(fixture->error);
+        struct stat info;
+        g_assert_cmpint(stat(fixture->output, &info), ==, 0);
+        g_assert_cmpuint(info.st_mode & 0777, ==, 0640);
+        assert_checksum(fixture->output, expected);
+        return;
+    }
+
+    if (geteuid() == 0) {
+        g_test_skip("Permission-denial checks require an unprivileged user");
+        return;
+    }
+    g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+    if (g_str_equal(kind, "read-only-file")) {
+        g_assert_cmpint(g_chmod(fixture->output, 0440), ==, 0);
+    } else {
+        g_assert_cmpint(g_chmod(fixture->directory, 0500), ==, 0);
+    }
+    run_transfer(fixture);
+    g_assert_cmpint(g_chmod(fixture->directory, 0700), ==, 0);
+    g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED);
+    assert_contents(fixture->output, "previous export");
+}
+
+static void test_access_acl(TransferFixture *fixture, gconstpointer data)
+{
+    (void)data;
+    /* Linux POSIX ACL xattr encoding, with a named user and a group mask. */
+    const struct {
+        guint32 version;
+        struct {
+            guint16 tag;
+            guint16 permissions;
+            guint32 id;
+        } entries[5];
+    } acl = {
+        GUINT32_TO_LE(2),
+        {
+            {GUINT16_TO_LE(1), GUINT16_TO_LE(6), GUINT32_TO_LE(G_MAXUINT32)},
+            {GUINT16_TO_LE(2), GUINT16_TO_LE(4), GUINT32_TO_LE(geteuid() + 1)},
+            {GUINT16_TO_LE(4), GUINT16_TO_LE(0), GUINT32_TO_LE(G_MAXUINT32)},
+            {GUINT16_TO_LE(16), GUINT16_TO_LE(4), GUINT32_TO_LE(G_MAXUINT32)},
+            {GUINT16_TO_LE(32), GUINT16_TO_LE(0), GUINT32_TO_LE(G_MAXUINT32)},
+        },
+    };
+    g_autofree char *expected = make_pattern(fixture->input, 1051);
+    g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+    int result = setxattr(fixture->output, "system.posix_acl_access", &acl, sizeof acl, 0);
+    if (result < 0 && (errno == ENOTSUP || errno == EINVAL)) {
+        g_test_skip("The test filesystem does not support the POSIX access ACL fixture");
+        return;
+    }
+    g_assert_cmpint(result, ==, 0);
+    run_transfer(fixture);
+    g_assert_no_error(fixture->error);
+    guint8 actual[sizeof acl];
+    g_assert_cmpint(getxattr(fixture->output, "system.posix_acl_access", actual, sizeof actual),
+                    ==, sizeof acl);
+    g_assert_cmpmem(actual, sizeof actual, &acl, sizeof acl);
+    assert_checksum(fixture->output, expected);
+}
+
+static void test_user_attribute(TransferFixture *fixture, gconstpointer data)
+{
+    (void)data;
+    g_autofree char *expected = make_pattern(fixture->input, 1051);
+    g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+    int result = setxattr(fixture->output, "user.export-test", "old", 3, 0);
+    if (result < 0 && errno == ENOTSUP) {
+        g_test_skip("The test filesystem does not support user extended attributes");
+        return;
+    }
+    g_assert_cmpint(result, ==, 0);
+    run_transfer(fixture);
+    g_assert_no_error(fixture->error);
+    g_assert_cmpint(getxattr(fixture->output, "user.export-test", NULL, 0), ==, -1);
+    g_assert_cmpint(errno, ==, ENODATA);
+    assert_checksum(fixture->output, expected);
+}
+
+static void test_substituted_staging(TransferFixture *fixture, gconstpointer data)
+{
+    (void)data;
+    g_autofree char *expected = make_pattern(fixture->input, 1051);
+    g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+    fault = SUBSTITUTE_STAGING;
+    run_transfer(fixture);
+    g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED);
+    assert_contents(fixture->output, "previous export");
+    assert_checksum(fixture->input, expected);
+
+    g_autoptr(GDir) directory = g_dir_open(fixture->directory, 0, NULL);
+    const char *entry;
+    guint replacements = 0;
+    while ((entry = g_dir_read_name(directory)) != NULL) {
+        if (g_str_has_prefix(entry, ".majoris-export-")) {
+            g_autofree char *path = g_build_filename(fixture->directory, entry, NULL);
+            g_assert_cmpint(g_rmdir(path), ==, 0);
+            replacements++;
+        }
+    }
+    g_assert_cmpuint(replacements, ==, 1);
+    g_autofree char *moved = g_build_filename(fixture->directory, "moved-staging", NULL);
+    g_assert_cmpint(g_rmdir(moved), ==, 0);
+}
+
 static void test_invalid_input(TransferFixture *fixture, gconstpointer data)
 {
     const char *kind = data;
@@ -308,7 +861,7 @@ static void test_non_native_payload(TransferFixture *fixture, gconstpointer data
     g_autofree char *expected = make_pattern(fixture->input, size);
     g_autoptr(GFile) target = g_file_new_for_uri("resource:///export-transfer");
     g_assert_false(g_file_is_native(target));
-    image_export_transfer_async(fixture->input, target, LIMIT_BYTES, fixture->cancel,
+    image_export_transfer_async(fixture->input, target, NULL, LIMIT_BYTES, fixture->cancel,
                                 transfer_done, fixture);
     g_main_loop_run(fixture->loop);
     g_assert_no_error(fixture->error);
@@ -331,12 +884,19 @@ static void test_failed_transfer(TransferFixture *fixture, gconstpointer data)
     case READ_ERROR:
     case SYNC_ERROR:
     case CLOSE_ERROR:
+    case STAGING_STAT_ERROR:
         g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_FAILED);
         break;
     case WRITE_ERROR:
+    case STAGING_CREATE_ERROR:
         g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_NO_SPACE);
         break;
     case COMMIT_ERROR:
+    case STAGING_OPEN_ERROR:
+    case STAGING_OWNER_ERROR:
+    case STAGING_MODE_ERROR:
+    case CHOWN_ERROR:
+    case CHMOD_ERROR:
         g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED);
         break;
     case CANCEL_TRANSFER:
@@ -381,6 +941,8 @@ int main(int argc, char **argv)
                setup_fixture, test_destination_link_limit, teardown_fixture);
     g_test_add("/export-transfer/excess-destination-links", TransferFixture, GUINT_TO_POINTER(41),
                setup_fixture, test_destination_link_limit, teardown_fixture);
+    g_test_add("/export-transfer/destination-link-cycle", TransferFixture, NULL,
+               setup_fixture, test_destination_cycle, teardown_fixture);
     g_test_add("/export-transfer/non-native-validated-payload", TransferFixture, NULL,
                setup_fixture, test_non_native_payload, teardown_fixture);
 
@@ -404,10 +966,60 @@ int main(int argc, char **argv)
         {"/export-transfer/close-error", CLOSE_ERROR},
         {"/export-transfer/commit-error", COMMIT_ERROR},
         {"/export-transfer/cancel-before-commit", CANCEL_BEFORE_COMMIT},
+        {"/export-transfer/staging-open-error", STAGING_OPEN_ERROR},
+        {"/export-transfer/staging-stat-error", STAGING_STAT_ERROR},
+        {"/export-transfer/staging-owner-error", STAGING_OWNER_ERROR},
+        {"/export-transfer/staging-mode-error", STAGING_MODE_ERROR},
+        {"/export-transfer/staging-create-error", STAGING_CREATE_ERROR},
+        {"/export-transfer/preserve-ownership-error", CHOWN_ERROR},
+        {"/export-transfer/preserve-mode-error", CHMOD_ERROR},
     };
     for (guint index = 0; index < G_N_ELEMENTS(failures); index++) {
         g_test_add(failures[index].name, TransferFixture, GINT_TO_POINTER(failures[index].fault),
                    setup_fixture, test_failed_transfer, teardown_fixture);
     }
+
+    const char *aliases[] = {"hard-link", "symlink", "chain", "parent-link", "relative"};
+    for (guint index = 0; index < G_N_ELEMENTS(aliases); index++) {
+        g_autofree char *name = g_strconcat("/export-transfer/source-alias-", aliases[index], NULL);
+        g_test_add(name, TransferFixture, aliases[index], setup_fixture, test_source_alias,
+                   teardown_fixture);
+    }
+    const struct {
+        const char *name;
+        TransferFault fault;
+    } mutations[] = {
+        {"/export-transfer/create-after-resolution", CREATE_AFTER_RESOLUTION},
+        {"/export-transfer/replace-during-copy", REPLACE_DURING_COPY},
+        {"/export-transfer/delete-after-sync", DELETE_AFTER_SYNC},
+        {"/export-transfer/change-mode-after-sync", CHANGE_MODE_AFTER_SYNC},
+        {"/export-transfer/substitute-symlink-after-sync", SYMLINK_AFTER_SYNC},
+        {"/export-transfer/retarget-before-validation", RETARGET_BEFORE_VALIDATION},
+        {"/export-transfer/substitute-parent", SUBSTITUTE_PARENT},
+        {"/export-transfer/source-alias-during-copy", SOURCE_ALIAS_DURING_COPY},
+        {"/export-transfer/competing-create-at-publication", CREATE_AT_PUBLICATION},
+    };
+    for (guint index = 0; index < G_N_ELEMENTS(mutations); index++) {
+        g_test_add(mutations[index].name, TransferFixture, GINT_TO_POINTER(mutations[index].fault),
+                   setup_fixture, test_destination_mutation, teardown_fixture);
+    }
+    const char *permissions[] = {"umask", "read-only-file", "read-only-directory"};
+    for (guint index = 0; index < G_N_ELEMENTS(permissions); index++) {
+        g_autofree char *name = g_strconcat("/export-transfer/", permissions[index], NULL);
+        g_test_add(name, TransferFixture, permissions[index], setup_fixture, test_permissions,
+                   teardown_fixture);
+    }
+    g_test_add("/export-transfer/replacement-ownership-mode-and-hard-links", TransferFixture, NULL,
+               setup_fixture, test_replacement_metadata, teardown_fixture);
+    g_test_add("/export-transfer/preserve-supplementary-group", TransferFixture, NULL,
+               setup_fixture, test_preserve_different_group, teardown_fixture);
+    g_test_add("/export-transfer/source-descriptor-survives-path-replacement", TransferFixture,
+               NULL, setup_fixture, test_pinned_source, teardown_fixture);
+    g_test_add("/export-transfer/preserve-access-acl", TransferFixture, NULL,
+               setup_fixture, test_access_acl, teardown_fixture);
+    g_test_add("/export-transfer/drop-user-attribute", TransferFixture, NULL,
+               setup_fixture, test_user_attribute, teardown_fixture);
+    g_test_add("/export-transfer/leave-substituted-staging-alone", TransferFixture, NULL,
+               setup_fixture, test_substituted_staging, teardown_fixture);
     return g_test_run();
 }

@@ -1,5 +1,177 @@
 # Bounded export transfer verification
 
+## Destination safety hardening
+
+The comparison baseline is `ec51c52`. Its native transaction validated and
+pinned the completed worker output, resolved final destination links, checked
+write access, and staged a bounded copy in a private directory. It preserved
+owner, group, and ordinary mode bits, synced and closed the output, and then
+renamed it into place. The only original-source check was `GFile.equal()`.
+The destination checked before the copy could change before the rename. A
+failed staging privacy check could leave the directory behind.
+
+### Changed files
+
+| Files | Change |
+|---|---|
+| `src/core/encoder-registry.vala`, `src/core/export-transfer.c`, `src/core/export-transfer.h` | Check aliases before the worker starts, retain the source and destination identities needed for publication, preserve the access ACL, and clean up staging on failure. The async transfer's two successful result forms are documented in the private header and at the Vala call site. |
+| `src/core/worker-client.vala` | Pass the pinned source descriptor to Bubblewrap as the read-only `/source` mount. Keep the existing source query, worker arguments, and protocol. |
+| `tests/unit/test-export-transfer.c`, `tests/unit/meson.build`, `tests/integration/test-core-api.vala` | Extend the existing suites with identity, mutation, metadata, and staging-fault assertions. |
+| `tests/benchmarks/benchmark-export-transfer.vala`, `tests/benchmarks/benchmark_export_transfer.py`, `tests/benchmarks/run_benchmarks.py` | Measure the preflight and transfer together, and add new-file and symlink fixtures with byte and link validation. |
+| `README.md`, `debian/control`, `docs/api-2.md`, `docs/verification-export-transfer.md` | Record the existing Bubblewrap dependency's minimum version, the native replacement policy, and verification. |
+
+### Publication and cleanup boundaries
+
+- For two native files, preflight opens the original source with `O_PATH` and
+  compares its device and inode to the resolved destination. The open
+  descriptor prevents inode reuse and pins the object mounted by Bubblewrap.
+  Preflight runs off the caller's main context.
+- After encoding, the native copy records the effective destination directory,
+  final basename, existing inode and metadata, and identities of the final
+  symlinks traversed. This snapshot governs the copy and commit. Alias checks
+  run again against it. Parent paths follow normal kernel lookup. Core
+  verifies the effective parents by inode.
+- After file sync and close, Core verifies that the original source path
+  still refers to its pinned inode, repeats destination resolution, and uses
+  `fstatat(AT_SYMLINK_NOFOLLOW)` against the directory descriptor that will
+  receive the rename. It checks the resolved path and link identities,
+  existence, inode, permissions, ownership, size, link count, and timestamps.
+  A detected alias gives `INVALID_ARGUMENT` and a detected transaction change
+  gives `BUSY`.
+- A new destination uses `renameat2(RENAME_NOREPLACE)`, which checks absence
+  inside the publication operation. An existing destination uses
+  `renameat()`. It atomically publishes complete bytes on supporting
+  filesystems, but Linux provides no inode-conditioned replacement. A
+  competing entry change after the check can affect the rename. Parent
+  descriptors keep the commit anchored even if an ancestor moves in that
+  interval. The final checks detect changes visible at inspection time.
+  [Linux rename documentation](https://man7.org/linux/man-pages/man2/rename.2.html)
+- Core removes its staged file through the private directory descriptor, then
+  removes the empty staging directory through the original parent descriptor
+  after checking its captured inode. It preserves the primary error and
+  leaves a substituted entry alone. Directory creation and removal use
+  separate identity checks. A change before the first identity capture or
+  after the last cleanup check remains possible in a writable namespace.
+  If the initial identity cannot be read, the empty directory may remain.
+  Staging cleanup never recurses.
+- Data synchronization covers the staging file. A successful close completes
+  the staged stream, and rename supplies visibility. The directory entry
+  remains subject to loss after sudden power failure. A canceled operation
+  after successful rename reports success.
+
+### Filesystem compatibility
+
+The public alias comparison used disposable copies of the same 16-bit PNG and
+the same worker with both Core builds. The GIO column summarizes a separate
+unprivileged GLib/GIO 2.84.4 matrix using
+`replace_contents_bytes_async()` and `FileCreateFlags.NONE`. The native
+columns include the regression results and prior-policy observations.
+
+| Scenario | Earlier GIO path | Previous bounded native path | Hardened native path |
+|---|---|---|---|
+| Identical source and destination | Core rejected it | Rejected | Rejected |
+| Symlink or parent-link alias of the source | GIO followed the link to its referent | Public export succeeded and replaced the original inode and bytes | Rejected with source SHA-256, device, inode, and links preserved |
+| Source hard-link alias | GIO wrote linked files in place | Public export succeeded and detached the alias from the original inode | Rejected with both names still linked to the original inode |
+| Distinct file, ordinary mode, and ownership | Replaced an ordinary file with a new inode and kept its mode and owner/group | Preserved ordinary mode, owner, and group | Same policy, including a tested replacement with a different supplementary group |
+| Existing and dangling destination symlinks | Updated the existing referent in place or created the missing referent | Preserved the link and published to the referent | Same referent behavior, with chain revalidation and a 40-link limit |
+| Previously absent destination | Created mode `0640` under umask `0027` | Staged and published mode `0640` under that umask | Same mode with atomic no-clobber creation |
+| Destination changed after resolution | No expected ETag was supplied | Published to the captured basename even if its entry changed | Observed inode, deletion, creation, symlink, parent, mode, and source-alias changes abort before commit |
+| Read-only file in writable directory | Permission denied | Permission denied | Permission denied, with the access check applied to the pinned inode |
+| Writable file in read-only directory | Wrote in place | Staging failed | Staging fails and the previous bytes remain |
+| Existing POSIX access ACL | Dropped on an ordinary staged replacement | Dropped on replacement | Preserved byte for byte, or publication fails |
+| Existing `user.*` attribute | Dropped on an ordinary staged replacement | Dropped on replacement | Dropped. Only the POSIX access ACL is carried over from the old inode |
+| Set-user-ID, set-group-ID, and sticky bits on mode `07750` | Published mode `01750` | Preserved ordinary mode bits only | Publishes mode `0750` |
+| Other hard links to a distinct destination | Kept linking the updated inode | Retained the old inode and old bytes | Retain the old inode and old bytes |
+| Pre-commit cancellation or commit error | An already canceled call and a directory rejection preserved the fixtures in the GIO matrix | Native fault tests preserved the prior destination | Preserves competing or prior data and removes owned staging |
+
+New files use the usual process umask or inherited default ACL. Replacements
+keep ordinary mode bits and the previous access ACL, including removing a
+staging-inherited access ACL if the old file has none. Capabilities and other
+`security.*` attributes from the old inode are discarded. The filesystem
+provides metadata for the new inode. Configurations with security labeling,
+non-POSIX ACLs, and ownership transitions to another user require separate
+filesystem verification.
+
+### Performance
+
+Five fresh processes per case on Debian 13, WSL2, GIO 2.84.4, with
+destination staging on ext4. Fixtures were warm in the operating-system cache.
+The same fixture generator and measurement runner checked output SHA-256 after
+each transfer. The comparison uses the bounded native transfer from
+`ec51c52`, with the same new-file and symlink fixture setup, and the hardened
+native transfer with source preflight included. RSS is the process wait
+high-water mark in KiB and includes the measurement overhead.
+
+| Workload | Previous time (ms) | Hardened time (ms) | Previous peak RSS (KiB) | Hardened peak RSS (KiB) | Hardened preflight (µs) |
+|---|---:|---:|---:|---:|---:|
+| 1 KiB, existing | 5.044 | 5.151 | 24,692 | 24,480 | 222 |
+| 1 MiB, existing | 5.798 | 6.349 | 24,692 | 24,480 | 224 |
+| 16 MiB, existing | 14.843 | 13.358 | 24,692 | 24,480 | 213 |
+| 64 MiB, existing | 40.222 | 34.164 | 24,692 | 24,480 | 223 |
+| 128 MiB, existing | 78.720 | 68.850 | 24,692 | 24,520 | 223 |
+| 256 MiB, existing | 160.733 | 158.103 | 24,692 | 24,520 | 214 |
+| 1 MiB, new destination | 6.520 | 6.414 | 24,396 | 24,348 | 214 |
+| 1 MiB, existing symlink destination | 5.913 | 6.105 | 24,692 | 24,480 | 232 |
+
+The 1 MiB existing-file median increased by 0.55 ms. Preflight took about
+0.22 ms, and the commit path now checks metadata and resolves the effective
+destination again. At 256 MiB, median throughput was 1,593 MiB/s before and
+1,619 MiB/s after. The native payload buffer remains at most 256 KiB and
+the 256 MiB limit remains in place. Median cleanup time after the benchmark
+canceled a 256 MiB transfer was 754 µs before and 622 µs after. Both paths
+preserved the previous destination in those cancellation samples.
+
+The end-to-end comparison used the same worker executable and 2500 × 1250
+TIFF crop with both builds. The reported RSS is Core's sampled peak.
+Independent runs can produce different ICC timestamps and small variations
+in encoded byte counts.
+
+| Export | Previous time (ms) | Hardened time (ms) | Previous peak RSS (KiB) | Hardened peak RSS (KiB) |
+|---|---:|---:|---:|---:|
+| PNG | 226.63 | 230.71 | 9,024 | 8,916 |
+| JPEG XL | 476.27 | 481.50 | 9,028 | 9,040 |
+| TIFF | 231.84 | 230.37 | 9,016 | 9,124 |
+
+Use the [benchmark commands below](#d-performance) to repeat the measurements.
+The isolated runner now reports new and symlink cases under `destinations`
+and the preflight timings under `export-identity`.
+
+### Regression and compatibility verification
+
+- All 55 focused transfer cases passed under strict C compiler warnings,
+  AddressSanitizer with leak detection, and UndefinedBehaviorSanitizer on
+  ext4. They verify source hashes and inode identity after alias rejection,
+  the pinned descriptor after pathname replacement, competing destination
+  bytes at controlled mutation points, permissions and metadata, and cleanup
+  with the original error intact. Cancellation at the rename boundary
+  leaves the committed bytes intact and reports success.
+- The default full GTK profile passed 25 tests, including 22 required tests.
+  The headless profile passed 15 tests, including 12 required tests. The
+  release-profile inventories matched across revisions. They contain 28
+  functional tests and 19 benchmarks with the same names, suites, timeouts,
+  parallel flags, and test protocols.
+- The ABI checker matched 285 Core and 77 GTK exports. The generated headers,
+  VAPI files, and GIR declarations matched byte for byte. The SONAMEs remain
+  2, and the worker protocol remains version 1. The Debian gain-map build
+  produced all five binary packages and passed the installed consumer checks
+  in a private package filesystem view.
+- PNG, lossless HDR JPEG XL, and TIFF round trips passed. In a separate
+  fixed-fixture comparison, both builds published the exact bytes of their
+  worker artifacts, with identical SHA-256 values across builds for all
+  three formats. The installed worker passed the Ultra HDR gain-map round
+  trip. Both revisions reported that the available libvips lacked an EXR
+  writer, so EXR export could not be verified on this system.
+- A loopback GVfs WebDAV destination returned HTTP 201 on creation and 204
+  on replacement. Both outputs decoded to the same pixels as the native
+  PNG. The final remote file also matched the native SHA-256. Backend
+  publication and cancellation semantics continue to apply to non-native
+  destinations.
+- The project-wide warnings-as-errors build stopped at existing Vala
+  diagnostics in decoder and worker code. The changed handwritten C and
+  fault-injection tests passed `-Wall -Wextra -Wpedantic -Werror`.
+
+## Original bounded-memory transfer
+
 ## A. Implementation
 
 The baseline was revision `0b6f2b4`. Core checked the worker output's pathname

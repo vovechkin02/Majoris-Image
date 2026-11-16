@@ -1,7 +1,16 @@
 [CCode (cname = "image_export_transfer_async", finish_name = "image_export_transfer_finish",
         cheader_filename = "export-transfer.h")]
-private extern async Bytes? transfer_output (string path, File destination, int64 limit,
+private extern async Bytes? transfer_output (string path, File destination, void* protected_source,
+                                            int64 limit,
                                             Cancellable cancel) throws Error;
+
+[CCode (cname = "image_export_prepare_async", finish_name = "image_export_prepare_finish",
+        cheader_filename = "export-transfer.h")]
+private extern async void* prepare_export (File source, File destination, Cancellable cancel)
+    throws Error;
+
+[CCode (cname = "image_export_source_free", cheader_filename = "export-transfer.h")]
+private extern void release_export_source (void* protected_source);
 
 private void record_phase (string stage, int64 started, int64 bytes) {
     stdout.printf ("ImageKit-profile %s %" + int64.FORMAT + " %" + int64.FORMAT + "\n",
@@ -28,7 +37,14 @@ private async void transfer (bool baseline, File input, File destination, Cancel
         record_phase ("export-replacement", replacement_started, size);
         record_phase ("payload-allocation", get_monotonic_time (), size);
     } else {
-        yield transfer_output (input.get_path (), destination, MAX_EXPORT_BYTES, cancel);
+        void* protected_source = yield prepare_export (input, destination, cancel);
+        record_phase ("export-identity", started, 1);
+        try {
+            yield transfer_output (input.get_path (), destination, protected_source,
+                MAX_EXPORT_BYTES, cancel);
+        } finally {
+            release_export_source (protected_source);
+        }
         record_phase ("payload-allocation", get_monotonic_time (), int64.min (
             256 * 1024, input.query_info (FileAttribute.STANDARD_SIZE, 0).get_size ()));
     }
@@ -39,9 +55,16 @@ private async void measure_transfer (string mode, string path) throws Error {
     bool baseline = mode.has_prefix ("transfer-baseline");
     bool cancel_transfer = mode.has_suffix ("-cancel");
     var input = File.new_for_path (path);
-    var destination = File.new_for_path (
-        Path.build_filename (Environment.get_tmp_dir (), "benchmark-export"));
-    destination.replace_contents ("existing".data, null, false, FileCreateFlags.NONE, null);
+    string directory = Environment.get_tmp_dir ();
+    string destination_path = Path.build_filename (directory, "benchmark-export");
+    var destination = File.new_for_path (destination_path);
+    if (mode.has_suffix ("-symlink")) {
+        var referent = File.new_for_path (Path.build_filename (directory, "benchmark-referent"));
+        referent.replace_contents ("existing".data, null, false, FileCreateFlags.NONE, null);
+        destination.make_symbolic_link ("benchmark-referent");
+    } else if (!mode.has_suffix ("-new")) {
+        destination.replace_contents ("existing".data, null, false, FileCreateFlags.NONE, null);
+    }
     var cancel = new Cancellable ();
     if (!cancel_transfer) {
         yield transfer (baseline, input, destination, cancel);
@@ -69,7 +92,10 @@ private async void measure_transfer (string mode, string path) throws Error {
 
 int main (string[] args) {
     if (args.length != 3 || !(args[1] in new string[] {
-        "transfer-baseline", "transfer-stream", "transfer-baseline-cancel", "transfer-stream-cancel"
+        "transfer-baseline", "transfer-stream",
+        "transfer-baseline-cancel", "transfer-stream-cancel",
+        "transfer-baseline-new", "transfer-stream-new",
+        "transfer-baseline-symlink", "transfer-stream-symlink"
     })) {
         stderr.printf ("Usage: benchmark-export-transfer MODE INPUT\n");
         return 2;

@@ -248,6 +248,11 @@ def measure(
                 "bytes_transferred": destination.stat().st_size,
                 "output_sha256": hashlib.file_digest(output_file, "sha256").hexdigest(),
             }
+        if operation.startswith("transfer-") and operation.endswith("-symlink"):
+            referent = Path("benchmark-referent")
+            if not destination.is_symlink() or destination.readlink() != referent:
+                raise RuntimeError(f"{operation} changed the destination link")
+            (staging / referent).unlink()
         destination.unlink()
     if any(staging.iterdir()):
         raise RuntimeError(f"{operation} left temporary files or job directories")

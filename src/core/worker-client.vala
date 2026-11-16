@@ -30,9 +30,13 @@ namespace ImageKit {
             return ((string) log.data).make_valid ();
         }
 
+        [CCode (cname = "image_export_source_dup", cheader_filename = "export-transfer.h")]
+        private static extern int duplicate_export_source (void* protected_source) throws Error;
+
         internal async string run (File? source, string operation, RenderOptions? transform,
                                    Cancellable cancel, int size = 0, DecodeOptions? options = null,
-                                       ExportOptions? encoding = null, bool preload = false) throws Error {
+                                   ExportOptions? encoding = null, bool preload = false,
+                                   void* protected_source = null) throws Error {
             if (size < 0 || size > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Image output edge must be at most 4096 pixels");
             }
@@ -48,7 +52,8 @@ namespace ImageKit {
                 OperationProfile.record ("scheduler-admission", admission);
             }
             try {
-                return yield execute (source, operation, transform, cancel, size, options, encoding);
+                return yield execute (source, operation, transform, cancel, size, options,
+                    encoding, protected_source);
             } finally {
                 scheduler.release ();
             }
@@ -56,7 +61,8 @@ namespace ImageKit {
 
         private async string execute (File? source, string operation, RenderOptions? transform,
                                       Cancellable cancel, int size, DecodeOptions? options,
-                                          ExportOptions? encoding) throws Error {
+                                      ExportOptions? encoding, void* protected_source)
+            throws Error {
             int64 started = OperationProfile.begin ();
             string job = DirUtils.make_tmp ("majoris-image-XXXXXX");
             OperationProfile.record ("job-directory", started);
@@ -112,7 +118,11 @@ namespace ImageKit {
                         "--clearenv",
                     "--setenv", "PATH", "/usr/bin", "--setenv", "HOME", "/tmp",
                     "--setenv", "OMP_NUM_THREADS", "2", "--setenv", "OMP_THREAD_LIMIT", "2" };
-                if (input != null) {
+                if (protected_source != null) {
+                    argv += "--ro-bind-fd";
+                    argv += "3";
+                    argv += "/source";
+                } else if (input != null) {
                     argv += "--ro-bind";
                     argv += input;
                     argv += "/source";
@@ -127,9 +137,16 @@ namespace ImageKit {
                 OperationProfile.record ("request-preparation", started);
                 started = OperationProfile.begin ();
                 Subprocess process;
+                var flags = SubprocessFlags.STDOUT_SILENCE | SubprocessFlags.STDERR_PIPE;
                 try {
-                    process = new Subprocess.newv (argv,
-                        SubprocessFlags.STDOUT_SILENCE | SubprocessFlags.STDERR_PIPE);
+                    if (protected_source == null) {
+                        process = new Subprocess.newv (argv, flags);
+                    } else {
+                        // Bind the inode checked by export even if its pathname changes.
+                        var launcher = new SubprocessLauncher (flags);
+                        launcher.take_fd (duplicate_export_source (protected_source), 3);
+                        process = launcher.spawnv (argv);
+                    }
                 } catch (Error e) {
                     throw new ImageError.SANDBOX ("Cannot start sandbox: %s", e.message);
                 }

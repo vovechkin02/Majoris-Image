@@ -1,3 +1,4 @@
+remote_publication_sources = files('non-native-publication.vala', 'operation-profile.vala')
 core_sources = files(
   'image-error.vala',
   'image-source.vala',
@@ -17,14 +18,13 @@ core_sources = files(
   'preload-manager.vala',
   'job-scheduler.vala',
   'decode-options.vala',
-  'operation-profile.vala',
   'worker-request.vala',
   'worker-client.vala',
   'worker-failure.vala',
   'worker-path.c',
   'thumbnail-png.c',
   'capability-contract.c',
-)
+) + remote_publication_sources
 core_dependencies = [gio, gee, json, math, dependency('zlib')]
 # The shared worker contract only needs recipe copying and serialization.
 render_options_vala_args = ['--define=RENDER_OPTIONS_DEFAULT_CHECK']

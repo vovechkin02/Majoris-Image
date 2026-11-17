@@ -69,7 +69,7 @@ private async void probe_remote (string mode, File input, File destination) thro
     });
     int64 started = get_monotonic_time ();
     try {
-        if (mode.has_prefix ("remote-fallback")) {
+        if (mode.has_prefix ("remote-fallback") || mode == "remote-bytes-baseline") {
             if (mode.has_suffix ("-precanceled")) {
                 cancel.cancel ();
             }
@@ -81,8 +81,12 @@ private async void probe_remote (string mode, File input, File destination) thro
             record_phase ("payload-allocation", get_monotonic_time (), size);
             cancel.set_error_if_cancelled ();
             int64 publishing = get_monotonic_time ();
-            yield destination.replace_contents_bytes_async (payload, null, false,
-                FileCreateFlags.NONE, cancel, null);
+            if (mode == "remote-bytes-baseline") {
+                yield destination.replace_contents_bytes_async (payload, null, false,
+                    FileCreateFlags.NONE, cancel, null);
+            } else {
+                yield ImageKit.publish_non_native_async (destination, payload, cancel);
+            }
             record_phase ("export-replacement", publishing, size);
             if (mode == "remote-fallback-cancel-after-success") {
                 cancel.cancel ();
@@ -130,6 +134,7 @@ private async void probe_remote (string mode, File input, File destination) thro
         }
         throw error;
     } finally {
+        stdout.printf ("Caller canceled: %s\n", cancel.is_cancelled ().to_string ());
         Source.remove (watch);
         cancel.disconnect (cancellation);
     }
@@ -233,6 +238,7 @@ private async void run (string mode, string path, string? uri) throws Error {
 int main (string[] args) {
     bool remote = args.length == 4 && args[1] in new string[] {
         "remote-fallback", "remote-fallback-precanceled", "remote-fallback-cancel-after-success",
+        "remote-bytes-baseline",
         "remote-stream", "remote-stage",
         "remote-push-stage", "remote-cancel-write", "remote-cancel-midway",
         "remote-cancel-before-close"
@@ -245,6 +251,9 @@ int main (string[] args) {
     }))) {
         stderr.printf ("Usage: benchmark-export-transfer MODE INPUT [REMOTE_URI]\n");
         return 2;
+    }
+    if (remote) {
+        Environment.set_variable ("MAJORIS_IMAGE_PROFILE", "1", true);
     }
     var loop = new MainLoop ();
     int status = 0;

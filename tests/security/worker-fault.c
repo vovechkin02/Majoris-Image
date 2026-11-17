@@ -48,6 +48,10 @@ int main(int argc, char **argv)
     if (argc != 6) {
         return 2;
     }
+    /* Exercise the caller's output validation after a successful worker exit. */
+    if (strcmp(argv[1], "export") == 0) {
+        return 0;
+    }
     FILE *source = fopen(argv[2], "rb");
     if (!source) {
         return 2;

@@ -110,12 +110,18 @@ rename leaves the successful export in place. The rename provides atomic
 visibility where supported. Synchronization covers the staged file. The directory
 entry can still be lost after sudden power loss.
 
-For other `GFile` backends, Core validates a complete in-memory payload before
-requesting asynchronous GIO replacement with no expected ETag or backup. The
-backend determines when the destination becomes visible and what remains after
-failure or cancellation. A cancellation result can arrive after server-side
-publication. See the [non-native export verification](verification-non-native-export.md)
-for the WebDAV close and error-reporting results.
+For other `GFile` backends, Core validates the complete encoded payload in
+memory, opens an asynchronous GIO replacement with no expected ETag or backup,
+writes all bytes, and awaits the stream's close. Open, write, and close errors
+propagate to the caller. A successful close confirms completion according to
+the backend's contract. Later cancellation leaves that result valid.
+
+The backend controls visibility, atomicity, and durability. A transport error
+or cancellation during finalization can occur after the server published the
+file, so the destination state may be uncertain. A write failure can also leave
+partial data on backends that publish buffered bytes during cleanup. Core makes
+one replacement attempt. See the [non-native export verification](verification-non-native-export.md)
+for WebDAV results and backend limits.
 
 Use `DecoderRegistry.inspect()` for the actual source format and
 capabilities. `installed_codecs()` returns the runtime libvips operation

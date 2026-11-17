@@ -19,6 +19,6 @@ G_GNUC_INTERNAL void image_export_transfer_async(const char *path, GFile *destin
                                                 GCancellable *cancel,
                                                 GAsyncReadyCallback callback, gpointer user_data);
 /* Successful NULL means native publication completed. Otherwise, finish transfers ownership
- * of the validated bytes with the input already closed. The caller publishes them through GIO,
- * which retains its own reference for the asynchronous replacement. */
+ * of the validated bytes with the input already closed. The caller keeps the bytes alive
+ * through asynchronous GIO publication. */
 G_GNUC_INTERNAL GBytes *image_export_transfer_finish(GAsyncResult *result, GError **error);

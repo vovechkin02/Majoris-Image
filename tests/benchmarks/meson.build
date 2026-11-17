@@ -1,4 +1,9 @@
-benchmark_program = executable('majoris-image-benchmark', 'benchmark.vala', dependencies: core_api)
+benchmark_program = executable(
+  'majoris-image-benchmark',
+  'benchmark.vala',
+  dependencies: core_api,
+  vala_args: ['--pkg', 'posix'],
+)
 native_benchmark = executable(
   'majoris-image-native-benchmark',
   'benchmark-native.c',
@@ -44,10 +49,18 @@ workloads = [
 
 transfer_benchmark = executable(
   'benchmark-export-transfer',
-  ['benchmark-export-transfer.vala', 'benchmark-export-bytes.c', '../../src/core/export-transfer.c'],
+  [
+    'benchmark-export-transfer.vala',
+    'benchmark-export-bytes.c',
+    '../../src/core/export-transfer.c',
+  ] + remote_publication_sources,
   dependencies: core_api,
   vala_args: ['--pkg', 'posix'],
-  link_args: ['-Wl,--wrap=g_bytes_new_take'],
+  link_args: [
+    '-Wl,--wrap=g_bytes_new_take',
+    '-Wl,--wrap=g_file_replace_async',
+    '-Wl,--wrap=g_file_replace_finish',
+  ],
 )
 benchmark(
   'Encoded export transfer memory and throughput',

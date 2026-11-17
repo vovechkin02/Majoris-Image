@@ -2,14 +2,15 @@
 
 ## A. Backend investigation
 
-**The current GIO compatibility path remains in use.** The WebDAV
+**Core keeps the validated full-buffer compatibility path and now checks
+explicit stream close.** The WebDAV
 investigation found a bounded upload mechanism, but did not establish a
 compatible transaction for safely publishing it to arbitrary destinations.
-The stream and staging experiments run only in the test executable.
+The chunked and staged variants run in the benchmark executable.
 
 | Backend or path | Client and backend memory bounded | Existing file protected during writing | Incomplete upload discard | Atomic final publication | Remote cleanup | Compatible and eligible |
 | --- | --- | --- | --- | --- | --- | --- |
-| GVfs WebDAV, direct replacement stream | Core yes; GVfs no | Yes before PUT in this fixture | No; canceled close can publish buffered bytes | Loopback fixture uses a same-directory rename; general server behavior unknown | No client-created staging object in direct mode | No |
+| GVfs WebDAV, chunked direct replacement probe | Core yes; GVfs no | Yes before PUT in this fixture | No; canceled close can publish buffered bytes | Loopback fixture uses a same-directory rename; general server behavior unknown | No client-created staging object in direct mode | No |
 | GVfs WebDAV, stream to sibling and MOVE | Core yes; GVfs no | Yes in this fixture until MOVE | Sibling can be deleted when permitted | Same-directory rename on this fixture | Limited; DELETE can fail | Different operations and permissions; no |
 | GVfs WebDAV, local file copy (GVfs push) to sibling and MOVE | Bounded upload observed in the GVfs push path | Yes in this fixture until MOVE | Sibling can be deleted when permitted | Same-directory rename on this fixture | Limited; DELETE can fail | Different operations, pathname reopen, and permissions; no |
 | GVfs SMB | Not measured | Unknown in deployment; the source includes an in-place truncate fallback | Unknown | Source includes unlink and rename as separate operations | Unknown | No |
@@ -58,8 +59,8 @@ let Core infer those properties for a destination from the URI or mount.
 
 ## B. Implementation and ownership
 
-No production transfer or encoder code changed. The ownership comment in
-`src/core/export-transfer.h` now specifies that a successful NULL completes
+The transfer contract in `src/core/export-transfer.h` specifies that a
+successful NULL completes
 native publication and a non-NULL result transfers a validated owned
 `GBytes` reference. The transfer task opens the completed worker output
 safely, bounds it to 268,435,456 bytes, checks the input descriptor and the
@@ -67,13 +68,20 @@ complete read, and closes the descriptor before returning the bytes. The
 compatibility path allocates one payload of the exact output size.
 `g_bytes_new_take()` takes ownership of that allocation without copying it.
 
-The encoder checks cancellation before it starts GIO publication. GIO
-retains a reference to the bytes for asynchronous replacement with no
-expected ETag, no backup, `FileCreateFlags.NONE`, and the caller's
-`Cancellable`. The encoder releases its reference and cleans the worker
-job directory and source handle when the operation returns. GIO's
-reference covers stream cleanup even if a write error completes the
-caller before close finishes.
+The encoder checks cancellation before opening a replacement stream with no
+expected ETag, no backup, and `FileCreateFlags.NONE`. The publication coroutine
+holds the bytes and lends their backing storage to `write_all_async()`. It
+awaits `close_async()` with the same caller cancellable after a complete write.
+The encoder cleans the worker job directory and releases the source handle
+after publication returns. Native publication still completes inside the
+transfer task.
+
+After a write error, the coroutine awaits one cleanup close with an already
+canceled token and preserves the original error. GLib's stream disposal can
+close an open stream, and GIO offers no generic abort. Even a canceled close
+can publish buffered bytes, so cleanup does not establish rollback. Core
+releases the stream after close completes and reports secondary cleanup
+errors at debug level.
 
 The other source changes are confined to tests and benchmarks.
 
@@ -108,7 +116,11 @@ the caller already received success. The former can coincide with publication.
 The tested GLib 2.84.4 asynchronous bytes helper discards the output-stream
 close error. Its result can therefore be successful when a DAV PUT failed
 at close. This limitation is present in the project's supported minimum
-GLib 2.76 source as well. The fallback preserves that upstream behavior.
+GLib 2.76 source as well. The current encoder observes the close result and
+preserves the underlying error. A successful close is the completion boundary.
+Transport errors and cancellation can leave the server outcome indeterminate.
+The client makes one replacement attempt and leaves the destination for the
+backend to resolve.
 The probe checks the server status and retrieved bytes independently of the
 client's return. [GLib 2.84.4 bytes replacement](https://github.com/GNOME/glib/blob/2.84.4/gio/gfile.c#L8117)
 [GLib 2.76 bytes replacement](https://github.com/GNOME/glib/blob/2.76.0/gio/gfile.c#L7769)
@@ -121,7 +133,7 @@ readback of the same artifact. Remote filesystem ownership, permissions,
 ETag evolution, and server-side resource properties are separate and were
 not verified across servers.
 
-## D. Performance
+## D. Historical streaming investigation performance
 
 Baseline revision `dd3f5f9ace61203708e7dde02887182ca7e18f33`.
 Debian 13.5 on Linux 6.18.58.1 WSL2 x86-64, GCC 14.2.0, Meson 1.7.0,
@@ -135,7 +147,8 @@ exclude fixture setup, mounting, and readback.
 
 ### Completed-output publication
 
-The production path is the measured fallback for both the baseline and
+At the time of this investigation, the production path was the bytes helper
+for both the baseline and
 this revision. The direct columns represent the experimental stream.
 Median times and ranges are in milliseconds. RSS values are in MiB.
 
@@ -186,7 +199,7 @@ generated large TIFF. Times cover `EncoderRegistry.encode()`, including
 worker launch, encoding, publication, and cleanup. Core peaks are
 29.4 MiB for both destinations in all rows. Worker and daemon peaks are
 sampled independently. These native results provide an end-to-end
-reference. The production WebDAV path uses the same fallback after the
+reference. The historical WebDAV path used the bytes helper after the
 investigation as before it.
 
 | Format | Native time (ms) | WebDAV time (ms) | Worker peak native / WebDAV (MiB) | WebDAV daemon peak (MiB) |
@@ -196,7 +209,7 @@ investigation as before it.
 | JPEG XL | 479.61 | 458.77 | 179.2 / 179.3 | 18.7 |
 | Ultra HDR | 374.64 | 393.40 | 159.1 / 159.1 | 19.7 |
 
-## E. Regression results
+## E. Historical streaming investigation results
 
 The transfer matrix completed 144 successful WebDAV publications across
 creation and replacement. Each sample read back the expected size and SHA-256
@@ -297,3 +310,157 @@ observable with explicit stream close but the tested direct stream can
 publish a partial image after cancellation. A future staged path needs
 equivalent publication permissions and metadata, reliable staging cleanup,
 an abortable finalization contract, and a protected verified input handle.
+
+## G. Explicit-close verification
+
+The pre-change WebDAV probe and the corrected public PNG export ran on Debian
+13 with GLib 2.84.4 and GVfs over a private D-Bus session. Each fault was
+tested with a new and an existing destination. “Previous state” means an
+existing destination retained its bytes, or a new destination stayed absent.
+
+| Scenario | Previous client | Explicit-close client | Fixture outcome |
+| --- | --- | --- | --- |
+| Successful PUT | Success | Success | Complete output |
+| HTTP 403 | False success | Permission denied | Previous state |
+| HTTP 507 | False success | Insufficient Storage error | Previous state |
+| Connection dropped before commit | False success | Stream protocol error | Previous state |
+| Connection dropped after commit | False success | Stream protocol error | Complete output |
+| Cancellation before upload | Canceled | Canceled | Previous state, zero PUTs |
+| Cancellation while writing | Canceled in direct-stream probe | Canceled in deterministic stream probe | Direct WebDAV close can still publish a prefix |
+| Cancellation while close was pending | Canceled | Canceled | Previous state after the fixture rejected the PUT |
+| Cancellation after server commit | Canceled | Canceled | Complete output |
+| Cancellation after client success | Success | Success | Complete output |
+
+The connection-loss tests also caused the GVfs daemon to exit on this host.
+The probe remounted between samples and sampled server state independently.
+A backend error alone cannot establish which connection-loss outcome occurred.
+
+| Fault | Domain and code | Message |
+| --- | --- | --- |
+| 403 | `g-io-error-quark:14` | HTTP Client Error: Forbidden |
+| 507 | `g-io-error-quark:0` | HTTP Error: Insufficient Storage |
+| 500 | `g-io-error-quark:0` | HTTP Error: Internal Server Error |
+| Authentication rejected on PUT | `g-io-error-quark:14` | HTTP Client Error: Unauthorized |
+| Missing parent rejected on PUT | `g-io-error-quark:0` | HTTP Error: Conflict |
+| Unsupported destination | `g-io-error-quark:15` | Operation not supported |
+| Injected replacement open rejection | `g-io-error-quark:14` | Injected replacement open failure |
+| Injected first or later write rejection | `g-io-error-quark:12` | Injected write failure |
+| Disconnect and lost response | `g-io-error-quark:0` | Error in stream protocol: End of stream |
+| Caller cancellation | `g-io-error-quark:19` | Operation was cancelled |
+| Missing worker output after successful worker exit | `image-kit-image-error-quark:11` | Decoder did not produce an output file |
+
+These are observed mappings on this host. The WebDAV regression checks failure
+independently of the numeric code. The benchmark also links a disposable
+stream double to the same private publication helper. It can reject open,
+return short writes, fail the first or a later write, and cancel during writing.
+The close handler checks the cleanup token and injects a second failure so the
+test can verify that the original write error survives.
+
+The final run completed 44 WebDAV probe cases, five deterministic stream
+cases, and 22 fault-matrix calls through the public encoder. It also ran four
+public format comparisons. GVfs deferred the authentication and missing
+parent responses to PUT in this fixture. The synthetic open failure checks
+the earlier replacement error path independently.
+
+### Explicit-close performance
+
+One sample per mode and destination on Debian 13. Times are milliseconds and
+RSS values are MiB. Total time includes validation. The old GLib helper only
+exposes its aggregate replacement time. Open, write, and close timings are
+for explicit publication.
+
+| Payload | Destination | Total before / after | Core peak RSS before / after | GVfs sampled peak before / after | Open / write / close |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 1 MiB | New | 6.39 / 6.19 | 29.1 / 29.1 | 19.0 / 21.0 | 2.50 / 1.06 / 1.81 |
+| 1 MiB | Existing | 6.10 / 6.02 | 29.2 / 29.2 | 25.2 / 26.2 | 2.58 / 0.72 / 1.89 |
+| 16 MiB | New | 55.83 / 55.36 | 29.7 / 29.7 | 37.9 / 53.9 | 2.72 / 12.66 / 31.34 |
+| 16 MiB | Existing | 57.32 / 54.69 | 29.7 / 29.7 | 102.2 / 118.2 | 2.82 / 11.86 / 31.39 |
+| 64 MiB | New | 218.35 / 213.82 | 71.9 / 71.9 | 85.9 / 154.0 | 3.17 / 40.65 / 142.96 |
+| 64 MiB | Existing | 206.57 / 212.83 | 71.9 / 71.9 | 346.1 / 410.1 | 2.80 / 38.52 / 142.60 |
+| 128 MiB | New | 417.34 / 417.18 | 136.1 / 135.9 | 149.9 / 277.9 | 2.75 / 68.50 / 288.96 |
+| 128 MiB | Existing | 409.90 / 375.17 | 136.0 / 135.9 | 662.2 / 790.2 | 3.08 / 103.41 / 213.54 |
+| 256 MiB | New | 876.89 / 840.19 | 264.1 / 264.0 | 277.9 / 537.9 | 3.38 / 130.45 / 596.55 |
+| 256 MiB | Existing | 725.19 / 711.17 | 263.9 / 263.9 | 1302.2 / 1558.2 | 2.84 / 128.57 / 475.69 |
+
+GVfs peak figures include allocator retention across modes on the same mount.
+They cannot isolate the memory cost of an individual publication. The Core
+peak and the allocation probe show one full-sized payload at the 256 MiB
+limit. Exact size and SHA-256 were verified by readback on success.
+
+These 16 MiB fault samples used a new destination. Wall time includes process
+startup and any fixture response hold. All timings are milliseconds.
+
+| Fault | Wall time before / after | Explicit open / write / close |
+| --- | ---: | ---: |
+| HTTP 403 | 86.11 / 74.75 | 2.80 / 12.66 / 41.22 |
+| HTTP 507 | 80.89 / 75.10 | 2.60 / 13.02 / 38.32 |
+| Disconnect before commit | 42.27 / 47.68 | 2.83 / 12.62 / 15.28 |
+| Lost response after commit | 79.70 / 85.03 | 2.53 / 11.47 / 54.95 |
+| Cancellation before commit | 142.45 / 142.63 | 2.58 / 14.47 / 105.65 |
+| Cancellation after commit | 173.70 / 180.35 | 3.01 / 12.72 / 143.80 |
+
+| Public worker export | Total before / after | Core peak RSS before / after | Open / write / close |
+| --- | ---: | ---: | ---: |
+| PNG | 208.53 / 249.84 | 28.4 / 30.2 | 2.81 / 0.30 / 1.10 |
+| TIFF | 209.77 / 220.26 | 28.4 / 30.2 | 2.75 / 0.21 / 1.47 |
+| JPEG XL | 458.36 / 663.84 | 28.4 / 30.2 | 2.74 / 0.13 / 1.40 |
+| Ultra HDR | 356.68 / 426.30 | 28.9 / 30.2 | 2.97 / 1.32 / 1.74 |
+
+The real exports used the same 2500 × 1250 crop. Native and WebDAV outputs
+matched decoded dimensions, sample format, pixel SHA-256, and inspected
+metadata fields. Libvips reads the 8-bit base image in Ultra HDR. The other
+three formats decoded to 16-bit unsigned samples. Republishing the same
+encoded artifact independently verified exact file bytes. The public
+before-and-after measurements came from separate runs. Total latency
+includes worker execution and varies with host load.
+
+### Regression commands
+
+```sh
+profiles=/tmp/majoris-remote.qoIImS
+b="$profiles/build"
+meson compile -C "$b" -j 4
+dbus-run-session -- python3 -B tests/benchmarks/benchmark_remote_export.py \
+  "$b/tests/benchmarks/benchmark-export-transfer" tests/fixtures/rgb8.png \
+  --sizes 1024 1048576 16777216 67108864 134217728 268435456 --samples 1 \
+  --public-benchmark "$b/tests/benchmarks/majoris-image-benchmark" \
+  --worker "$b/src/worker/majoris-image-worker" \
+  --fault-worker "$b/tests/security/worker-fault" --source "$b/tests/large.tiff" \
+  --formats png tiff jxl uhdr --output /tmp/majoris-close-final.json
+python3 tests/release/qualify.py "$profiles/headless" --variant headless --jobs 3
+python3 tests/release/qualify.py "$profiles/native" --variant native --jobs 3
+python3 tests/release/qualify.py "$profiles/release" --variant release --jobs 5 --installed
+meson compile -C "$profiles/strict" -j 2
+meson compile -C "$profiles/sanitizers" -j 3
+meson test -C "$profiles/sanitizers" --suite unit --print-errorlogs
+meson test -C "$profiles/sanitizers" \
+  'Encoded export transfer validation and publication' --print-errorlogs
+cc -std=gnu11 -Wall -Wextra -Wpedantic -Werror -fsyntax-only \
+  $(pkg-config --cflags gio-2.0) tests/benchmarks/benchmark-export-bytes.c
+DEB_BUILD_OPTIONS="parallel=4 noclean" dpkg-buildpackage -us -uc -b
+```
+
+Headless qualification passed 14 tests and verified 280 Core exports.
+Glycin-disabled GTK qualification passed 24 tests and verified 280 Core and
+77 GTK exports. Both profiles had zero failures or skips. Core and GTK
+GIR and VAPI files matched the pre-change artifacts byte for byte.
+
+The focused export-transfer regression and all five deterministic GIO stream
+cases passed under ASan/UBSan. In the full sanitized unit run, six tests passed
+and the separate job scheduler test reported a 40-byte LeakSanitizer finding
+from `g_rec_mutex_lock()`. The strict C fixture compile passed. The repository
+strict build stopped on existing Vala warnings in decoder and worker sources.
+The generated C for the Vala `Bytes.get_data()` binding also emits a
+const-qualification warning for the borrowed payload.
+
+The standard Debian profile built the binary packages in a disposable source
+copy with Git-tracked file modes. Release qualification passed all 25 required
+tests. Its functional suite passed 28 tests and its performance suite passed
+35 benchmarks, both with zero failures or skips. It verified 285 Core and 77
+GTK exports.
+The installed headless, Vala GTK, C GtkBuilder, introspection, Photos export,
+and thumbnail checks passed in an isolated view of the extracted packages.
+SMB, other live remote backends, and a Wayland compositor were outside this
+run. The validated full-buffer path continues to support arbitrary GIO
+destinations. Remote streaming still needs a compatible validation and
+publication contract that addresses partial writes across backends.

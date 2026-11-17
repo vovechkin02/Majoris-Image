@@ -204,8 +204,9 @@ It needs `gio`, a GVfs WebDAV backend, and a disposable D-Bus session on Linux.
 It builds deterministic PNGs with exact encoded sizes, checks SHA-256 by HTTP
 readback, samples the GVfs daemon separately, and verifies destination bytes and
 staging cleanup after injected faults. Streaming and staged promotion are
-experiments in the benchmark executable. The supported export path uses the
-validated GIO bytes replacement.
+experiments in the benchmark executable. The validated full-payload probe
+compares the old bytes helper with explicit open, write, and close. Finalization
+errors must fail the explicit-close probe and the public encoder.
 
 ```sh
 meson compile -C build
@@ -225,9 +226,12 @@ decode the downloaded artifacts, add the following arguments and have
 ```text
 --public-benchmark build/tests/benchmarks/majoris-image-benchmark
 --worker build/src/worker/majoris-image-worker
+--fault-worker build/tests/security/worker-fault
 --source build/tests/large.tiff
 ```
 
+The fault worker exits successfully without creating an encoded file so the
+runner can verify that validation fails before any PUT and cleans up the job.
 See the [non-native export verification](verification-non-native-export.md)
 for results and backend limitations.
 

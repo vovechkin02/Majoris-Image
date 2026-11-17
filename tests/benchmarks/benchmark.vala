@@ -42,8 +42,11 @@ private void record_phase (string stage, int64 started) {
         stage, get_monotonic_time () - started);
 }
 
-private async void measure_export (string format, ImageSource source, File? remote)
+private async void measure_export (string workload, ImageSource source, File? remote)
     throws Error {
+    string[] fields = workload.split ("-", 2);
+    string format = fields[0];
+    string action = fields.length == 2 ? fields[1] : "";
     var options = new ExportOptions ();
     options.format = format;
     options.lossless = true;
@@ -58,7 +61,23 @@ private async void measure_export (string format, ImageSource source, File? remo
         destination.replace_contents ("existing".data, null, false, FileCreateFlags.NONE, null);
     }
     int64 started = get_monotonic_time ();
-    yield new EncoderRegistry ().encode (source, destination, options, transform);
+    var cancel = new Cancellable ();
+    uint watch = Unix.signal_add (Posix.Signal.USR1, () => {
+        cancel.cancel ();
+        return Source.CONTINUE;
+    });
+    try {
+        if (action == "precanceled") {
+            cancel.cancel ();
+        }
+        yield new EncoderRegistry ().encode (source, destination, options, transform, cancel);
+        if (action == "cancel-after-success") {
+            cancel.cancel ();
+        }
+    } finally {
+        stdout.printf ("Caller canceled: %s\n", cancel.is_cancelled ().to_string ());
+        Source.remove (watch);
+    }
     record_phase ("workload", started);
 }
 
@@ -306,8 +325,8 @@ int main (string[] args) {
         try {
             measure.end (response);
         } catch (Error e) {
-            stderr.printf ("%s\n", e.message);
-            result = 1;
+            stderr.printf ("%s:%d: %s\n", e.domain.to_string (), e.code, e.message);
+            result = (remote != null && e is IOError.CANCELLED) ? 3 : 1;
         }
         loop.quit ();
     });

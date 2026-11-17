@@ -27,7 +27,6 @@ from run_benchmarks import descendants, disk_usage, memory_kib
 
 CHUNK_BYTES = 256 * 1024
 MIB = 1024**2
-PREVIOUS = b"previous export"
 
 
 def digest(path: Path) -> str:
@@ -57,9 +56,10 @@ def make_png(reference: Path, output: Path, size: int) -> str:
 
 
 class DavServer(ThreadingHTTPServer):
-    def __init__(self, store: Path):
+    def __init__(self, store: Path, previous: bytes):
         super().__init__(("127.0.0.1", 0), DavHandler)
         self.store = store
+        self.previous = previous
         self.fault = ""
         self.put_started = Event()
         self.put_finished = Event()
@@ -136,7 +136,14 @@ class DavHandler(BaseHTTPRequestHandler):
         fault = self.server.fault
         if fault != "cancel-after-server-commit":
             self.server.put_started.set()
-        if fault in ("forbidden", "quota", "cancel-close"):
+        rejections = {
+            "forbidden": 403,
+            "quota": 507,
+            "protocol-error": 500,
+            "missing-parent": 409,
+            "authentication": 401,
+        }
+        if fault in rejections or fault == "cancel-close":
             remaining = int(self.headers["Content-Length"])
             while remaining:
                 chunk = self.rfile.read(min(CHUNK_BYTES, remaining))
@@ -146,8 +153,10 @@ class DavHandler(BaseHTTPRequestHandler):
             if fault == "cancel-close":
                 self.server.release.wait(15)
                 self.respond(503)
+            elif fault == "authentication":
+                self.respond(401, WWW_Authenticate='Basic realm="export-probe"')
             else:
-                self.respond({"forbidden": 403, "quota": 507}[fault])
+                self.respond(rejections[fault])
             return
         if fault == "disconnect":
             self.rfile.read(1)
@@ -281,6 +290,14 @@ def collect(
             phases[name] = {"us": int(duration), "quantity": int(quantity)}
     return {
         "status": process.returncode,
+        "caller_canceled": next(
+            (
+                line.endswith("true")
+                for line in lines
+                if line.startswith("Caller canceled: ")
+            ),
+            None,
+        ),
         "wall_seconds": elapsed,
         "cpu_seconds": usage.ru_utime + usage.ru_stime,
         "core_peak_rss_kib": usage.ru_maxrss,
@@ -322,7 +339,7 @@ def sample(
     dav.release.clear()
     target = dav.store / "export"
     if existing:
-        target.write_bytes(PREVIOUS)
+        target.write_bytes(dav.previous)
     with tempfile.TemporaryDirectory(dir=root) as work:
         staging = Path(work) / "tmp"
         staging.mkdir()
@@ -348,10 +365,15 @@ def sample(
     result["remote_leftovers"] = sorted(
         path.name for path in dav.store.iterdir() if path != target
     )
-    result["bytes_at_destination"] = target.stat().st_size if target.exists() else 0
-    result["sha256"] = (
-        readback(dav.uri + "/export", root / "readback") if target.exists() else None
-    )
+    exists = target.exists()
+    result["destination_exists"] = exists
+    result["bytes_at_destination"] = target.stat().st_size if exists else 0
+    result["sha256"] = None
+    if exists:
+        downloaded = root / "readback"
+        result["sha256"] = readback(dav.uri + "/export", downloaded)
+        if downloaded.stat().st_size != result["bytes_at_destination"]:
+            raise RuntimeError(("Readback length did not match the server", result))
     return result
 
 
@@ -365,6 +387,7 @@ def successful_samples(
         by_mode = {
             mode: []
             for mode in (
+                "remote-bytes-baseline",
                 "remote-fallback",
                 "remote-stream",
                 "remote-stage",
@@ -383,6 +406,7 @@ def successful_samples(
                 )
                 if (
                     result["status"]
+                    or result["bytes_at_destination"] != size
                     or result["sha256"] != expected
                     or result["remote_leftovers"]
                     or result["backend_exited"]
@@ -412,7 +436,7 @@ def summarize(samples: list[dict], size: int) -> dict:
 def failure_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
     fixture = root / "encoded.png"
     complete = make_png(args.png, fixture, 16 * MIB)
-    previous = hashlib.sha256(PREVIOUS).hexdigest()
+    previous = hashlib.sha256(dav.previous).hexdigest()
     cases = [
         ("remote-fallback-precanceled", "", 3),
         ("remote-cancel-write", "", 3),
@@ -424,6 +448,10 @@ def failure_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dic
         ("remote-stream", "disconnect", 1),
         ("remote-fallback", "forbidden", 1),
         ("remote-fallback", "quota", 1),
+        ("remote-fallback", "protocol-error", 1),
+        ("remote-fallback", "authentication", 1),
+        ("remote-fallback", "missing-parent", 1),
+        ("remote-fallback", "invalid-destination", 1),
         ("remote-stream", "forbidden", 1),
         ("remote-fallback", "lost-response", 1),
         ("remote-fallback", "cancel-after-server-commit", 3),
@@ -436,8 +464,13 @@ def failure_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dic
     results = {}
     for mode, fault, status in cases:
         for existing in (False, True):
+            uri = dav.uri + "/export"
+            if fault == "invalid-destination":
+                uri = "resource:///imagekit/nonexistent/export"
+            elif fault == "missing-parent":
+                uri = dav.uri + "/missing/export"
             result = sample(
-                [args.executable, mode, fixture, dav.uri + "/export"],
+                [args.executable, mode, fixture, uri],
                 dav,
                 root,
                 existing,
@@ -457,20 +490,52 @@ def failure_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dic
                     for offset in range(0, size, CHUNK_BYTES):
                         checksum.update(source.read(min(CHUNK_BYTES, size - offset)))
                     expected_hashes.add(checksum.hexdigest())
-            allowed_statuses = {status}
-            # GLib 2.84.4 ignores close errors in its bytes replacement helper.
-            if mode == "remote-fallback" and status == 1:
-                allowed_statuses.add(0)
             if (
-                result["status"] not in allowed_statuses
+                result["status"] != status
                 or result["sha256"] not in expected_hashes
             ):
                 raise RuntimeError((mode, fault, existing, result))
+            if fault == "invalid-destination" or mode.endswith("-precanceled"):
+                if any(method == "PUT" for method, *_ in result["requests"]):
+                    raise RuntimeError((mode, fault, result))
             if bool(result["remote_leftovers"]) != (fault == "cleanup-denied"):
                 raise RuntimeError(result)
             results[
                 f"{mode}/{fault or 'cancel'}/{'replace' if existing else 'create'}"
             ] = result
+    return results
+
+
+def stream_faults(args: argparse.Namespace, root: Path) -> dict:
+    fixture = root / "encoded.png"
+    make_png(args.png, fixture, MIB)
+    cases = {
+        "short-writes": (0, ""),
+        "open-denied": (1, "Injected replacement open failure"),
+        "first-write": (1, "Injected write failure"),
+        "later-write": (1, "Injected write failure"),
+        "cancel-write": (3, ""),
+    }
+    results = {}
+    for fault, (status, message) in cases.items():
+        process = subprocess.run(
+            [args.executable, "remote-fallback", fixture, f"imagekit-probe:///{fault}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        canceled = "Caller canceled: true" in process.stdout.splitlines()
+        if (
+            process.returncode != status
+            or message not in process.stderr
+            or canceled != (fault == "cancel-write")
+        ):
+            raise RuntimeError((fault, process))
+        results[fault] = {
+            "status": process.returncode,
+            "caller_canceled": canceled,
+            "diagnostics": process.stderr.splitlines(),
+        }
     return results
 
 
@@ -549,9 +614,66 @@ def public_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dict
     return results
 
 
+def public_faults(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
+    cases = [
+        ("export-png", "", 0, True),
+        ("export-png", "forbidden", 1, False),
+        ("export-png", "quota", 1, False),
+        ("export-png", "protocol-error", 1, False),
+        ("export-png", "disconnect", 1, False),
+        ("export-png", "lost-response", 1, True),
+        ("export-png", "cancel-close", 3, False),
+        ("export-png", "cancel-after-server-commit", 3, True),
+        ("export-png-precanceled", "", 3, False),
+        ("export-png-cancel-after-success", "", 0, True),
+    ]
+    cases.append(("export-png", "invalid-worker-output", 1, False))
+    results = {}
+    previous = hashlib.sha256(dav.previous).hexdigest()
+    expected_image = None
+    for mode, fault, status, committed in cases:
+        worker = args.fault_worker if fault == "invalid-worker-output" else args.worker
+        for existing in (False, True):
+            result = sample(
+                [args.public_benchmark, mode, args.source, dav.uri + "/export"],
+                dav,
+                root,
+                existing,
+                fault,
+                worker,
+            )
+            if result["status"] != status or result["remote_leftovers"]:
+                raise RuntimeError((mode, fault, existing, result))
+            canceled = status == 3 or mode.endswith("-cancel-after-success")
+            if result["caller_canceled"] != canceled:
+                raise RuntimeError((mode, fault, existing, result))
+            if committed:
+                image = decode(root / "readback", root)
+                if expected_image is None:
+                    expected_image = image
+                if image != expected_image or result["bytes_at_destination"] == 0:
+                    raise RuntimeError((mode, fault, existing, result))
+            elif result["sha256"] != (previous if existing else None):
+                raise RuntimeError((mode, fault, existing, result))
+            puts = [request for request in result["requests"] if request[0] == "PUT"]
+            before_put = mode.endswith("-precanceled") or fault == "invalid-worker-output"
+            if len(puts) != (0 if before_put else 1):
+                raise RuntimeError((mode, fault, result))
+            if fault == "invalid-worker-output" and not any(
+                "Decoder did not produce an output file" in line
+                for line in result["diagnostics"]
+            ):
+                raise RuntimeError((mode, fault, result))
+            results[f"{mode}/{fault or 'normal'}/{'replace' if existing else 'create'}"] = result
+    return results
+
+
 @contextmanager
-def loopback_mount(root: Path) -> Iterator[DavServer]:
-    with tempfile.TemporaryDirectory(dir=root) as store, DavServer(Path(store)) as dav:
+def loopback_mount(root: Path, previous: bytes) -> Iterator[DavServer]:
+    with (
+        tempfile.TemporaryDirectory(dir=root) as store,
+        DavServer(Path(store), previous) as dav,
+    ):
         thread = Thread(target=dav.serve_forever, daemon=True)
         thread.start()
         try:
@@ -570,6 +692,7 @@ def loopback_mount(root: Path) -> Iterator[DavServer]:
 
 def run(args: argparse.Namespace) -> dict:
     workloads = {}
+    previous = args.png.read_bytes()
     with tempfile.TemporaryDirectory(prefix="imagekit-webdav-") as directory:
         root = Path(directory)
         results = {
@@ -586,14 +709,17 @@ def run(args: argparse.Namespace) -> dict:
             "workloads": workloads,
         }
         for size in args.sizes:
-            with loopback_mount(root) as dav:
+            with loopback_mount(root, previous) as dav:
                 workloads.update(successful_samples(args, dav, root, size))
         if not args.skip_faults:
-            with loopback_mount(root) as dav:
+            results["stream_faults"] = stream_faults(args, root)
+            with loopback_mount(root, previous) as dav:
                 results["failures"] = failure_samples(args, dav, root)
         if args.public_benchmark:
-            with loopback_mount(root) as dav:
+            with loopback_mount(root, previous) as dav:
                 results["public_exports"] = public_samples(args, dav, root)
+                if not args.skip_faults:
+                    results["public_failures"] = public_faults(args, dav, root)
     return results
 
 
@@ -607,6 +733,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--public-benchmark", type=lambda path: Path(path).resolve())
     parser.add_argument("--worker", type=lambda path: Path(path).resolve())
+    parser.add_argument("--fault-worker", type=lambda path: Path(path).resolve())
     parser.add_argument("--source", type=lambda path: Path(path).resolve())
     parser.add_argument("--formats", nargs="+", default=["png", "tiff", "jxl"])
     args = parser.parse_args()
@@ -620,6 +747,8 @@ def main() -> int:
         parser.error(
             "Public exports require --public-benchmark, --worker, and --source"
         )
+    if args.public_benchmark and not args.skip_faults and not args.fault_worker:
+        parser.error("Public export fault cases require --fault-worker")
     os.environ["GVFS_DISABLE_FUSE"] = "1"
     args.output.write_text(json.dumps(run(args), indent=2) + "\n", encoding="utf-8")
     return 0

@@ -20,7 +20,7 @@ namespace ImageKit {
                                                              int64 limit, Cancellable stop)
             throws Error;
 
-        /** Encode a separate file, then move the completed result to its destination. */
+        /** Encode a separate file and publish the completed result to its destination. */
         public async void encode (ImageSource source, File destination, ExportOptions options,
                                   RenderOptions? transform = null, Cancellable? cancel = null) throws Error {
             options.validate ();
@@ -45,10 +45,7 @@ namespace ImageKit {
                         protected_source, MAX_EXPORT_BYTES, stop);
                     // Null means native publication completed. Bytes are validated for GIO.
                     if (payload != null) {
-                        // Backend-specific replacement begins only after validation succeeds.
-                        stop.set_error_if_cancelled ();
-                        yield destination.replace_contents_bytes_async (payload, null, false,
-                            FileCreateFlags.NONE, stop, null);
+                        yield publish_non_native_async (destination, payload, stop);
                     }
                 } finally {
                     OperationProfile.record ("export-transfer", started);

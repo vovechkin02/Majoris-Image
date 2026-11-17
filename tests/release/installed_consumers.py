@@ -84,6 +84,8 @@ def check_headless(env: dict[str, str]) -> None:
         "valac",
         "--pkg",
         CORE_PACKAGE,
+        "--pkg",
+        "posix",
         TESTS / "benchmarks/benchmark.vala",
         "-o",
         "headless",

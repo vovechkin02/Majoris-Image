@@ -48,6 +48,10 @@ typedef enum {
     SOURCE_ALIAS_DURING_COPY,
     SUBSTITUTE_PARENT,
     SUBSTITUTE_STAGING,
+    SOURCE_WRITE_DURING_COPY,
+    SOURCE_WRITE_AFTER_SYNC,
+    SOURCE_DESCRIPTOR_ERROR,
+    SOURCE_PATH_ERROR,
 } TransferFault;
 
 typedef struct {
@@ -56,6 +60,8 @@ typedef struct {
     char *output;
     char *source_path;
     ExportSource *source;
+    struct stat source_before;
+    int source_fd;
     GCancellable *cancel;
     GMainLoop *loop;
     GError *error;
@@ -74,12 +80,16 @@ static int output_fd;
 #define __wrap_openat __wrap_openat64
 #define __real_fstat __real_fstat64
 #define __wrap_fstat __wrap_fstat64
+#define __real_stat __real_stat64
+#define __wrap_stat __wrap_stat64
 #endif
 
 int __real_openat(int fd, const char *path, int flags, ...);
 int __wrap_openat(int fd, const char *path, int flags, ...);
 int __real_fstat(int fd, struct stat *info);
 int __wrap_fstat(int fd, struct stat *info);
+int __real_stat(const char *path, struct stat *info);
+int __wrap_stat(const char *path, struct stat *info);
 int __real_fchown(int fd, uid_t owner, gid_t group);
 int __wrap_fchown(int fd, uid_t owner, gid_t group);
 int __real_fchmod(int fd, mode_t mode);
@@ -103,6 +113,21 @@ int __wrap_renameat2(int old_dir, const char *old_path, int new_dir, const char 
 static void create_competing_file(void)
 {
     g_assert_true(g_file_set_contents(active_fixture->output, "competing export", -1, NULL));
+}
+
+static void set_source_mtime(TransferFixture *fixture, time_t seconds_delta)
+{
+    struct timespec times[] = {fixture->source_before.st_atim, fixture->source_before.st_mtim};
+    times[1].tv_sec += seconds_delta;
+    g_assert_cmpint(utimensat(AT_FDCWD, fixture->source_path, times, 0), ==, 0);
+}
+
+static void overwrite_source(TransferFixture *fixture)
+{
+    int fd = open(fixture->source_path, O_WRONLY | O_CLOEXEC);
+    g_assert_cmpint(fd, >=, 0);
+    g_assert_cmpint(pwrite(fd, "freshness", 9, 0), ==, 9);
+    g_assert_cmpint(close(fd), ==, 0);
 }
 
 int __wrap_openat(int fd, const char *path, int flags, ...)
@@ -137,11 +162,21 @@ int __wrap_openat(int fd, const char *path, int flags, ...)
 
 int __wrap_fstat(int fd, struct stat *info)
 {
+    if (active_fixture != NULL && fd == active_fixture->source_fd &&
+        fault == SOURCE_DESCRIPTOR_ERROR) {
+        errno = EIO;
+        return -1;
+    }
     if (fd == staging_fd && fault == STAGING_STAT_ERROR) {
         errno = EIO;
         return -1;
     }
     int result = __real_fstat(fd, info);
+    if (result == 0 && active_fixture != NULL && active_fixture->source_fd < 0 &&
+        info->st_dev == active_fixture->source_before.st_dev &&
+        info->st_ino == active_fixture->source_before.st_ino) {
+        active_fixture->source_fd = fd;
+    }
     if (result == 0 && fd == staging_fd && fault == STAGING_OWNER_ERROR) {
         info->st_uid ^= 1;
     } else if (result == 0 && fd == staging_fd && fault == STAGING_MODE_ERROR) {
@@ -150,6 +185,15 @@ int __wrap_fstat(int fd, struct stat *info)
         info->st_gid ^= 1;
     }
     return result;
+}
+
+int __wrap_stat(const char *path, struct stat *info)
+{
+    if (fault == SOURCE_PATH_ERROR && g_strcmp0(path, active_fixture->source_path) == 0) {
+        errno = EACCES;
+        return -1;
+    }
+    return __real_stat(path, info);
 }
 
 int __wrap_fchown(int fd, uid_t owner, gid_t group)
@@ -199,6 +243,10 @@ ssize_t __wrap_read(int fd, void *buffer, size_t size)
             g_assert_cmpint(g_remove(active_fixture->output), ==, 0);
             g_assert_cmpint(link(active_fixture->source_path, active_fixture->output), ==, 0);
             break;
+        case SOURCE_WRITE_DURING_COPY:
+            overwrite_source(active_fixture);
+            set_source_mtime(active_fixture, 1);
+            break;
         default:
             break;
         }
@@ -231,6 +279,9 @@ int __wrap_fsync(int fd)
         }
     } else if (fault == CHANGE_MODE_AFTER_SYNC) {
         g_assert_cmpint(g_chmod(active_fixture->output, 0641), ==, 0);
+    } else if (fault == SOURCE_WRITE_AFTER_SYNC) {
+        overwrite_source(active_fixture);
+        set_source_mtime(active_fixture, 1);
     }
     return result;
 }
@@ -293,6 +344,7 @@ static void setup_fixture(TransferFixture *fixture, gconstpointer data)
     fixture->input = g_build_filename(fixture->directory, "encoded", NULL);
     fixture->output = g_build_filename(fixture->directory, "destination", NULL);
     fixture->cancel = g_cancellable_new();
+    fixture->source_fd = -1;
     fixture->loop = g_main_loop_new(NULL, FALSE);
     fault = NO_FAULT;
     reads = 0;
@@ -722,6 +774,138 @@ static void test_pinned_source(TransferFixture *fixture, gconstpointer data)
     assert_checksum(fixture->input, encoded);
 }
 
+static void test_source_freshness(TransferFixture *fixture, gconstpointer data)
+{
+    const char *scenario = data;
+    fixture->source_path = g_build_filename(fixture->directory, "source", NULL);
+    g_autofree char *source_hash = make_pattern(fixture->source_path, 113);
+    g_autofree char *output_hash = make_pattern(fixture->input, CHUNK_BYTES * 2);
+    gboolean new_destination = g_str_equal(scenario, "during-copy");
+    struct stat destination_before;
+    if (!new_destination) {
+        g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
+        g_assert_cmpint(stat(fixture->output, &destination_before), ==, 0);
+    }
+
+    /* Make a subsequent read eligible to update atime even on a relatime mount. */
+    const struct timespec times[] = {{1, 0}, {1000000000, 0}};
+    g_assert_cmpint(utimensat(AT_FDCWD, fixture->source_path, times, 0), ==, 0);
+    g_assert_cmpint(stat(fixture->source_path, &fixture->source_before), ==, 0);
+    prepare_source(fixture);
+    g_assert_no_error(fixture->error);
+    g_assert_cmpint(fixture->source_fd, >=, 0);
+
+    gboolean atime_only = g_str_equal(scenario, "read");
+    gboolean deleted = g_str_equal(scenario, "deleted");
+    gboolean invalid_path = g_str_equal(scenario, "invalid-path");
+    gboolean restored_mtime = g_str_equal(scenario, "restored-mtime");
+    gboolean changed_bytes = FALSE;
+    if (g_str_equal(scenario, "grow") || g_str_equal(scenario, "shrink")) {
+        off_t size = g_str_equal(scenario, "grow") ? 114 : 112;
+        g_assert_cmpint(truncate(fixture->source_path, size), ==, 0);
+        changed_bytes = TRUE;
+    } else if (g_str_equal(scenario, "same-size") || restored_mtime) {
+        overwrite_source(fixture);
+        set_source_mtime(fixture, restored_mtime ? 0 : 1);
+        changed_bytes = TRUE;
+    } else if (g_str_equal(scenario, "mtime-nanoseconds")) {
+        struct timespec modified[] = {times[0], times[1]};
+        modified[1].tv_nsec = 1000;
+        g_assert_cmpint(utimensat(AT_FDCWD, fixture->source_path, modified, 0), ==, 0);
+    } else if (atime_only) {
+        assert_checksum(fixture->source_path, source_hash);
+    } else if (deleted || invalid_path) {
+        g_assert_cmpint(g_remove(fixture->source_path), ==, 0);
+        if (invalid_path) {
+            g_assert_cmpint(symlink("source", fixture->source_path), ==, 0);
+        }
+    } else if (g_str_equal(scenario, "during-copy")) {
+        fault = SOURCE_WRITE_DURING_COPY;
+        changed_bytes = TRUE;
+    } else if (g_str_equal(scenario, "after-sync")) {
+        fault = SOURCE_WRITE_AFTER_SYNC;
+        changed_bytes = TRUE;
+    } else if (g_str_equal(scenario, "descriptor-error")) {
+        fault = SOURCE_DESCRIPTOR_ERROR;
+    } else if (g_str_equal(scenario, "path-error")) {
+        fault = SOURCE_PATH_ERROR;
+    }
+
+    const struct stat *before = &fixture->source_before;
+    struct stat after;
+    g_assert_cmpint(__real_fstat(fixture->source_fd, &after), ==, 0);
+    if (restored_mtime) {
+        g_assert_cmpint(after.st_mtim.tv_sec, ==, before->st_mtim.tv_sec);
+        g_assert_cmpint(after.st_mtim.tv_nsec, ==, before->st_mtim.tv_nsec);
+        if (after.st_ctim.tv_sec == before->st_ctim.tv_sec &&
+            after.st_ctim.tv_nsec == before->st_ctim.tv_nsec) {
+            g_test_skip("Filesystem did not report a ctime change after restoring mtime");
+            return;
+        }
+    } else if (g_str_equal(scenario, "mtime-nanoseconds")) {
+        g_assert_cmpint(after.st_mtim.tv_sec, ==, before->st_mtim.tv_sec);
+        if (after.st_mtim.tv_nsec == before->st_mtim.tv_nsec) {
+            g_test_skip("Filesystem did not retain the subsecond mtime change");
+            return;
+        }
+    }
+
+    run_transfer(fixture);
+    if (atime_only) {
+        g_assert_no_error(fixture->error);
+        assert_checksum(fixture->output, output_hash);
+    } else {
+        int code = G_IO_ERROR_BUSY;
+        const char *diagnostic = "Image source changed";
+        if (fault == SOURCE_DESCRIPTOR_ERROR) {
+            code = g_io_error_from_errno(EIO);
+            diagnostic = "Cannot recheck pinned image source";
+        } else if (fault == SOURCE_PATH_ERROR) {
+            code = G_IO_ERROR_PERMISSION_DENIED;
+            diagnostic = "Cannot recheck image source path";
+        } else if (deleted || invalid_path) {
+            diagnostic = "Image source path changed";
+        }
+        g_assert_error(fixture->error, G_IO_ERROR, code);
+        g_assert_true(g_str_has_prefix(fixture->error->message, diagnostic));
+        if (new_destination) {
+            g_assert_false(g_file_test(fixture->output, G_FILE_TEST_EXISTS));
+        } else {
+            struct stat destination_after;
+            g_assert_cmpint(stat(fixture->output, &destination_after), ==, 0);
+            assert_same_inode(&destination_before, &destination_after);
+            assert_contents(fixture->output, "previous export");
+        }
+    }
+
+    g_assert_cmpint(__real_fstat(fixture->source_fd, &after), ==, 0);
+    assert_same_inode(before, &after);
+    if (changed_bytes) {
+        off_t expected_size = before->st_size;
+        if (g_str_equal(scenario, "grow")) {
+            expected_size++;
+        } else if (g_str_equal(scenario, "shrink")) {
+            expected_size--;
+        }
+        g_assert_cmpint(after.st_size, ==, expected_size);
+        g_assert_true(after.st_size != before->st_size ||
+                      after.st_mtim.tv_sec != before->st_mtim.tv_sec ||
+                      after.st_mtim.tv_nsec != before->st_mtim.tv_nsec ||
+                      after.st_ctim.tv_sec != before->st_ctim.tv_sec ||
+                      after.st_ctim.tv_nsec != before->st_ctim.tv_nsec);
+    } else if (atime_only) {
+        assert_checksum(fixture->source_path, source_hash);
+        if (after.st_atim.tv_sec == before->st_atim.tv_sec &&
+            after.st_atim.tv_nsec == before->st_atim.tv_nsec) {
+            g_test_message("Source reads did not advance atime on this mount");
+        }
+    }
+
+    g_clear_pointer(&fixture->source, image_export_source_free);
+    g_assert_cmpint(fcntl(fixture->source_fd, F_GETFD), ==, -1);
+    g_assert_cmpint(errno, ==, EBADF);
+}
+
 static void test_permissions(TransferFixture *fixture, gconstpointer data)
 {
     const char *kind = data;
@@ -1015,6 +1199,15 @@ int main(int argc, char **argv)
                setup_fixture, test_preserve_different_group, teardown_fixture);
     g_test_add("/export-transfer/source-descriptor-survives-path-replacement", TransferFixture,
                NULL, setup_fixture, test_pinned_source, teardown_fixture);
+    const char *freshness[] = {
+        "read", "grow", "shrink", "same-size", "mtime-nanoseconds", "restored-mtime",
+        "during-copy", "after-sync", "deleted", "invalid-path", "descriptor-error", "path-error",
+    };
+    for (guint index = 0; index < G_N_ELEMENTS(freshness); index++) {
+        g_autofree char *name = g_strconcat("/export-transfer/source-", freshness[index], NULL);
+        g_test_add(name, TransferFixture, freshness[index], setup_fixture, test_source_freshness,
+                   teardown_fixture);
+    }
     g_test_add("/export-transfer/preserve-access-acl", TransferFixture, NULL,
                setup_fixture, test_access_acl, teardown_fixture);
     g_test_add("/export-transfer/drop-user-attribute", TransferFixture, NULL,

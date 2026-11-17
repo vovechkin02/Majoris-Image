@@ -1,5 +1,147 @@
 # Bounded export transfer verification
 
+## Native source freshness
+
+The preceding transaction pinned the source and checked only the device and
+inode reached by the original pathname before publication. Same-inode writes
+could pass that check. Now, after the staged output is synchronized and closed
+and destination revalidation passes, Core checks both `fstat()` on the pinned
+descriptor and `stat()` on the original pathname. Both must match the original
+regular-file type, device, inode, size, and nanosecond mtime and ctime captured
+by preflight. Mode, ownership, and link count are outside the explicit source
+comparison. Their usual ctime effects can still invalidate an export. Atime is
+ignored because encoding itself can advance it.
+
+Source changes, a missing path, a broken parent component, and symlink loops
+return `G_IO_ERROR_BUSY`. Other query errors retain the errno-to-GIO mapping
+and identify which check failed. Source rejection leaves the destination
+untouched and uses the existing staging and worker cleanup paths. The
+cancellation check still runs before rename.
+
+Documents and thumbnails use GIO source stamps based on backend-provided URI,
+identity, ETag, size, and microsecond timestamps. Native-to-native export uses
+the pinned Linux descriptor and native stat fields directly. The read-only
+sandbox mount restricts the worker's access. Other processes can write to the
+same inode, and checks can miss coarse timestamps, restored or manipulated
+metadata, unreported filesystem changes, and writes between the final checks
+and rename. Export uses metadata queries only. The optional earlier check
+after worker completion was deferred to avoid repeating queries on success.
+
+### Implementation files
+
+| Files | Change |
+|---|---|
+| `src/core/export-transfer.c` | Compares pinned and pathname metadata immediately before rename and records the source capture and validation phases. |
+| `src/core/encoder-registry.vala` | Records complete native preflight time using the existing profiler. |
+| `tests/unit/test-export-transfer.c`, `tests/unit/meson.build` | Add source mutation and metadata-query faults to the existing transfer suite and link the pathname-stat wrapper. |
+| `tests/integration/test-core-api.vala` | Checks normal PNG and TIFF exports and changes a disposable source after the real worker encodes it, before the launcher returns. |
+| `tests/benchmarks/benchmark-export-transfer.vala`, `tests/benchmarks/benchmark_export_transfer.py` | Measure native transfer and rejection, and compare two native builds on the same fixtures. |
+| `docs/api-2.md`, `docs/verification-export-transfer.md` | Document the native publication contract, limitations, and verification. |
+
+### Freshness and identity checks
+
+| Scenario | Previous behavior | Updated behavior | Regression result |
+|---|---|---|---|
+| Unchanged source | Published | Publishes | Native transfer, PNG, and TIFF passed |
+| Source inode replaced | Rejected | Rejects | Pinned descriptor retained the original inode and source SHA-256 |
+| Source deleted | Rejected | Rejects | `G_IO_ERROR_BUSY` with a source-path diagnostic |
+| Same-inode size increase | Could publish | Rejects when size or timestamps differ | `G_IO_ERROR_BUSY` |
+| Same-inode size decrease | Could publish | Rejects when size or timestamps differ | `G_IO_ERROR_BUSY` |
+| Same-size overwrite | Could publish | Rejects when mtime or ctime differs | Baseline published the test fixture. Updated build returned `G_IO_ERROR_BUSY` |
+| Modification time changed | Could publish | Compares seconds and nanoseconds | Same-second mtime change rejected |
+| Modification time restored after write | Could publish | Rejects when ctime differs | Original mtime restored and changed ctime observed before rejection |
+| Access time changed only | Published | Publishes | Read advanced atime and the source SHA-256 matched |
+| Source alias through hard link | Rejected | Rejects | `G_IO_ERROR_INVALID_ARGUMENT` |
+| Source alias through symlink | Rejected | Rejects | `G_IO_ERROR_INVALID_ARGUMENT` |
+
+Fault injection covered mutation during copy and after synchronization, an
+invalid source symlink, descriptor `EIO` mapped to `G_IO_ERROR_FAILED`, and
+pathname `EACCES` mapped to `G_IO_ERROR_PERMISSION_DENIED`. The tests checked
+the existing destination's bytes and inode, no new destination on rejection,
+staging removal, and descriptor closure via `EBADF`. The real worker tests
+checked job cleanup and both existing and absent destinations. The existing
+cancellation cases verified `G_IO_ERROR_CANCELLED` before publication and
+successful completion after rename. The existing non-native payload test
+verified the bytes passed to GIO. Loopback GVfs WebDAV creation and
+overwrite also produced bytes identical to the native PNG, confirmed by
+SHA-256 and the server's HTTP 201 and 204 responses.
+In both builds the published PNG and TIFF matched their respective worker
+artifacts byte for byte, and the source TIFF SHA-256 stayed the same.
+Independent encoder runs generated different hashes, so each comparison
+used the artifact and destination from the same export.
+
+### Performance measurements
+
+For a same-host comparison, build the preceding and updated revisions with
+the same Meson options and use the updated runner. It retains the historical
+whole-payload mode, compares the two native executables, checks payload hashes,
+and measures rejection with the prior destination preserved.
+
+Baseline `ca16fb9` and the updated build ran on Debian 13 under WSL2
+(Linux 6.18.58.1, GIO 2.84.4), with warm fixtures and destination staging
+on ext4. The baseline carried equivalent timers for capture, pathname
+validation, preflight, and transfer. Synthetic
+workloads used nine fresh processes per mode with rotating run order. The
+real exports used five fresh processes per build, the same TIFF fixture and
+the same worker executable. Synthetic RSS is the wait high-water mark. Real
+export RSS is the sampled Core-process peak.
+
+| Workload or phase | Previous time | Updated time | Previous peak RSS (KiB) | Updated peak RSS (KiB) |
+|---|---:|---:|---:|---:|
+| 1 MiB preflight | 220 µs | 235 µs | 24,704 | 24,704 |
+| 1 MiB source capture | 2 µs | 3 µs | 24,704 | 24,704 |
+| 1 MiB source validation | 5 µs | 4 µs | 24,704 | 24,704 |
+| 1 MiB complete native transfer | 5.717 ms | 5.846 ms | 24,704 | 24,704 |
+| 1 KiB export | 5.051 ms | 5.197 ms | 24,704 | 24,704 |
+| 1 MiB export | 6.006 ms | 6.177 ms | 24,704 | 24,704 |
+| 16 MiB export | 13.289 ms | 13.398 ms | 24,756 | 24,756 |
+| 64 MiB export | 34.437 ms | 34.378 ms | 24,788 | 24,788 |
+| 128 MiB export | 64.054 ms | 67.929 ms | 24,924 | 24,924 |
+| 256 MiB export | 131.894 ms | 142.644 ms | 24,924 | 24,924 |
+| 1 MiB new destination | 6.234 ms | 6.498 ms | 24,544 | 24,544 |
+| 1 MiB symlink destination | 6.011 ms | 5.954 ms | 24,704 | 24,704 |
+| 1 MiB source change rejection | — | 6.184 ms | — | 25,716 |
+| Real PNG export | 234.488 ms | 234.962 ms | 9,228 | 9,296 |
+| Real TIFF export | 232.351 ms | 232.438 ms | 9,296 | 9,340 |
+
+The phase rows report the enclosing process's RSS. The 1 MiB freshness check
+measured 1 µs for the pinned descriptor and 3 µs for the original pathname in
+the updated build. The baseline measured only pathname lookup and inode
+comparison. At 256 MiB the updated run took about 11 ms longer overall.
+The copy phase showed the largest difference, with a median of 57.4 ms before
+and 74.6 ms after. Final metadata validation accounted for 12 µs in the
+updated run. Native payload buffer size remained 256 KiB.
+
+```sh
+python3 -B tests/benchmarks/benchmark_export_transfer.py \
+  build-after/tests/benchmarks/benchmark-export-transfer \
+  --previous-executable build-before/tests/benchmarks/benchmark-export-transfer \
+  --samples 9 --output transfer.json
+```
+
+### Build and compatibility
+
+- Focused transfer coverage passed all 67 cases, including the 12 new cases,
+  with no skips. AddressSanitizer and UndefinedBehaviorSanitizer passed the
+  focused transfer suite.
+- Glycin-disabled headless qualification passed all 14 tests, including 12
+  required cases. Full GTK qualification passed all 25 tests, including 22
+  required cases. Both runs had zero failures and skips.
+- Core and GTK matched their ABI 2 baselines of 285 and 77 symbols.
+  Generated public C headers, GIR, and VAPI were byte-identical to the
+  preceding revision. Worker protocol v1 and worker security tests passed.
+- The warning-level-3 headless build and strict handwritten C checks passed.
+  The project-wide warnings-as-errors build stopped on five existing Vala
+  warnings in Core.
+- The Debian gain-map build produced the five primary binary packages and
+  four debug-symbol packages. A read-only private package view passed the
+  installed headless and GTK consumers, C GtkBuilder, introspection, Photos
+  export, thumbnail, and gain-map checks.
+- Release qualification passed all 28 functional tests, including the 25
+  mandatory tests, and all 35 performance benchmarks with zero failures and
+  skips. A matching baseline configuration had identical registered names,
+  suites, and timeouts.
+
 ## Destination safety hardening
 
 The comparison baseline is `ec51c52`. Its native transaction validated and

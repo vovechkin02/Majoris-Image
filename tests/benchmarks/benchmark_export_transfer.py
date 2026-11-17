@@ -46,16 +46,32 @@ def summarize(samples: list[dict], size: int) -> dict:
     }
 
 
-def compare(executable: Path, root: Path, size: int, count: int, suffix: str = "") -> dict:
+def compare(
+    executable: Path,
+    previous: Path | None,
+    root: Path,
+    size: int,
+    count: int,
+    suffix: str = "",
+) -> dict:
     fixture = root / "encoded"
     digest = make_fixture(fixture, size)
-    samples = {"transfer-baseline": [], "transfer-stream": []}
-    for _ in range(count):
-        for mode in samples:
-            sample = measure(executable, mode + suffix, str(fixture), root, executable)
+    workloads = {
+        "transfer-baseline": (executable, "transfer-baseline"),
+        "transfer-stream": (executable, "transfer-stream"),
+    }
+    if previous is not None:
+        workloads["previous-native"] = (previous, "transfer-stream")
+    samples = {name: [] for name in workloads}
+    order = list(workloads)
+    for repetition in range(count):
+        offset = repetition % len(order)
+        for name in order[offset:] + order[:offset]:
+            binary, mode = workloads[name]
+            sample = measure(binary, mode + suffix, str(fixture), root, binary)
             if sample["bytes_transferred"] != size or sample["output_sha256"] != digest:
-                raise RuntimeError(f"{mode} changed the {size}-byte fixture")
-            samples[mode].append(sample)
+                raise RuntimeError(f"{name} changed the {size}-byte fixture")
+            samples[name].append(sample)
     return {mode: summarize(runs, size) for mode, runs in samples.items()}
 
 
@@ -79,9 +95,33 @@ def measure_cancellation(executable: Path, root: Path, count: int) -> dict:
     return result
 
 
+def measure_rejection(executable: Path, root: Path, count: int) -> dict:
+    fixture = root / "changed-source"
+    expected = hashlib.sha256(b"existing").hexdigest()
+    mode = "transfer-stream-changed"
+    samples = []
+    for _ in range(count):
+        make_fixture(fixture, 1024**2)
+        sample = measure(executable, mode, str(fixture), root, executable)
+        if sample["output_sha256"] != expected:
+            raise RuntimeError("Source-change rejection modified the existing destination")
+        samples.append(sample)
+    return {
+        "median_phase_us": {
+            name: statistics.median(sample["phases"][name]["us"] for sample in samples)
+            for name in samples[0]["phases"]
+        },
+        "median_peak_rss_kib": statistics.median(
+            sample["wait4_peak_rss_kib"] for sample in samples
+        ),
+        "samples": samples,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
+    parser.add_argument("--previous-executable", type=Path)
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -90,20 +130,22 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="imagekit-export-bench-") as temporary:
         root = Path(temporary)
         executable = args.executable.resolve()
+        previous = args.previous_executable.resolve() if args.previous_executable else None
         result = {
             "system": platform.platform(),
             "codecs": codec_versions(),
             "temporary_storage": str(root.parent),
             "sample_mode": "fresh process, warm fixture, OS caches retained",
             "destinations": {
-                kind: compare(executable, root, 1024**2, args.samples, f"-{kind}")
+                kind: compare(executable, previous, root, 1024**2, args.samples, f"-{kind}")
                 for kind in ("new", "symlink")
             },
             "workloads": {
-                str(size): compare(executable, root, size, args.samples)
+                str(size): compare(executable, previous, root, size, args.samples)
                 for size in [1024, *(mib * 1024**2 for mib in (1, 16, 64, 128, 256))]
             },
             "cancellation": measure_cancellation(executable, root, args.samples),
+            "source_change_rejection": measure_rejection(executable, root, args.samples),
         }
     encoded = json.dumps(result, indent=2) + "\n"
     if args.output:

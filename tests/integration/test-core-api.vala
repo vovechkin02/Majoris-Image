@@ -279,6 +279,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     var target = File.new_for_path (Path.build_filename (temp, "export.png"));
     try {
         var encoder = new EncoderRegistry ();
+        var original = yield source.file.load_bytes_async (null, null);
         try {
             yield encoder.encode (source, source.file, new ExportOptions ());
             assert_not_reached ();
@@ -290,6 +291,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
         transform.turns = 1;
         yield encoder.encode (source, target, new ExportOptions (), transform);
         var exported = yield registry.open (new ImageSource (target));
+        assert (exported.mime_type == "image/png");
         assert (exported.width == 16 && exported.height == 24 && exported.bit_depth == 16);
 
         var tiff = new ExportOptions ();
@@ -301,12 +303,78 @@ async void verify_headless_core_api (string directory, string large_path) throws
         assert (replacement.width == exported.width && replacement.height == exported.height);
         assert (replacement.bit_depth == exported.bit_depth);
         for (int channel = 0; channel < 3; channel++) {
-            assert (Math.fabs (sample (replacement.preview, 5, 7, channel) -
-                sample (exported.preview, 5, 7, channel)) < 0.001);
+            float expected = sample (document.preview, 7, document.height - 1 - 5, channel);
+            assert (Math.fabs (sample (exported.preview, 5, 7, channel) - expected) < 0.001);
+            assert (Math.fabs (sample (replacement.preview, 5, 7, channel) - expected) < 0.001);
         }
+        assert (original.compare (yield source.file.load_bytes_async (null, null)) == 0);
+        yield verify_export_source_change (encoder, original, target);
     } finally {
         FileUtils.unlink (target.get_path ());
         DirUtils.remove (temp);
+    }
+}
+
+private string install_export_test_launcher () throws Error {
+    string? bwrap = Environment.find_program_in_path ("bwrap");
+    if (bwrap == null) {
+        throw new IOError.NOT_FOUND ("Bubblewrap is required for the export integration test");
+    }
+    string temporary = Environment.get_tmp_dir ();
+    string directory = DirUtils.make_tmp ("export-test-launcher-XXXXXX");
+    string launcher = Path.build_filename (directory, "bwrap");
+    string source = Shell.quote (Path.build_filename (temporary, "mutable-export-source.png"));
+    string executable = Shell.quote (bwrap);
+    // The real sandbox and worker finish encoding before the launcher changes the source.
+    FileUtils.set_contents (launcher, "#!/bin/sh\n" +
+        "if [ -f " + source + " ]; then\n" +
+        "    " + executable + " \"$@\" || exit $?\n" +
+        "    printf x >> " + source + "\n" +
+        "else\n    exec " + executable + " \"$@\"\nfi\n");
+    if (FileUtils.chmod (launcher, 0700) != 0) {
+        throw new IOError.FAILED ("Cannot make the export test launcher executable");
+    }
+    Environment.set_variable ("PATH", directory + ":" + Environment.get_variable ("PATH"), true);
+    return launcher;
+}
+
+private async void verify_export_source_change (EncoderRegistry encoder, Bytes original,
+                                                 File existing) throws Error {
+    string temporary = Environment.get_tmp_dir ();
+    var file = File.new_for_path (Path.build_filename (temporary, "mutable-export-source.png"));
+    var missing = existing.get_parent ().get_child ("incomplete.png");
+    var previous = yield existing.load_bytes_async (null, null);
+    var identity = existing.query_info (FileAttribute.UNIX_INODE, 0);
+    try {
+        foreach (var destination in new File[] { existing, missing }) {
+            yield file.replace_contents_bytes_async (original, null, false, FileCreateFlags.NONE,
+                null, null);
+            try {
+                yield encoder.encode (new ImageSource (file), destination, new ExportOptions ());
+                assert_not_reached ();
+            } catch (IOError.BUSY error) {
+                assert (error.message == "Image source changed during export");
+            }
+            var modified = yield file.load_bytes_async (null, null);
+            assert (modified.get_size () == original.get_size () + 1);
+        }
+        assert (!missing.query_exists ());
+        assert (previous.compare (yield existing.load_bytes_async (null, null)) == 0);
+        assert (existing.query_info (FileAttribute.UNIX_INODE, 0).get_attribute_uint64 (
+            FileAttribute.UNIX_INODE) == identity.get_attribute_uint64 (FileAttribute.UNIX_INODE));
+        var jobs = Dir.open (temporary);
+        string? entry;
+        while ((entry = jobs.read_name ()) != null) {
+            assert (!entry.has_prefix ("majoris-image-") ||
+                entry.has_prefix ("majoris-image-source-"));
+        }
+        var destinations = Dir.open (existing.get_parent ().get_path ());
+        while ((entry = destinations.read_name ()) != null) {
+            assert (!entry.has_prefix (".majoris-export-"));
+        }
+    } finally {
+        FileUtils.unlink (file.get_path ());
+        FileUtils.unlink (missing.get_path ());
     }
 }
 
@@ -390,6 +458,13 @@ private double luminance (PixelBuffer pixels, int x, int y) {
 }
 
 int main (string[] args) {
+    string launcher;
+    try {
+        launcher = install_export_test_launcher ();
+    } catch (Error error) {
+        stderr.printf ("%s\n", error.message);
+        return 1;
+    }
     var loop = new MainLoop ();
     int result = 0;
     verify_headless_core_api.begin (args[1], args[2], (obj, response) => {
@@ -402,5 +477,7 @@ int main (string[] args) {
         loop.quit ();
     });
     loop.run ();
+    FileUtils.unlink (launcher);
+    DirUtils.remove (Path.get_dirname (launcher));
     return result;
 }

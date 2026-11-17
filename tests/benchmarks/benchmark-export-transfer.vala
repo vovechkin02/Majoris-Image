@@ -17,8 +17,8 @@ private void record_phase (string stage, int64 started, int64 bytes) {
         stage, get_monotonic_time () - started, bytes);
 }
 
-private async void transfer (bool baseline, File input, File destination, Cancellable cancel)
-    throws Error {
+private async void transfer (bool baseline, File input, File destination, Cancellable cancel,
+                             bool change_source = false) throws Error {
     const int64 MAX_EXPORT_BYTES = 268435456;
     int64 started = get_monotonic_time ();
     if (baseline) {
@@ -39,10 +39,24 @@ private async void transfer (bool baseline, File input, File destination, Cancel
     } else {
         void* protected_source = yield prepare_export (input, destination, cancel);
         record_phase ("export-identity", started, 1);
+        int64 transfer_started = get_monotonic_time ();
         try {
+            if (change_source) {
+                input.set_attribute_uint64 (FileAttribute.TIME_MODIFIED, 1,
+                    FileQueryInfoFlags.NONE, cancel);
+                transfer_started = get_monotonic_time ();
+            }
             yield transfer_output (input.get_path (), destination, protected_source,
                 MAX_EXPORT_BYTES, cancel);
+            if (change_source) {
+                throw new IOError.FAILED ("Published output after changing the source");
+            }
+        } catch (IOError.BUSY error) {
+            if (!change_source || !error.message.has_prefix ("Image source changed")) {
+                throw error;
+            }
         } finally {
+            record_phase ("export-native-transfer", transfer_started, 1);
             release_export_source (protected_source);
         }
         record_phase ("payload-allocation", get_monotonic_time (), int64.min (
@@ -67,7 +81,7 @@ private async void measure_transfer (string mode, string path) throws Error {
     }
     var cancel = new Cancellable ();
     if (!cancel_transfer) {
-        yield transfer (baseline, input, destination, cancel);
+        yield transfer (baseline, input, destination, cancel, mode == "transfer-stream-changed");
         return;
     }
 
@@ -95,7 +109,7 @@ int main (string[] args) {
         "transfer-baseline", "transfer-stream",
         "transfer-baseline-cancel", "transfer-stream-cancel",
         "transfer-baseline-new", "transfer-stream-new",
-        "transfer-baseline-symlink", "transfer-stream-symlink"
+        "transfer-baseline-symlink", "transfer-stream-symlink", "transfer-stream-changed"
     })) {
         stderr.printf ("Usage: benchmark-export-transfer MODE INPUT\n");
         return 2;

@@ -84,6 +84,53 @@ static gboolean same_inode(const struct stat *first, const struct stat *second)
     return first->st_dev == second->st_dev && first->st_ino == second->st_ino;
 }
 
+static gboolean source_metadata_matches(const struct stat *initial, const struct stat *current)
+{
+    return S_ISREG(current->st_mode) && same_inode(initial, current) &&
+        initial->st_size == current->st_size &&
+        initial->st_mtim.tv_sec == current->st_mtim.tv_sec &&
+        initial->st_mtim.tv_nsec == current->st_mtim.tv_nsec &&
+        initial->st_ctim.tv_sec == current->st_ctim.tv_sec &&
+        initial->st_ctim.tv_nsec == current->st_ctim.tv_nsec;
+}
+
+static gboolean validate_source(const ExportSource *source, GError **error)
+{
+    if (source == NULL) {
+        return TRUE;
+    }
+
+    struct stat pinned;
+    gint64 started = g_get_monotonic_time();
+    if (fstat(source->fd, &pinned) < 0) {
+        set_io_error(error, "Cannot recheck pinned image source", errno);
+        return FALSE;
+    }
+    gboolean pinned_matches = source_metadata_matches(&source->identity, &pinned);
+    record_phase("export-source-descriptor", started, 1);
+
+    struct stat named;
+    started = g_get_monotonic_time();
+    if (stat(source->path, &named) < 0) {
+        int saved_errno = errno;
+        if (saved_errno == ENOENT || saved_errno == ENOTDIR || saved_errno == ELOOP) {
+            g_set_error(error, G_IO_ERROR, G_IO_ERROR_BUSY,
+                        "Image source path changed during export: %s", g_strerror(saved_errno));
+        } else {
+            set_io_error(error, "Cannot recheck image source path", saved_errno);
+        }
+        return FALSE;
+    }
+    gboolean named_matches = source_metadata_matches(&source->identity, &named);
+    record_phase("export-source-path", started, 1);
+
+    if (!pinned_matches || !named_matches) {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_BUSY, "Image source changed during export");
+        return FALSE;
+    }
+    return TRUE;
+}
+
 static gboolean same_entry(const struct stat *first, const struct stat *second)
 {
     return same_inode(first, second) &&
@@ -344,15 +391,6 @@ static gboolean same_links(const GArray *first, const GArray *second)
 static gboolean validate_destination(const char *path, const Destination *initial,
                                      const ExportSource *source, GError **error)
 {
-    if (source != NULL) {
-        struct stat current;
-        if (stat(source->path, &current) < 0 || !same_inode(&source->identity, &current)) {
-            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_BUSY,
-                                "Image source identity changed during export");
-            return FALSE;
-        }
-    }
-
     g_auto(Destination) current = {.directory = -1, .file = -1};
     if (!resolve_destination(path, &current, NULL)) {
         destination_changed(error);
@@ -376,10 +414,10 @@ static gboolean validate_destination(const char *path, const Destination *initia
         }
         if (initial->file >= 0 && same_entry(&initial->existing, &current.existing) &&
             same_entry(&initial->existing, &entry)) {
-            return TRUE;
+            return validate_source(source, error);
         }
     } else if (errno == ENOENT && initial->file < 0) {
-        return TRUE;
+        return validate_source(source, error);
     }
     destination_changed(error);
     return FALSE;
@@ -605,9 +643,14 @@ static void run_preparation(GTask *task, gpointer object, gpointer data, GCancel
     source->fd = open(source->path, O_PATH | O_CLOEXEC);
     g_autoptr(GError) error = NULL;
     g_auto(Destination) destination = {.directory = -1, .file = -1};
+    gint64 started = g_get_monotonic_time();
     if (source->fd < 0 || fstat(source->fd, &source->identity) < 0) {
         set_io_error(&error, "Cannot inspect image source", errno);
-    } else if (!S_ISREG(source->identity.st_mode)) {
+        g_task_return_error(task, g_steal_pointer(&error));
+        return;
+    }
+    record_phase("export-source-capture", started, 1);
+    if (!S_ISREG(source->identity.st_mode)) {
         g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
                             "The image source must be a regular file");
     } else if (resolve_destination(preparation->destination, &destination, &error) &&

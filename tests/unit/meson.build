@@ -110,6 +110,7 @@ export_transfer_test = executable(
   link_args: [
     '-Wl,--wrap=read,--wrap=write,--wrap=fsync,--wrap=g_close,--wrap=renameat,--wrap=renameat2',
     '-Wl,--wrap=openat,--wrap=openat64,--wrap=fstat,--wrap=fstat64,--wrap=fchown,--wrap=fchmod',
+    '-Wl,--wrap=stat,--wrap=stat64',
   ],
 )
 test('Encoded export transfer validation and publication', export_transfer_test, suite: 'unit')

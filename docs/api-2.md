@@ -72,8 +72,17 @@ quality, bit depth, color profile and metadata policy.
 The encoded worker output must be a nonempty regular file of at most 256 MiB.
 Core rejects an identical source and destination. For two native files, it also
 rejects paths, symlinks, and hard links that refer to the same source inode.
-Bubblewrap binds that inode read-only for encoding. The caller's source path
-must still identify the same inode at publication.
+Bubblewrap binds the pinned inode read-only for encoding. Immediately before
+publication, Core checks the pinned descriptor and the original pathname
+against the regular file's preflight device, inode, size, and nanosecond mtime
+and ctime. Detected changes and missing or invalid paths return
+`G_IO_ERROR_BUSY`. Other metadata-query failures retain their mapped GIO
+error. Reads can update atime without invalidating an export.
+
+Other processes can still write to the pinned inode. Detection depends on
+metadata the filesystem exposes, including timestamp resolution. Writes that
+leave indistinguishable metadata, or that occur after the final checks, can
+escape detection.
 
 For a native destination, Core copies the encoded bytes through a buffer of at
 most 256 KiB into private staging on the destination filesystem. It follows

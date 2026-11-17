@@ -1,5 +1,11 @@
 using ImageKit;
 
+[CCode (cname = "worker_output_fault_arm", cheader_filename = "worker-output-fault.h")]
+private extern void arm_output_fault (Cancellable? cancel);
+
+[CCode (cname = "worker_output_fault_finish", cheader_filename = "worker-output-fault.h")]
+private extern bool finish_output_fault ();
+
 private class FaultBackend : Object, DecoderBackend {
     public string id {
         get {
@@ -166,6 +172,24 @@ private async void verify_replacement_during_decode (DecoderRegistry registry, I
     }
 }
 
+private async void verify_output_consumption (DecoderRegistry registry, ImageSource source)
+    throws Error {
+    foreach (bool cancel_read in new bool[] { false, true }) {
+        var cancel = new Cancellable ();
+        arm_output_fault (cancel_read ? cancel : null);
+        try {
+            yield registry.open (source, null, cancel);
+            assert_not_reached ();
+        } catch (ImageError.INVALID_RESPONSE error) {
+            assert (!cancel_read && error.message.contains ("ended before"));
+        } catch (IOError.CANCELLED error) {
+            assert (cancel_read);
+        } finally {
+            assert (finish_output_fault ());
+        }
+    }
+}
+
 async void verify_worker_failures_and_isolation (string worker_path, string launcher_directory)
     throws Error {
     var registry = new DecoderRegistry ();
@@ -220,7 +244,7 @@ async void verify_worker_failures_and_isolation (string worker_path, string laun
         assert (original == "R");
 
         foreach (string mode in new string[] {
-            "I", "J", "N", "Q", "Z", "E", "K", "W"
+            "I", "J", "N", "Q", "Z", "E", "K", "W", "j", "s", "f", "u"
         }) {
             FileUtils.set_contents (input, mode);
             try {
@@ -254,7 +278,7 @@ async void verify_worker_failures_and_isolation (string worker_path, string laun
         assert (recovered.width == 1 && recovered.loader == "fault-test");
 
         foreach (string mode in new string[] {
-            "S", "L"
+            "S", "L", "p", "x"
         }) {
             FileUtils.set_contents (input, mode);
             try {
@@ -267,6 +291,7 @@ async void verify_worker_failures_and_isolation (string worker_path, string laun
         FileUtils.set_contents (input, "Y");
         var document = yield registry.open (source);
         assert (document.preview.width == 1 && document.preview.stride == 16);
+        yield verify_output_consumption (registry, source);
         registry.timeout_seconds = 5;
         yield verify_launcher_cancellation (registry, source, launcher_directory);
         yield verify_replacement_during_decode (registry, source);

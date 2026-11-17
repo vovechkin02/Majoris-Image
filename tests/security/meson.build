@@ -41,8 +41,8 @@ worker_fault = executable('worker-fault', 'worker-fault.c')
 
 worker_security = executable(
   'test-worker-security',
-  'test-worker-security.vala',
-  dependencies: core_api,
+  ['test-worker-security.vala', 'worker-output-fault.c'],
+  dependencies: [core_api, c_compiler.find_library('dl')],
 )
 test(
   'Worker timeout, cancellation, crash and response validation',

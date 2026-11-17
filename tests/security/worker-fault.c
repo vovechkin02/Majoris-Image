@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
 
@@ -113,7 +114,13 @@ int main(int argc, char **argv)
         }
         mode = 'Y';
     }
-    if (mode == 'S' || mode == 'Y' || mode == 'L') {
+    if (mode == 's') {
+        return symlink(argv[2], argv[3]) != 0;
+    }
+    if (mode == 'f') {
+        return mkfifo(argv[3], 0600) != 0;
+    }
+    if (mode == 'S' || mode == 'Y' || mode == 'L' || mode == 'p' || mode == 'x') {
         FILE *manifest = fopen("/job/image.json", "wb");
         if (!manifest) {
             return 2;
@@ -134,6 +141,13 @@ int main(int argc, char **argv)
         }
         fwrite(header, sizeof header, 1, pixels);
         fwrite(valid, mode == 'S' ? 15 : mode == 'L' ? 0 : 16, 1, pixels);
+        if (mode == 'x') {
+            fputc(0, pixels);
+        }
+        if (mode == 'p' && (fflush(pixels) || ftruncate(fileno(pixels), 268435469))) {
+            fclose(pixels);
+            return 2;
+        }
         return fclose(pixels);
     }
     FILE *output = fopen(argv[3], "wb");
@@ -141,6 +155,15 @@ int main(int argc, char **argv)
         return 2;
     }
     switch (mode) {
+    case 'j':
+        if (ftruncate(fileno(output), 1048577) != 0) {
+            fclose(output);
+            return 2;
+        }
+        break;
+    case 'u':
+        fputc(0xff, output);
+        break;
     case '!':
     case 'V':
         fputs("{\"protocol-version\":1,\"width\":1,\"height\":1,\"loader\":\"fault-test\"}",

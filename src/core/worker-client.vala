@@ -302,21 +302,14 @@ namespace ImageKit {
             }
         }
 
+        [CCode (cname = "worker_output_read_async", finish_name = "worker_output_read_finish",
+                cheader_filename = "worker-output-reader.h")]
+        private static extern async Bytes read_validated_output (string path, int64 limit,
+                                                                  Cancellable stop) throws Error;
+
         internal static async Bytes read_output (string path, int64 limit, Cancellable stop) throws Error {
             int64 started = OperationProfile.begin ();
-            var file = File.new_for_path (path);
-            FileInfo info;
-            try {
-                info = yield file.query_info_async ("standard::type,standard::size",
-                    FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
-                                                    Priority.DEFAULT, stop);
-            } catch (IOError.NOT_FOUND e) {
-                throw new ImageError.INVALID_RESPONSE ("Decoder did not produce an output file");
-            }
-            if (info.get_file_type () != FileType.REGULAR || info.get_size () < 1 || info.get_size () > limit) {
-                throw new ImageError.INVALID_RESPONSE ("Invalid decoder response type or size");
-            }
-            var bytes = yield file.load_bytes_async (stop, null);
+            var bytes = yield read_validated_output (path, limit, stop);
             OperationProfile.record ("output-read", started, bytes.get_size ());
             return bytes;
         }

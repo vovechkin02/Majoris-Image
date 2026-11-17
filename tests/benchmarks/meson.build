@@ -9,6 +9,26 @@ native_benchmark = executable(
   'benchmark-native.c',
   dependencies: native_api,
 )
+worker_output_benchmark = executable(
+  'benchmark-worker-output',
+  ['benchmark-worker-output.c', '../../src/core/worker-output-reader.c'],
+  dependencies: [core_api, c_compiler.find_library('dl')],
+  link_args: [
+    '-Wl,--wrap=open,--wrap=open64,--wrap=fstat,--wrap=fstat64',
+    '-Wl,--wrap=g_try_malloc',
+  ],
+)
+benchmark(
+  'Bounded worker output memory and throughput',
+  python,
+  args: isolated + [
+    python.full_path(),
+    files('benchmark_worker_output.py'),
+    worker_output_benchmark,
+  ],
+  suite: 'performance',
+  timeout: 900,
+)
 workloads = [
   'export-png=' + (fixture_build_dir / 'large.tiff'),
   'export-jxl=' + (fixture_build_dir / 'large.tiff'),

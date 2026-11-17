@@ -33,6 +33,17 @@ test(
 test('Thumbnail PNG decoding and validation', png_test, suite: 'unit', timeout: 15)
 test('Job scheduling and priorities', scheduler_test, suite: 'unit', timeout: 10)
 
+worker_output_reader_test = executable(
+  'test-worker-output-reader',
+  ['test-worker-output-reader.c', '../../src/core/worker-output-reader.c'],
+  dependencies: core_api,
+  link_args: [
+    '-Wl,--wrap=open,--wrap=open64,--wrap=fstat,--wrap=fstat64',
+    '-Wl,--wrap=read,--wrap=close,--wrap=g_try_malloc',
+  ],
+)
+test('Bounded worker output validation', worker_output_reader_test, suite: 'unit', timeout: 15)
+
 if get_option('gtk')
   policy_source = configure_file(
     input: '../../src/gtk/presentation.vala',

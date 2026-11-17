@@ -83,7 +83,8 @@ meson setup sanitize -Dgtk=false -Dglycin=disabled -Dsequence=enabled \
 ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   meson test -C sanitize --print-errorlogs \
   'OpenEXR region decoding' 'Native image processing references' 'Thumbnail PNG decoding and validation' \
-  'Native parser fuzz smoke' 'Worker protocol round trips and validation'
+  'Native parser fuzz smoke' 'Worker protocol round trips and validation' \
+  'Bounded worker output validation'
 ```
 
 The sandbox enforces a 2 GiB address-space ceiling, so ASan-instrumented worker
@@ -265,6 +266,33 @@ VIPS_CONCURRENCY=2 python3 tests/benchmarks/run_benchmarks.py --native \
 Use `--baseline previous.json` to check matching fixtures and compare timings.
 A MIF1 digest mismatch fails the comparison. `--references NEW_DIRECTORY`
 retains the first cold output from each workload for direct comparison.
+
+## Bounded worker output
+
+Run the private descriptor-reader tests together with the sandbox and thumbnail
+cache regressions.
+
+```sh
+meson test -C build --print-errorlogs \
+  'Bounded worker output validation' \
+  'Worker timeout, cancellation, crash and response validation' \
+  'Cross-process thumbnail publication'
+```
+
+The direct tests inject faults at specific system calls in the production
+reader. The sandbox suite also cancels and truncates a read after the worker has
+exited. The performance suite includes an isolated comparison against the
+previous asynchronous GIO sequence, using generated files and checking their
+SHA-256 digests.
+
+```sh
+meson compile -C build benchmark-worker-output
+python3 tests/benchmarks/benchmark_worker_output.py \
+  build/tests/benchmarks/benchmark-worker-output --samples 5 --output worker-output.json
+```
+
+See [worker output verification](verification-worker-output.md) for the
+security contract, measured results, and release checks.
 
 ## Installed tests and release qualification
 

@@ -11,6 +11,7 @@ CORE_TESTS = {
     "OpenEXR region decoding",
     "Native image processing references",
     "Thumbnail PNG decoding and validation",
+    "Bounded worker output validation",
     "Job scheduling and priorities",
     "Headless Core API",
     "Encoded export transfer validation and publication",

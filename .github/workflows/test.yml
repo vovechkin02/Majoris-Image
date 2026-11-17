@@ -60,7 +60,8 @@ jobs:
             ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
               runuser -u nobody -- meson test -C "$build" --print-errorlogs \
               'OpenEXR region decoding' 'Native image processing references' 'Thumbnail PNG decoding and validation' \
-              'Native parser fuzz smoke' 'Worker protocol round trips and validation'
+              'Native parser fuzz smoke' 'Worker protocol round trips and validation' \
+              'Bounded worker output validation'
           else
             qualification_variant=$VARIANT
             if [ "$VARIANT" = diagnostic ]; then qualification_variant=full; fi

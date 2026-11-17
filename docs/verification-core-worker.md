@@ -20,8 +20,9 @@ vector. Executable resolution honors the registered backend, the current
 `MAJORIS_IMAGE_WORKER` override, and the installed worker path in that order.
 After launch, Vips initializes, the dispatcher runs the operation, and the
 worker writes its output. The parent drains bounded diagnostics and reaps the
-child before releasing the slot. Consumers validate the output type and size,
-parse the manifest or pixels, and clean the job directory. Worker errors
+child before releasing the slot. Consumers use the
+[bounded descriptor reader](verification-worker-output.md) for text, pixels,
+and PNG output, then validate the format and clean the job directory. Worker errors
 trigger job cleanup before they propagate. Cancellation and timeout interrupt
 the diagnostic read after signaling the subprocess, then wait for the direct
 child. This lets cleanup complete even when a launch helper still has the

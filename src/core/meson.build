@@ -20,6 +20,7 @@ core_sources = files(
   'decode-options.vala',
   'worker-request.vala',
   'worker-client.vala',
+  'worker-output-reader.c',
   'worker-failure.vala',
   'worker-path.c',
   'thumbnail-png.c',

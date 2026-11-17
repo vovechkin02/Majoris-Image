@@ -193,6 +193,23 @@ def main() -> int:
             (root / "recovered-publication.png").read_bytes()
         ) == pixel_payload(output)
         assert not (root / "mid-publication.png").exists()
+
+        published = pending.with_suffix("")
+        target = root / "untouched.png"
+        target.write_bytes(published.read_bytes())
+        published.unlink()
+        published.symlink_to(target)
+        starts = count()
+        finish(launch("symlink-repaired", 127))
+        assert count() == starts + 1
+        assert published.is_file() and not published.is_symlink()
+        assert target.read_bytes() == (root / "recovered-publication.png").read_bytes()
+        repaired = published.read_bytes()
+        readers = [launch(f"cached{i}", 127) for i in range(4)]
+        for i, proc in enumerate(readers):
+            finish(proc)
+            assert (root / f"cached{i}.png").read_bytes() == repaired
+        assert count() == starts + 1
     return 0
 
 

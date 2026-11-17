@@ -42,18 +42,21 @@ private void record_phase (string stage, int64 started) {
         stage, get_monotonic_time () - started);
 }
 
-private async void measure_export (string format, ImageSource source) throws Error {
+private async void measure_export (string format, ImageSource source, File? remote)
+    throws Error {
     var options = new ExportOptions ();
     options.format = format;
     options.lossless = true;
+    options.hdr = format == "uhdr";
     var transform = new RenderOptions ();
     // The shared large TIFF fixture contributes a 2500 × 1250 region.
     transform.crop_width = 0.125;
     transform.crop_height = 0.125;
-    var destination = File.new_for_path (
+    var destination = remote ?? File.new_for_path (
         Path.build_filename (Environment.get_tmp_dir (), "benchmark-export"));
-    // Exercise replacement of an existing file in both builds.
-    destination.replace_contents ("existing".data, null, false, FileCreateFlags.NONE, null);
+    if (remote == null) {
+        destination.replace_contents ("existing".data, null, false, FileCreateFlags.NONE, null);
+    }
     int64 started = get_monotonic_time ();
     yield new EncoderRegistry ().encode (source, destination, options, transform);
     record_phase ("workload", started);
@@ -172,9 +175,9 @@ private async void measure_preloading (string mode, ImageSource source,
     }
 }
 
-private async void measure (string mode, ImageSource source) throws Error {
+private async void measure (string mode, ImageSource source, File? remote) throws Error {
     if (mode.has_prefix ("export-")) {
-        yield measure_export (mode.substring ("export-".length), source);
+        yield measure_export (mode.substring ("export-".length), source, remote);
         return;
     }
     int64 began = get_monotonic_time ();
@@ -291,14 +294,15 @@ private async void measure (string mode, ImageSource source) throws Error {
 }
 
 int main (string[] args) {
-    if (args.length != 3) {
-        stderr.printf ("Usage: majoris-image-benchmark MODE FILE\n");
+    if (args.length != 3 && !(args.length == 4 && args[1].has_prefix ("export-"))) {
+        stderr.printf ("Usage: majoris-image-benchmark MODE FILE [EXPORT_URI]\n");
         return 2;
     }
     var source = new ImageSource (File.new_for_commandline_arg (args[2]));
+    var remote = args.length == 4 ? File.new_for_uri (args[3]) : null;
     var loop = new MainLoop ();
     int result = 0;
-    measure.begin (args[1], source, (obj, response) => {
+    measure.begin (args[1], source, remote, (obj, response) => {
         try {
             measure.end (response);
         } catch (Error e) {

@@ -111,8 +111,11 @@ visibility where supported. Synchronization covers the staged file. The director
 entry can still be lost after sudden power loss.
 
 For other `GFile` backends, Core validates a complete in-memory payload before
-requesting the backend's normal GIO replacement. The backend determines atomicity
-and whether a canceled replacement reached the destination.
+requesting asynchronous GIO replacement with no expected ETag or backup. The
+backend determines when the destination becomes visible and what remains after
+failure or cancellation. A cancellation result can arrive after server-side
+publication. See the [non-native export verification](verification-non-native-export.md)
+for the WebDAV close and error-reporting results.
 
 Use `DecoderRegistry.inspect()` for the actual source format and
 capabilities. `installed_codecs()` returns the runtime libvips operation

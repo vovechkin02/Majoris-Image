@@ -199,6 +199,38 @@ source. The limit case needs at least 1 GiB of temporary storage per sample. Pas
 with `gvfs=REFERENCE_FILE` to measure another GVfs URI serving the reference
 bytes. Record the scenario as unavailable if the backend cannot open the URI.
 
+For non-native **export destinations**, run the loopback WebDAV probe below.
+It needs `gio`, a GVfs WebDAV backend, and a disposable D-Bus session on Linux.
+It builds deterministic PNGs with exact encoded sizes, checks SHA-256 by HTTP
+readback, samples the GVfs daemon separately, and verifies destination bytes and
+staging cleanup after injected faults. Streaming and staged promotion are
+experiments in the benchmark executable. The supported export path uses the
+validated GIO bytes replacement.
+
+```sh
+meson compile -C build
+dbus-run-session -- python3 -B tests/benchmarks/benchmark_remote_export.py \
+  build/tests/benchmarks/benchmark-export-transfer tests/fixtures/rgb8.png \
+  --output webdav.json
+```
+
+Use `--sizes 1024 1048576 16777216 67108864 134217728 268435456` to
+include the entire transfer range outside the fast suite. `--skip-faults`
+isolates performance sampling. To also exercise the public encoder and
+decode the downloaded artifacts, add the following arguments and have
+`vips` and `vipsheader` available. Generate the source first with
+`meson compile -C build 'large and animated fixtures'`. Add
+`--formats png tiff jxl uhdr` on a build with Ultra HDR enabled.
+
+```text
+--public-benchmark build/tests/benchmarks/majoris-image-benchmark
+--worker build/src/worker/majoris-image-worker
+--source build/tests/large.tiff
+```
+
+See the [non-native export verification](verification-non-native-export.md)
+for results and backend limitations.
+
 To measure the first presented RAW preview, use the same runner with
 `majoris-image-view-benchmark` as the executable and run it under
 `xvfb-run -a` with `GDK_BACKEND=x11 GDK_SCALE=1 GSK_RENDERER=cairo`.

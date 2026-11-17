@@ -24,6 +24,7 @@ typedef enum {
     WRITE_ERROR,
     TRUNCATE_INPUT,
     GROW_INPUT,
+    MODIFY_INPUT,
     SWAP_INPUT,
     CANCEL_TRANSFER,
     SYNC_ERROR,
@@ -227,6 +228,16 @@ ssize_t __wrap_read(int fd, void *buffer, size_t size)
         case GROW_INPUT:
             g_assert_cmpint(truncate(active_fixture->input, LIMIT_BYTES + 1), ==, 0);
             break;
+        case MODIFY_INPUT: {
+            int writable = open(active_fixture->input, O_WRONLY | O_CLOEXEC);
+            g_assert_cmpint(writable, >=, 0);
+            g_assert_cmpint(pwrite(writable, "changed", 7, 0), ==, 7);
+            /* Force a timestamp difference even on filesystems with coarse timestamps. */
+            const struct timespec times[] = {{.tv_nsec = UTIME_OMIT}, {.tv_sec = 1}};
+            g_assert_cmpint(futimens(writable, times), ==, 0);
+            g_assert_cmpint(close(writable), ==, 0);
+            break;
+        }
         case SWAP_INPUT: {
             g_autofree char *moved = g_strconcat(active_fixture->input, ".moved", NULL);
             g_assert_cmpint(g_rename(active_fixture->input, moved), ==, 0);
@@ -1020,9 +1031,8 @@ static void test_substituted_staging(TransferFixture *fixture, gconstpointer dat
     g_assert_cmpint(g_rmdir(moved), ==, 0);
 }
 
-static void test_invalid_input(TransferFixture *fixture, gconstpointer data)
+static void make_invalid_input(TransferFixture *fixture, const char *kind)
 {
-    const char *kind = data;
     if (g_str_equal(kind, "empty")) {
         g_assert_true(g_file_set_contents(fixture->input, "", 0, NULL));
     } else if (g_str_equal(kind, "oversized")) {
@@ -1033,26 +1043,60 @@ static void test_invalid_input(TransferFixture *fixture, gconstpointer data)
     } else if (g_str_equal(kind, "fifo")) {
         g_assert_cmpint(mkfifo(fixture->input, 0600), ==, 0);
     }
+}
+
+static void test_invalid_input(TransferFixture *fixture, gconstpointer data)
+{
+    make_invalid_input(fixture, data);
     run_transfer(fixture);
     g_assert_error(fixture->error, IMAGE_KIT_IMAGE_ERROR, IMAGE_KIT_IMAGE_ERROR_INVALID_RESPONSE);
     g_assert_false(g_file_test(fixture->output, G_FILE_TEST_EXISTS));
 }
 
-static void test_non_native_payload(TransferFixture *fixture, gconstpointer data)
+static void read_non_native_payload(TransferFixture *fixture)
 {
-    (void)data;
-    gsize size = 3 * CHUNK_BYTES + 17;
-    g_autofree char *expected = make_pattern(fixture->input, size);
     g_autoptr(GFile) target = g_file_new_for_uri("resource:///export-transfer");
     g_assert_false(g_file_is_native(target));
     image_export_transfer_async(fixture->input, target, NULL, LIMIT_BYTES, fixture->cancel,
                                 transfer_done, fixture);
     g_main_loop_run(fixture->loop);
+}
+
+static void test_non_native_invalid_input(TransferFixture *fixture, gconstpointer data)
+{
+    make_invalid_input(fixture, data);
+    read_non_native_payload(fixture);
+    g_assert_error(fixture->error, IMAGE_KIT_IMAGE_ERROR, IMAGE_KIT_IMAGE_ERROR_INVALID_RESPONSE);
+    g_assert_null(fixture->payload);
+}
+
+static void test_non_native_payload(TransferFixture *fixture, gconstpointer data)
+{
+    gsize size = GPOINTER_TO_UINT(data);
+    g_autofree char *expected = make_pattern(fixture->input, size);
+    fault = SHORT_IO;
+    read_non_native_payload(fixture);
     g_assert_no_error(fixture->error);
     g_assert_nonnull(fixture->payload);
     g_assert_cmpuint(g_bytes_get_size(fixture->payload), ==, size);
     g_autofree char *actual = g_compute_checksum_for_bytes(G_CHECKSUM_SHA256, fixture->payload);
     g_assert_cmpstr(actual, ==, expected);
+}
+
+static void test_non_native_rejection(TransferFixture *fixture, gconstpointer data)
+{
+    fault = GPOINTER_TO_INT(data);
+    g_autofree char *expected = make_pattern(fixture->input, 3 * CHUNK_BYTES);
+    read_non_native_payload(fixture);
+    g_assert_null(fixture->payload);
+    if (fault == READ_ERROR) {
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_FAILED);
+    } else if (fault == CANCEL_TRANSFER) {
+        g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+    } else {
+        g_assert_error(fixture->error, IMAGE_KIT_IMAGE_ERROR,
+                       IMAGE_KIT_IMAGE_ERROR_INVALID_RESPONSE);
+    }
 }
 
 static void test_failed_transfer(TransferFixture *fixture, gconstpointer data)
@@ -1127,14 +1171,40 @@ int main(int argc, char **argv)
                setup_fixture, test_destination_link_limit, teardown_fixture);
     g_test_add("/export-transfer/destination-link-cycle", TransferFixture, NULL,
                setup_fixture, test_destination_cycle, teardown_fixture);
-    g_test_add("/export-transfer/non-native-validated-payload", TransferFixture, NULL,
+    g_test_add("/export-transfer/non-native-validated-payload", TransferFixture,
+               GUINT_TO_POINTER(3 * CHUNK_BYTES + 17),
                setup_fixture, test_non_native_payload, teardown_fixture);
+    g_test_add("/export-transfer/non-native-exact-chunk", TransferFixture,
+               GUINT_TO_POINTER(CHUNK_BYTES), setup_fixture, test_non_native_payload,
+               teardown_fixture);
+    g_test_add("/export-transfer/non-native-small", TransferFixture, GUINT_TO_POINTER(1024),
+               setup_fixture, test_non_native_payload, teardown_fixture);
+
+    const struct {
+        const char *name;
+        TransferFault fault;
+    } non_native_failures[] = {
+        {"/export-transfer/non-native-read-error", READ_ERROR},
+        {"/export-transfer/non-native-unexpected-eof", TRUNCATE_INPUT},
+        {"/export-transfer/non-native-growing-output", GROW_INPUT},
+        {"/export-transfer/non-native-modified-output", MODIFY_INPUT},
+        {"/export-transfer/non-native-cancel-during-validation", CANCEL_TRANSFER},
+    };
+    for (guint index = 0; index < G_N_ELEMENTS(non_native_failures); index++) {
+        g_test_add(non_native_failures[index].name, TransferFixture,
+                   GINT_TO_POINTER(non_native_failures[index].fault), setup_fixture,
+                   test_non_native_rejection, teardown_fixture);
+    }
 
     const char *invalid[] = {"empty", "oversized", "missing", "symlink", "fifo"};
     for (guint index = 0; index < G_N_ELEMENTS(invalid); index++) {
         g_autofree char *name = g_strconcat("/export-transfer/invalid-", invalid[index], NULL);
         g_test_add(name, TransferFixture, invalid[index], setup_fixture, test_invalid_input,
                    teardown_fixture);
+        g_autofree char *non_native_name =
+            g_strconcat("/export-transfer/non-native-invalid-", invalid[index], NULL);
+        g_test_add(non_native_name, TransferFixture, invalid[index], setup_fixture,
+                   test_non_native_invalid_input, teardown_fixture);
     }
     const struct {
         const char *name;

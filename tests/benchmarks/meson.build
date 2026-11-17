@@ -44,8 +44,10 @@ workloads = [
 
 transfer_benchmark = executable(
   'benchmark-export-transfer',
-  ['benchmark-export-transfer.vala', '../../src/core/export-transfer.c'],
+  ['benchmark-export-transfer.vala', 'benchmark-export-bytes.c', '../../src/core/export-transfer.c'],
   dependencies: core_api,
+  vala_args: ['--pkg', 'posix'],
+  link_args: ['-Wl,--wrap=g_bytes_new_take'],
 )
 benchmark(
   'Encoded export transfer memory and throughput',

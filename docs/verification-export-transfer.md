@@ -528,3 +528,7 @@ non-native transfer remains deferred until the backend can provide an
 abortable replacement with equivalent publication semantics. Portable
 backend-specific atomicity and behavior on a failed remote commit
 remain dependent on GIO and the server.
+
+The [non-native export verification](verification-non-native-export.md)
+measures the compatibility path and compares it with real GVfs WebDAV
+streaming and staging probes.

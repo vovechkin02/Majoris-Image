@@ -8,13 +8,20 @@ namespace ImageKit {
             if (!Path.is_absolute (backend.executable) || backend.id == "") {
                 throw new IOError.INVALID_ARGUMENT ("Decoder workers require an ID and an absolute executable path");
             }
+            bool duplicate = false;
             lock (custom_workers) {
                 foreach (var existing in custom_workers) {
                     if (existing.id == backend.id) {
-                        throw new IOError.EXISTS ("Decoder ID already registered");
+                        duplicate = true;
+                        break;
                     }
                 }
-                custom_workers.add (backend);
+                if (!duplicate) {
+                    custom_workers.add (backend);
+                }
+            }
+            if (duplicate) {
+                throw new IOError.EXISTS ("Decoder ID already registered");
             }
         }
 
@@ -223,6 +230,7 @@ namespace ImageKit {
             var worker = yield select (source, request.required_capabilities, stop);
             transform.validate ();
             request.preview_size = edge;
+            string identity = yield source.stamp (stop);
             try {
                 string output = yield worker.run (source.file, "decode", transform, stop, edge, request);
                 try {
@@ -231,7 +239,20 @@ namespace ImageKit {
                     if ((probe.capabilities & request.required_capabilities) != request.required_capabilities) {
                         throw new ImageError.UNSUPPORTED ("Image does not meet the requested render capabilities");
                     }
-                    return yield WorkerClient.read_pixels (output, stop);
+                    var pixels = yield WorkerClient.read_pixels (output, stop);
+                    string current;
+                    try {
+                        current = yield source.stamp (stop);
+                    } catch (IOError.NOT_FOUND error) {
+                        // A source deleted after decoding is also a detectable change.
+                        OperationProfile.event ("source-validation-failure");
+                        throw new ImageError.SOURCE_CHANGED ("Image source changed during rendering");
+                    }
+                    if (identity != "" && identity != current) {
+                        OperationProfile.event ("source-validation-failure");
+                        throw new ImageError.SOURCE_CHANGED ("Image source changed during rendering");
+                    }
+                    return pixels;
                 } finally {
                     WorkerClient.cleanup (output);
                 }

@@ -11,6 +11,7 @@ namespace ImageKit {
     }
 
     internal class Presentation : Object {
+#if !PRESENTATION_POLICY_ONLY
         private static OutputCapability output_capability (Gtk.Widget view) {
             var native = view.get_native ();
             var surface = native?.get_surface ();
@@ -34,6 +35,7 @@ namespace ImageKit {
         internal static PresentationDecision inspect (Gtk.Widget view, PresentationPolicy policy, bool hdr) {
             return choose (policy, hdr, output_capability (view));
         }
+#endif
 
         internal static PresentationDecision choose (PresentationPolicy policy, bool hdr,
             OutputCapability output) {
@@ -61,6 +63,7 @@ namespace ImageKit {
             return result;
         }
 
+#if !PRESENTATION_POLICY_ONLY
         [CCode (cname = "image_texture_external_description", cheader_filename = "image-texture.h")]
         private extern static unowned string external_description (Gdk.Texture texture,
             out bool sdr, out bool hdr);
@@ -77,5 +80,6 @@ namespace ImageKit {
                                                    Cancellable stop) throws Error {
             return yield document.render_preview (decision.tone_map, stop);
         }
+#endif
     }
 }

@@ -69,6 +69,13 @@ crop, exposure and color adjustments. `EncoderRegistry.encode()` writes a
 completed export to a separate destination using the chosen container,
 quality, bit depth, color profile and metadata policy.
 
+`DecoderRegistry.render()` compares the existing source metadata stamp before
+native decoding and after validated pixels are read. A detectable modification,
+replacement, or deletion raises `ImageError.SOURCE_CHANGED`; the result is
+discarded and the worker job is cleaned. Cancellation retains its GIO error,
+and only unsupported or missing codecs permit Glycin fallback. Metadata stamps
+detect observable changes; they do not provide an immutable file snapshot.
+
 The encoded worker output must be a nonempty regular file of at most 256 MiB.
 Core rejects an identical source and destination. For two native files, it also
 rejects paths, symlinks, and hard links that refer to the same source inode.

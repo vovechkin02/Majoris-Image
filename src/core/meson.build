@@ -30,6 +30,8 @@ core_dependencies = [gio, gee, json, math, dependency('zlib')]
 # The shared worker contract only needs recipe copying and serialization.
 render_options_vala_args = ['--define=RENDER_OPTIONS_DEFAULT_CHECK']
 core_vala_args = [
+  # Worker-only contract methods remain available to the worker and protocol tests.
+  '--define=CORE_WORKER_CLIENT',
   '--shared-library=libmajoris-image.so.2',
   '--hide-internal',
 ] + render_options_vala_args

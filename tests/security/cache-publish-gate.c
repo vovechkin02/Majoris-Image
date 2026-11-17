@@ -9,7 +9,10 @@
 
 int fsync(int fd)
 {
-    int (*next_fsync)(int) = dlsym(RTLD_NEXT, "fsync");
+    void *symbol = dlsym(RTLD_NEXT, "fsync");
+    int (*next_fsync)(int);
+    _Static_assert(sizeof next_fsync == sizeof symbol, "POSIX function pointer size");
+    memcpy(&next_fsync, &symbol, sizeof next_fsync);
     const char *gate = getenv("IMAGEKIT_PUBLICATION_GATE");
     if (gate) {
         char descriptor[64], path[4096];

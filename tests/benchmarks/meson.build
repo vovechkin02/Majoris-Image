@@ -34,6 +34,7 @@ workloads = [
   'export-jxl=' + (fixture_build_dir / 'large.tiff'),
   'export-tiff=' + (fixture_build_dir / 'large.tiff'),
   'open=' + (fixture_dir / 'rgb16.png'),
+  'render=' + (fixture_dir / 'rgb16.png'),
   'jpeg=' + (fixture_build_dir / 'navigation.jpg'),
   'large-tiff=' + (fixture_build_dir / 'large.tiff'),
   'pages=' + (fixture_dir / 'multipart.exr'),
@@ -75,7 +76,7 @@ transfer_benchmark = executable(
     '../../src/core/export-transfer.c',
   ] + remote_publication_sources,
   dependencies: core_api,
-  vala_args: ['--pkg', 'posix'],
+  vala_args: ['--pkg', 'posix', '--define=PROFILE_TIMINGS_ONLY'],
   link_args: [
     '-Wl,--wrap=g_bytes_new_take',
     '-Wl,--wrap=g_file_replace_async',

@@ -98,6 +98,8 @@ external texture reporting.
 
 See the [test guide](docs/TESTING.md) for isolated, extended, sanitizer, benchmark,
 and release qualification workflows.
+The [final closure report](docs/verification-release-2.0.md) records the current
+source-validation fix, strict-build blockers, and release qualification status.
 
 ## License
 

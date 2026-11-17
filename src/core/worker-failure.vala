@@ -1,5 +1,7 @@
 namespace ImageKit {
     internal class WorkerFailure : Object {
+#if !CORE_WORKER_CLIENT
+#if !WORKER_PROCESS
         public static DecodeFailure classify (Error error) {
             if (error is ImageError.UNSUPPORTED || error is ImageError.RAW_UNSUPPORTED) {
                 return DecodeFailure.UNSUPPORTED;
@@ -24,6 +26,7 @@ namespace ImageKit {
             }
             return DecodeFailure.FAILURE;
         }
+#endif
 
         public static string serialize (Error error) {
             string message = error.message.make_valid ();
@@ -64,6 +67,8 @@ namespace ImageKit {
             return generator.to_data (null);
         }
 
+#endif
+#if !WORKER_PROCESS
         public static Error deserialize (string diagnostic) {
             try {
                 string text = diagnostic.strip ();
@@ -103,5 +108,6 @@ namespace ImageKit {
                 return new ImageError.DECODE (_("The decoder could not read this image. Check the file or the installed codecs."));
             }
         }
+#endif
     }
 }

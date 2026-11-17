@@ -64,6 +64,7 @@ namespace ImageKit {
             }
         }
 
+#if !CORE_WORKER_CLIENT
         internal string serialize () {
             var node = Json.gobject_serialize (this);
             var object = node.get_object ();
@@ -75,6 +76,8 @@ namespace ImageKit {
             return generator.to_data (null);
         }
 
+#endif
+#if !WORKER_PROCESS
         internal static ImageProbe deserialize (string text) throws Error {
             var parser = new Json.Parser ();
             try {
@@ -120,5 +123,6 @@ namespace ImageKit {
             }
             return result;
         }
+#endif
     }
 }

@@ -53,6 +53,7 @@ if get_option('gtk')
   presentation_test = executable(
     'test-presentation-policy',
     ['test-presentation-policy.vala', policy_source],
+    vala_args: ['--define=PRESENTATION_POLICY_ONLY'],
     include_directories: include_directories('../../src/gtk'),
     dependencies: gtk_api,
   )

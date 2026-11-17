@@ -192,6 +192,7 @@ void image_cache_unlock(int fd)
 
 static void publish_thread(GTask *task, gpointer source, gpointer data, GCancellable *stop)
 {
+    (void)source;
     if (g_task_return_error_if_cancelled(task)) {
         return;
     }

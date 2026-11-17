@@ -35,7 +35,29 @@ void check_protocol_round_trips () {
     }
 }
 
+private void verify_failure_round_trips () {
+    Error[] errors = {
+        new ImageError.UNSUPPORTED ("Unsupported fixture"),
+        new ImageError.CODEC_MISSING ("Missing fixture codec"),
+        new ImageError.RAW_UNSUPPORTED ("Unsupported RAW fixture"),
+        new ImageError.CORRUPT ("Corrupt fixture"),
+        new ImageError.MEMORY ("Fixture budget exceeded"),
+        new ImageError.COLOR_PROFILE ("Invalid fixture profile"),
+        new ImageError.DECODE ("Fixture failed")
+    };
+    foreach (var error in errors) {
+        var decoded = WorkerFailure.deserialize (WorkerFailure.serialize (error));
+        assert (decoded.domain == error.domain && decoded.code == error.code);
+        assert (decoded.message == error.message);
+        assert (WorkerFailure.classify (decoded) == WorkerFailure.classify (error));
+    }
+    assert (WorkerFailure.classify (new ImageError.DECODER_CRASH ("Crash")) == DecodeFailure.CRASH);
+    assert (WorkerFailure.classify (new IOError.TIMED_OUT ("Timeout")) == DecodeFailure.TIMEOUT);
+    assert (WorkerFailure.deserialize ("{") is ImageError.DECODE);
+}
+
 int main () {
     check_protocol_round_trips ();
+    verify_failure_round_trips ();
     return 0;
 }

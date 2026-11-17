@@ -202,7 +202,13 @@ private async void measure (string mode, ImageSource source, File? remote) throw
     int64 began = get_monotonic_time ();
     var registry = new DecoderRegistry ();
     var options = new DecodeOptions ();
-    if (mode == "thumbnail") {
+    if (mode == "render") {
+        var transform = new RenderOptions ();
+        transform.turns = 1;
+        var pixels = yield registry.render (source, transform, 1024);
+        stdout.printf ("Rendered %d × %d, %zu bytes\n", pixels.width, pixels.height,
+            pixels.bytes.get_size ());
+    } else if (mode == "thumbnail") {
         var png = yield new ThumbnailService ().generate (source, 256);
         stdout.printf ("PNG bytes %zu\n", png.get_size ());
     } else if (mode == "cancel") {

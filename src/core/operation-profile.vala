@@ -12,11 +12,13 @@ namespace ImageKit {
             }
         }
 
+#if !PROFILE_TIMINGS_ONLY
         internal static void event (string stage) {
             if (Environment.get_variable ("MAJORIS_IMAGE_PROFILE") == "1") {
                 emit (stage, 0, 1);
             }
         }
+#endif
 
         private static void emit (string stage, int64 elapsed, uint64 count) {
             stderr.printf ("ImageKit-profile %s %" + int64.FORMAT + " %" + uint64.FORMAT + "\n",

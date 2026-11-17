@@ -11,12 +11,15 @@ namespace ImageKit {
 
         public int sequence_frames { get; set; }
 
+#if !WORKER_PROCESS
         public string serialize () {
             var node = Json.gobject_serialize (this);
             RenderOptions.translate_recipe (node.get_object ().get_member ("transform"), true);
             return Json.to_string (node, false);
         }
+#endif
 
+#if !CORE_WORKER_CLIENT
         public static WorkerRequest deserialize (string text) throws Error {
             var parser = new Json.Parser ();
             parser.load_from_data (text);
@@ -37,5 +40,6 @@ namespace ImageKit {
             request.transform.validate ();
             return request;
         }
+#endif
     }
 }

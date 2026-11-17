@@ -1,5 +1,6 @@
 gexiv = dependency('gexiv2')
 native_vala_flags = [
+  '--define=WORKER_PROCESS',
   '--vapidir=' + meson.project_source_root() / 'vapi',
   '--pkg=image-native',
   '--pkg=image-vips',

@@ -179,7 +179,7 @@ static heif_track *presentation_track(heif_context *context)
 {
     uint32_t ids[64];
     int count = heif_context_number_of_sequence_tracks(context);
-    if (count < 1 || count > G_N_ELEMENTS(ids)) {
+    if (count < 1 || count > (int)G_N_ELEMENTS(ids)) {
         return NULL;
     }
 

@@ -131,6 +131,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     assert (document.preview.bytes.get_size () == (size_t) document.preview.stride * document.preview.height);
     var rgb8 = yield registry.open (new ImageSource (File.new_for_path (Path.build_filename (directory, "rgb8.png"))));
     assert (rgb8.bit_depth == 8);
+    yield verify_direct_rendering (registry, source, document.preview);
     yield verify_source_replacement (registry, source, rgb8.source);
     var pixels = yield document.render_region (0, 0, 1, 1, 1);
     assert (pixels.width == 1 && pixels.height == 1 && pixels.bytes.get_size () == 16);
@@ -325,8 +326,14 @@ private string install_export_test_launcher () throws Error {
     string launcher = Path.build_filename (directory, "bwrap");
     string source = Shell.quote (Path.build_filename (temporary, "mutable-export-source.png"));
     string executable = Shell.quote (bwrap);
+    string render_action = Shell.quote (Path.build_filename (temporary, "render-action"));
     // The real sandbox and worker finish encoding before the launcher changes the source.
     FileUtils.set_contents (launcher, "#!/bin/sh\n" +
+        "if [ -f " + render_action + " ]; then\n" +
+        "    job=''\n    for argument in \"$@\"; do\n" +
+        "        case \"$argument\" in \"$TMPDIR\"/majoris-image-*) job=\"$argument\";; esac\n" +
+        "    done\n    " + executable + " \"$@\" || exit $?\n" +
+        "    . " + render_action + "\n    exit $?\nfi\n" +
         "if [ -f " + source + " ]; then\n" +
         "    " + executable + " \"$@\" || exit $?\n" +
         "    printf x >> " + source + "\n" +
@@ -336,6 +343,141 @@ private string install_export_test_launcher () throws Error {
     }
     Environment.set_variable ("PATH", directory + ":" + Environment.get_variable ("PATH"), true);
     return launcher;
+}
+
+private void assert_render_cleanup () throws Error {
+    var jobs = Dir.open (Environment.get_tmp_dir ());
+    string? entry;
+    while ((entry = jobs.read_name ()) != null) {
+        assert (!entry.has_prefix ("majoris-image-") ||
+            entry.has_prefix ("majoris-image-source-"));
+    }
+}
+
+private async void verify_direct_rendering (DecoderRegistry registry, ImageSource fixture,
+                                            PixelBuffer reference) throws Error {
+    var file = File.new_for_path (Path.build_filename (Environment.get_tmp_dir (),
+        "mutable-render-source.png"));
+    string action = Path.build_filename (Environment.get_tmp_dir (), "render-action");
+    string launches = Path.build_filename (Environment.get_tmp_dir (), "render-launches");
+    string ready = Path.build_filename (Environment.get_tmp_dir (), "render-ready");
+    string gate = Path.build_filename (Environment.get_tmp_dir (), "render-gate");
+    var original = yield fixture.file.load_bytes_async (null, null);
+    var source = new ImageSource (file);
+    var transform = new RenderOptions ();
+    transform.turns = 1;
+    string quoted = Shell.quote (file.get_path ());
+    string count = "printf x >> " + Shell.quote (launches) + "\n";
+    try {
+        yield file.replace_contents_bytes_async (original, null, false, FileCreateFlags.NONE,
+            null, null);
+        var pixels = yield registry.render (source, transform, 64);
+        assert (pixels.width == reference.height && pixels.height == reference.width);
+        assert (pixels.stride == pixels.width * 16);
+        assert (pixels.bytes.get_size () == (size_t) pixels.stride * pixels.height);
+        for (int channel = 0; channel < 4; channel++) {
+            assert (Math.fabs (sample (pixels, 5, 7, channel) -
+                sample (reference, 7, reference.height - 1 - 5, channel)) < 0.001);
+        }
+        assert (original.compare (yield file.load_bytes_async (null, null)) == 0);
+        assert_render_cleanup ();
+
+        // The launcher mutates only after the real decoder exits, before Core consumes output.
+        string[] mutations = {
+            "touch -m -d @1 " + quoted,
+            "printf x | dd of=" + quoted + " bs=1 seek=20 conv=notrunc status=none\n" +
+                "touch -m -d @1 " + quoted,
+            "printf x >> " + quoted,
+            "cp " + quoted + " " + quoted + ".replacement\nmv " + quoted +
+                ".replacement " + quoted,
+            "rm " + quoted
+        };
+        foreach (string mutation in mutations) {
+            yield file.replace_contents_bytes_async (original, null, false,
+                FileCreateFlags.NONE, null, null);
+            FileUtils.set_contents (action, count + mutation + "\n");
+            try {
+                yield registry.render (source, transform, 64);
+                assert_not_reached ();
+            } catch (ImageError.SOURCE_CHANGED error) {
+                assert (error.message == "Image source changed during rendering");
+            }
+            string attempts;
+            FileUtils.get_contents (launches, out attempts);
+            assert (attempts == "x");
+            FileUtils.unlink (launches);
+            FileUtils.unlink (action);
+            assert_render_cleanup ();
+        }
+
+        yield file.replace_contents_bytes_async (original, null, false, FileCreateFlags.NONE,
+            null, null);
+        FileUtils.set_contents (action, count + "printf '{' > \"$job/image.json\"\n");
+        try {
+            yield registry.render (source, transform, 64);
+            assert_not_reached ();
+        } catch (ImageError.INVALID_RESPONSE error) {
+            // A malformed manifest must retain its classification and bypass fallback.
+        }
+        string attempts;
+        FileUtils.get_contents (launches, out attempts);
+        assert (attempts == "x");
+        FileUtils.unlink (action);
+        FileUtils.unlink (launches);
+        assert_render_cleanup ();
+
+        var cancel = new Cancellable ();
+        cancel.cancel ();
+        try {
+            yield registry.render (source, transform, 64, null, cancel);
+            assert_not_reached ();
+        } catch (IOError.CANCELLED error) {
+            // A canceled request must not launch a worker or fall back.
+        }
+        assert_render_cleanup ();
+
+        cancel = new Cancellable ();
+        var monitor = File.new_for_path (ready).monitor_file (FileMonitorFlags.NONE);
+        ulong handler = monitor.changed.connect (() => {
+            if (FileUtils.test (ready, FileTest.EXISTS)) {
+                cancel.cancel ();
+            }
+        });
+        FileUtils.set_contents (action, count + "mkfifo " + Shell.quote (gate) +
+            "\nprintf ready > " + Shell.quote (ready) + "\nread value < " + Shell.quote (gate) + "\n");
+        uint previous_timeout = registry.timeout_seconds;
+        registry.timeout_seconds = 5;
+        try {
+            yield registry.render (source, transform, 64, null, cancel);
+            assert_not_reached ();
+        } catch (IOError.CANCELLED error) {
+            assert (FileUtils.test (ready, FileTest.EXISTS));
+        } finally {
+            registry.timeout_seconds = previous_timeout;
+            monitor.disconnect (handler);
+            monitor.cancel ();
+        }
+        FileUtils.get_contents (launches, out attempts);
+        assert (attempts == "x");
+        FileUtils.unlink (action);
+        assert_render_cleanup ();
+
+        var corrupt = new ImageSource (fixture.file.get_parent ().get_child ("corrupt.bin"));
+        try {
+            yield registry.render (corrupt, transform, 64);
+            assert_not_reached ();
+        } catch (ImageError.UNSUPPORTED error) {
+            // Keep the established corrupt-fixture classification.
+        }
+        pixels = yield registry.render (source, transform, 64);
+        assert (pixels.width == reference.height && pixels.height == reference.width);
+        assert (original.compare (yield file.load_bytes_async (null, null)) == 0);
+        assert_render_cleanup ();
+    } finally {
+        foreach (string path in new string[] { file.get_path (), action, launches, ready, gate }) {
+            FileUtils.unlink (path);
+        }
+    }
 }
 
 private async void verify_export_source_change (EncoderRegistry encoder, Bytes original,

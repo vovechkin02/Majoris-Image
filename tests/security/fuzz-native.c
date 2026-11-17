@@ -67,6 +67,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
 int LLVMFuzzerInitialize(int *argc, char ***argv)
 {
+    (void)argc;
     if (VIPS_INIT((*argv)[0])) {
         return 1;
     }

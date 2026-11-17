@@ -92,6 +92,9 @@ processes cannot reserve their shadow address space there. Keep sandbox
 qualification in the regular build. The sanitizer build exercises the same
 native parsers directly. Strict-warning builds still report existing generated
 Vala C warnings.
+The [final closure report](verification-release-2.0.md) distinguishes clean
+first-party Vala compilation from remaining generated C and XTest deprecation
+failures under repository-wide warnings as errors.
 
 The deterministic harness mutates PNG, ICC, timed-track, and float buffer inputs.
 The protocol property test exercises the production manifest and request parsers.
@@ -169,6 +172,10 @@ For a standalone baseline, pass the built benchmark and worker to
 `MODE=FIXTURE` arguments. Pass `--baseline previous.json` to compare workloads
 with the same fixture hash. Cross-machine timings do not gate functional tests.
 For scheduled comparisons use the same runner and build settings.
+The `render=FIXTURE` workload measures transformed direct rendering, including
+source-freshness checks. `Headless Core API` also covers deterministic post-decode
+source mutations, deleted sources, malformed manifests, cancellation, cleanup,
+and successful rendering after failures using its existing Bubblewrap launcher.
 
 For Core and sandbox timing, configure both comparison builds with
 `-Dworker_profiling=true`. The runner enables `MAJORIS_IMAGE_PROFILE=1` in

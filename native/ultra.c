@@ -6,6 +6,9 @@
 
 #include "bridge.h"
 
+// GNU11 binary16 samples match libuhdr's half-float layout before C23.
+__extension__ typedef _Float16 HalfFloat;
+
 static gboolean ultra_error(uhdr_error_info_t status, GError **error)
 {
     if (status.error_code == UHDR_CODEC_OK) {
@@ -125,7 +128,7 @@ VipsImage *image_codec_ultra_decode(const char *path, gboolean sdr, GError **err
                 (guint16 *)decoded->planes[0] + (size_t)y * decoded->stride[0] * 4;
             float *target = (float *)buffer + (size_t)y * decoded->w * 4;
             for (unsigned x = 0; x < decoded->w * 4; x++) {
-                _Float16 half;
+                HalfFloat half;
                 memcpy(&half, source + x, 2);
                 target[x] = (float)half;
             }
@@ -219,7 +222,7 @@ gboolean image_codec_ultra_encode(VipsImage *image, const char *path, int format
                                         "half-float gamut; export linear EXR instead");
                     goto done;
                 }
-                _Float16 half = (_Float16)MAX(rgb[c], 0);
+                HalfFloat half = (HalfFloat)MAX(rgb[c], 0);
                 memcpy(buffer + ((size_t)y * linear->Xsize + x) * 4 + c, &half, 2);
             }
         }

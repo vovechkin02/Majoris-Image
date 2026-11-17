@@ -7,7 +7,7 @@ typedef struct _ExportSource ExportSource;
 G_GNUC_INTERNAL void image_export_prepare_async(GFile *source, GFile *destination,
                                                GCancellable *cancel,
                                                GAsyncReadyCallback callback, gpointer user_data);
-/* Finish transfers ownership of the pin. Successful NULL means no native identity is available. */
+/* Finish transfers ownership of the pin. Successful NULL means the source is non-native. */
 G_GNUC_INTERNAL ExportSource *image_export_prepare_finish(GAsyncResult *result, GError **error);
 G_GNUC_INTERNAL void image_export_source_free(ExportSource *source);
 /* The caller owns the returned close-on-exec descriptor. */
@@ -19,6 +19,6 @@ G_GNUC_INTERNAL void image_export_transfer_async(const char *path, GFile *destin
                                                 GCancellable *cancel,
                                                 GAsyncReadyCallback callback, gpointer user_data);
 /* Successful NULL means native publication completed. Otherwise, finish transfers ownership
- * of the validated bytes with the input already closed. The caller keeps the bytes alive
- * through asynchronous GIO publication. */
+ * of the validated bytes after closing the input and checking the source pin, if supplied.
+ * The caller keeps the bytes alive through asynchronous GIO publication. */
 G_GNUC_INTERNAL GBytes *image_export_transfer_finish(GAsyncResult *result, GError **error);

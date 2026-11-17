@@ -51,6 +51,8 @@ typedef enum {
     SUBSTITUTE_STAGING,
     SOURCE_WRITE_DURING_COPY,
     SOURCE_WRITE_AFTER_SYNC,
+    SOURCE_CAPTURE_ERROR,
+    CANCEL_SOURCE_CAPTURE,
     SOURCE_DESCRIPTOR_ERROR,
     SOURCE_PATH_ERROR,
 } TransferFault;
@@ -67,6 +69,7 @@ typedef struct {
     GMainLoop *loop;
     GError *error;
     GBytes *payload;
+    gboolean remote;
 } TransferFixture;
 
 static TransferFixture *active_fixture;
@@ -177,6 +180,13 @@ int __wrap_fstat(int fd, struct stat *info)
         info->st_dev == active_fixture->source_before.st_dev &&
         info->st_ino == active_fixture->source_before.st_ino) {
         active_fixture->source_fd = fd;
+        if (fault == SOURCE_CAPTURE_ERROR) {
+            errno = EIO;
+            return -1;
+        }
+        if (fault == CANCEL_SOURCE_CAPTURE) {
+            g_cancellable_cancel(active_fixture->cancel);
+        }
     }
     if (result == 0 && fd == staging_fd && fault == STAGING_OWNER_ERROR) {
         info->st_uid ^= 1;
@@ -404,12 +414,23 @@ static void preparation_done(GObject *source, GAsyncResult *result, gpointer dat
     g_main_loop_quit(fixture->loop);
 }
 
+static GFile *transfer_destination(TransferFixture *fixture)
+{
+    return fixture->remote ? g_file_new_for_uri("resource:///export-transfer")
+                           : g_file_new_for_path(fixture->output);
+}
+
+static void prepare_file(TransferFixture *fixture, GFile *source)
+{
+    g_autoptr(GFile) destination = transfer_destination(fixture);
+    image_export_prepare_async(source, destination, fixture->cancel, preparation_done, fixture);
+    g_main_loop_run(fixture->loop);
+}
+
 static void prepare_source_at(TransferFixture *fixture, const char *path)
 {
     g_autoptr(GFile) source = g_file_new_for_path(path);
-    g_autoptr(GFile) destination = g_file_new_for_path(fixture->output);
-    image_export_prepare_async(source, destination, fixture->cancel, preparation_done, fixture);
-    g_main_loop_run(fixture->loop);
+    prepare_file(fixture, source);
 }
 
 static void prepare_source(TransferFixture *fixture)
@@ -419,11 +440,13 @@ static void prepare_source(TransferFixture *fixture)
 
 static void run_transfer(TransferFixture *fixture)
 {
-    g_autoptr(GFile) target = g_file_new_for_path(fixture->output);
+    g_autoptr(GFile) target = transfer_destination(fixture);
     image_export_transfer_async(fixture->input, target, fixture->source, LIMIT_BYTES,
                                 fixture->cancel, transfer_done, fixture);
     g_main_loop_run(fixture->loop);
-    g_assert_null(fixture->payload);
+    if (!fixture->remote) {
+        g_assert_null(fixture->payload);
+    }
 }
 
 static char *make_pattern(const char *path, gsize size)
@@ -757,7 +780,7 @@ static void test_preserve_different_group(TransferFixture *fixture, gconstpointe
 
 static void test_pinned_source(TransferFixture *fixture, gconstpointer data)
 {
-    (void)data;
+    fixture->remote = GPOINTER_TO_INT(data);
     fixture->source_path = g_build_filename(fixture->directory, "source", NULL);
     g_autofree char *original = g_build_filename(fixture->directory, "original", NULL);
     g_autofree char *expected = make_pattern(fixture->source_path, 1051);
@@ -765,6 +788,7 @@ static void test_pinned_source(TransferFixture *fixture, gconstpointer data)
     g_assert_true(g_file_set_contents(fixture->output, "previous export", -1, NULL));
     struct stat before;
     g_assert_cmpint(stat(fixture->source_path, &before), ==, 0);
+    fixture->source_before = before;
     prepare_source(fixture);
     g_assert_no_error(fixture->error);
     g_assert_cmpint(g_rename(fixture->source_path, original), ==, 0);
@@ -773,21 +797,69 @@ static void test_pinned_source(TransferFixture *fixture, gconstpointer data)
     int fd = image_export_source_dup(fixture->source, &fixture->error);
     g_assert_no_error(fixture->error);
     g_assert_cmpint(fd, >=, 0);
+    g_assert_cmpint(fcntl(fd, F_GETFD), ==, FD_CLOEXEC);
+    g_assert_cmpint(fcntl(fixture->source_fd, F_GETFD), ==, FD_CLOEXEC);
     struct stat pinned;
     g_assert_cmpint(fstat(fd, &pinned), ==, 0);
     assert_same_inode(&before, &pinned);
     g_assert_cmpint(close(fd), ==, 0);
     run_transfer(fixture);
     g_assert_error(fixture->error, G_IO_ERROR, G_IO_ERROR_BUSY);
+    g_assert_null(fixture->payload);
     assert_contents(fixture->output, "previous export");
     assert_contents(fixture->source_path, "substitute");
     assert_checksum(original, expected);
     assert_checksum(fixture->input, encoded);
+    g_clear_pointer(&fixture->source, image_export_source_free);
+    g_assert_cmpint(fcntl(fixture->source_fd, F_GETFD), ==, -1);
+    g_assert_cmpint(errno, ==, EBADF);
+}
+
+static void test_skip_non_native_source(TransferFixture *fixture, gconstpointer data)
+{
+    fixture->remote = GPOINTER_TO_INT(data);
+    g_autoptr(GFile) source = g_file_new_for_uri("resource:///export-source");
+    g_assert_false(g_file_is_native(source));
+    prepare_file(fixture, source);
+    g_assert_no_error(fixture->error);
+    g_assert_null(fixture->source);
+}
+
+static void test_invalid_source(TransferFixture *fixture, gconstpointer data)
+{
+    const char *scenario = data;
+    fixture->remote = TRUE;
+    gboolean directory = g_str_equal(scenario, "directory");
+    fixture->source_path = directory ? g_strdup(fixture->directory)
+                                     : g_build_filename(fixture->directory, "source", NULL);
+    int code = G_IO_ERROR_INVALID_ARGUMENT;
+    if (g_str_equal(scenario, "missing")) {
+        code = G_IO_ERROR_NOT_FOUND;
+    } else if (g_str_equal(scenario, "fifo")) {
+        g_assert_cmpint(mkfifo(fixture->source_path, 0600), ==, 0);
+    } else if (!directory) {
+        g_assert_true(g_file_set_contents(fixture->source_path, "source", -1, NULL));
+        g_assert_cmpint(stat(fixture->source_path, &fixture->source_before), ==, 0);
+        gboolean canceled = g_str_equal(scenario, "canceled");
+        fault = canceled ? CANCEL_SOURCE_CAPTURE : SOURCE_CAPTURE_ERROR;
+        code = canceled ? G_IO_ERROR_CANCELLED : g_io_error_from_errno(EIO);
+    }
+    prepare_source(fixture);
+    g_assert_error(fixture->error, G_IO_ERROR, code);
+    g_assert_null(fixture->source);
+    if (fixture->source_fd >= 0) {
+        g_assert_cmpint(fcntl(fixture->source_fd, F_GETFD), ==, -1);
+        g_assert_cmpint(errno, ==, EBADF);
+    }
 }
 
 static void test_source_freshness(TransferFixture *fixture, gconstpointer data)
 {
     const char *scenario = data;
+    fixture->remote = g_str_has_prefix(scenario, "remote-");
+    if (fixture->remote) {
+        scenario += strlen("remote-");
+    }
     fixture->source_path = g_build_filename(fixture->directory, "source", NULL);
     g_autofree char *source_hash = make_pattern(fixture->source_path, 113);
     g_autofree char *output_hash = make_pattern(fixture->input, CHUNK_BYTES * 2);
@@ -808,6 +880,8 @@ static void test_source_freshness(TransferFixture *fixture, gconstpointer data)
 
     gboolean atime_only = g_str_equal(scenario, "read");
     gboolean deleted = g_str_equal(scenario, "deleted");
+    gboolean renamed = g_str_equal(scenario, "renamed");
+    gboolean canceled = g_str_equal(scenario, "canceled");
     gboolean invalid_path = g_str_equal(scenario, "invalid-path");
     gboolean restored_mtime = g_str_equal(scenario, "restored-mtime");
     gboolean changed_bytes = FALSE;
@@ -830,6 +904,11 @@ static void test_source_freshness(TransferFixture *fixture, gconstpointer data)
         if (invalid_path) {
             g_assert_cmpint(symlink("source", fixture->source_path), ==, 0);
         }
+    } else if (renamed) {
+        g_autofree char *original = g_build_filename(fixture->directory, "original", NULL);
+        g_assert_cmpint(g_rename(fixture->source_path, original), ==, 0);
+    } else if (canceled) {
+        fault = CANCEL_TRANSFER;
     } else if (g_str_equal(scenario, "during-copy")) {
         fault = SOURCE_WRITE_DURING_COPY;
         changed_bytes = TRUE;
@@ -862,9 +941,17 @@ static void test_source_freshness(TransferFixture *fixture, gconstpointer data)
     }
 
     run_transfer(fixture);
-    if (atime_only) {
+    if (atime_only || g_str_equal(scenario, "unchanged")) {
         g_assert_no_error(fixture->error);
-        assert_checksum(fixture->output, output_hash);
+        if (fixture->remote) {
+            g_assert_nonnull(fixture->payload);
+            g_autofree char *hash = g_compute_checksum_for_bytes(G_CHECKSUM_SHA256,
+                                                                 fixture->payload);
+            g_assert_cmpstr(hash, ==, output_hash);
+            assert_contents(fixture->output, "previous export");
+        } else {
+            assert_checksum(fixture->output, output_hash);
+        }
     } else {
         int code = G_IO_ERROR_BUSY;
         const char *diagnostic = "Image source changed";
@@ -874,11 +961,17 @@ static void test_source_freshness(TransferFixture *fixture, gconstpointer data)
         } else if (fault == SOURCE_PATH_ERROR) {
             code = G_IO_ERROR_PERMISSION_DENIED;
             diagnostic = "Cannot recheck image source path";
-        } else if (deleted || invalid_path) {
+        } else if (deleted || invalid_path || renamed) {
             diagnostic = "Image source path changed";
         }
+        if (canceled) {
+            code = G_IO_ERROR_CANCELLED;
+        }
         g_assert_error(fixture->error, G_IO_ERROR, code);
-        g_assert_true(g_str_has_prefix(fixture->error->message, diagnostic));
+        g_assert_null(fixture->payload);
+        if (!canceled) {
+            g_assert_true(g_str_has_prefix(fixture->error->message, diagnostic));
+        }
         if (new_destination) {
             g_assert_false(g_file_test(fixture->output, G_FILE_TEST_EXISTS));
         } else {
@@ -1269,6 +1362,22 @@ int main(int argc, char **argv)
                setup_fixture, test_preserve_different_group, teardown_fixture);
     g_test_add("/export-transfer/source-descriptor-survives-path-replacement", TransferFixture,
                NULL, setup_fixture, test_pinned_source, teardown_fixture);
+    g_test_add("/export-transfer/remote-source-descriptor-survives-path-replacement",
+               TransferFixture, GINT_TO_POINTER(TRUE), setup_fixture, test_pinned_source,
+               teardown_fixture);
+    g_test_add("/export-transfer/native-destination-skips-non-native-source",
+               TransferFixture, NULL, setup_fixture, test_skip_non_native_source,
+               teardown_fixture);
+    g_test_add("/export-transfer/remote-destination-skips-non-native-source",
+               TransferFixture, GINT_TO_POINTER(TRUE), setup_fixture, test_skip_non_native_source,
+               teardown_fixture);
+    const char *invalid_sources[] = {"missing", "directory", "fifo", "capture-error", "canceled"};
+    for (guint index = 0; index < G_N_ELEMENTS(invalid_sources); index++) {
+        g_autofree char *name = g_strconcat("/export-transfer/remote-preflight-",
+                                            invalid_sources[index], NULL);
+        g_test_add(name, TransferFixture, invalid_sources[index], setup_fixture,
+                   test_invalid_source, teardown_fixture);
+    }
     const char *freshness[] = {
         "read", "grow", "shrink", "same-size", "mtime-nanoseconds", "restored-mtime",
         "during-copy", "after-sync", "deleted", "invalid-path", "descriptor-error", "path-error",
@@ -1277,6 +1386,17 @@ int main(int argc, char **argv)
         g_autofree char *name = g_strconcat("/export-transfer/source-", freshness[index], NULL);
         g_test_add(name, TransferFixture, freshness[index], setup_fixture, test_source_freshness,
                    teardown_fixture);
+    }
+    const char *remote_freshness[] = {
+        "remote-unchanged", "remote-read", "remote-grow", "remote-shrink",
+        "remote-same-size", "remote-mtime-nanoseconds", "remote-restored-mtime",
+        "remote-during-copy", "remote-renamed", "remote-deleted", "remote-invalid-path",
+        "remote-descriptor-error", "remote-path-error", "remote-canceled",
+    };
+    for (guint index = 0; index < G_N_ELEMENTS(remote_freshness); index++) {
+        g_autofree char *name = g_strconcat("/export-transfer/", remote_freshness[index], NULL);
+        g_test_add(name, TransferFixture, remote_freshness[index], setup_fixture,
+                   test_source_freshness, teardown_fixture);
     }
     g_test_add("/export-transfer/preserve-access-acl", TransferFixture, NULL,
                setup_fixture, test_access_acl, teardown_fixture);

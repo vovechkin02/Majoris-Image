@@ -6,11 +6,14 @@ import json
 import os
 import platform
 import random
+import select
+import shlex
 import shutil
 import signal
 import statistics
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import zlib
@@ -27,6 +30,8 @@ from run_benchmarks import descendants, disk_usage, memory_kib
 
 CHUNK_BYTES = 256 * 1024
 MIB = 1024**2
+G_IO_ERROR_BUSY = 26
+G_IO_ERROR_CANCELLED = 19
 
 
 def digest(path: Path) -> str:
@@ -223,7 +228,7 @@ def backend_rss(pid: int) -> int:
         for line in Path(f"/proc/{pid}/status").read_text().splitlines():
             if line.startswith("VmRSS:"):
                 return int(line.split()[1])
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
         pass
     return 0
 
@@ -327,6 +332,8 @@ def sample(
     existing: bool,
     fault: str = "",
     worker: Path | None = None,
+    launcher: Path | None = None,
+    remote_source: Path | None = None,
 ) -> dict:
     for path in dav.store.iterdir():
         path.unlink()
@@ -340,6 +347,8 @@ def sample(
     target = dav.store / "export"
     if existing:
         target.write_bytes(dav.previous)
+    if remote_source is not None:
+        shutil.copyfile(remote_source, dav.store / "source")
     with tempfile.TemporaryDirectory(dir=root) as work:
         staging = Path(work) / "tmp"
         staging.mkdir()
@@ -349,7 +358,13 @@ def sample(
                 MAJORIS_IMAGE_WORKER=str(worker),
                 MAJORIS_IMAGE_PROFILE="1",
             )
+        if launcher is not None:
+            environment["PATH"] = f"{launcher}:{environment['PATH']}"
         result = collect(command, environment, dav, worker)
+        if remote_source is not None and len(command) == 3 and result["status"] == 0:
+            output = staging / "benchmark-export"
+            result["native_sha256"] = digest(output)
+            output.unlink()
         if any(staging.iterdir()):
             raise RuntimeError(
                 f"Export left client temporary files: {list(staging.iterdir())}"
@@ -362,8 +377,11 @@ def sample(
     if result["backend_exited"]:
         mount(dav)
     result["requests"] = list(dav.requests)
+    result["request_count"] = len(result["requests"])
     result["remote_leftovers"] = sorted(
-        path.name for path in dav.store.iterdir() if path != target
+        path.name
+        for path in dav.store.iterdir()
+        if path != target and not (remote_source is not None and path.name == "source")
     )
     exists = target.exists()
     result["destination_exists"] = exists
@@ -490,10 +508,7 @@ def failure_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dic
                     for offset in range(0, size, CHUNK_BYTES):
                         checksum.update(source.read(min(CHUNK_BYTES, size - offset)))
                     expected_hashes.add(checksum.hexdigest())
-            if (
-                result["status"] != status
-                or result["sha256"] not in expected_hashes
-            ):
+            if result["status"] != status or result["sha256"] not in expected_hashes:
                 raise RuntimeError((mode, fault, existing, result))
             if fault == "invalid-destination" or mode.endswith("-precanceled"):
                 if any(method == "PUT" for method, *_ in result["requests"]):
@@ -605,9 +620,15 @@ def public_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dict
         remote["decoded"] = decode(root / "readback", root)
         if native["decoded"] != remote["decoded"]:
             raise RuntimeError((format_name, native, remote))
+        created = sample(
+            [*command, dav.uri + "/export"], dav, root, False, worker=args.worker
+        )
+        if created["status"] or decode(root / "readback", root) != native["decoded"]:
+            raise RuntimeError((format_name, native, created))
         results[format_name] = {
             "native": native,
             "webdav": remote,
+            "webdav_create": created,
             "same_encoded_artifact": same_artifact,
             "independent_encoded_hashes_match": native["sha256"] == remote["sha256"],
         }
@@ -656,7 +677,9 @@ def public_faults(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
             elif result["sha256"] != (previous if existing else None):
                 raise RuntimeError((mode, fault, existing, result))
             puts = [request for request in result["requests"] if request[0] == "PUT"]
-            before_put = mode.endswith("-precanceled") or fault == "invalid-worker-output"
+            before_put = (
+                mode.endswith("-precanceled") or fault == "invalid-worker-output"
+            )
             if len(puts) != (0 if before_put else 1):
                 raise RuntimeError((mode, fault, result))
             if fault == "invalid-worker-output" and not any(
@@ -664,7 +687,200 @@ def public_faults(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
                 for line in result["diagnostics"]
             ):
                 raise RuntimeError((mode, fault, result))
-            results[f"{mode}/{fault or 'normal'}/{'replace' if existing else 'create'}"] = result
+            results[
+                f"{mode}/{fault or 'normal'}/{'replace' if existing else 'create'}"
+            ] = result
+    return results
+
+
+def source_metadata(info: os.stat_result) -> dict:
+    return {
+        "device": info.st_dev,
+        "inode": info.st_ino,
+        "size": info.st_size,
+        "mtime_ns": info.st_mtime_ns,
+        "ctime_ns": info.st_ctime_ns,
+    }
+
+
+def mutate_source(source: Path) -> None:
+    with source.open("ab") as output:
+        output.write(b"x")
+
+
+def launch_source_probe(
+    bwrap: str, scenario: str, name: str, report: str, arguments: list[str]
+) -> int:
+    source = Path(name)
+    expected = source_metadata(source.stat())
+    binding = arguments.index("--ro-bind-fd")
+    fd = int(arguments[binding + 1])
+    assert arguments[binding + 2] == "/source"
+    pinned = source_metadata(os.fstat(fd))
+    assert pinned == expected
+
+    if scenario == "renamed-after-preflight":
+        # The pathname is absent throughout decoding. Only the pin can supply input.
+        source.rename(source.with_suffix(".original"))
+    if scenario == "modified-in-sandbox":
+        # Wait for sandbox setup and mutate while it is blocked before worker exec.
+        info_read, info_write = os.pipe()
+        ready_read, ready_write = os.pipe()
+        try:
+            with subprocess.Popen(
+                [
+                    bwrap,
+                    "--info-fd",
+                    str(info_write),
+                    "--block-fd",
+                    str(ready_read),
+                    *arguments,
+                ],
+                pass_fds=(fd, info_write, ready_read),
+            ) as process:
+                try:
+                    if not select.select([info_read], [], [], 15)[0]:
+                        raise TimeoutError("Sandbox did not report readiness")
+                    if "child-pid" not in json.loads(os.read(info_read, 4096)):
+                        raise RuntimeError("Missing sandbox process identity")
+                    mutate_source(source)
+                    os.write(ready_write, b"x")
+                    status = process.wait(timeout=30)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+        finally:
+            for pipe in (info_read, info_write, ready_read, ready_write):
+                os.close(pipe)
+    else:
+        status = subprocess.run(
+            [bwrap, *arguments], pass_fds=(fd,), timeout=30
+        ).returncode
+    if scenario == "modified-after-worker":
+        mutate_source(source)
+    elif scenario == "replaced-after-worker":
+        replacement = source.with_suffix(".replacement")
+        replacement.write_bytes(b"substitute")
+        replacement.replace(source)
+
+    Path(report).write_text(
+        json.dumps({"before": expected, "pin": pinned, "worker_status": status}),
+        encoding="utf-8",
+    )
+    if scenario == "canceled-after-worker":
+        os.kill(os.getppid(), signal.SIGUSR1)
+        # The client terminates this launcher through its normal cancellation path.
+        signal.pause()
+    return status
+
+
+def protected_source_cases(
+    args: argparse.Namespace, dav: DavServer, root: Path
+) -> dict:
+    bwrap = shutil.which("bwrap")
+    if bwrap is None:
+        raise RuntimeError("Bubblewrap is required for the protected source cases")
+    results = {}
+    previous = hashlib.sha256(dav.previous).hexdigest()
+    for scenario, status in (
+        ("unchanged", 0),
+        ("renamed-after-preflight", 1),
+        ("modified-in-sandbox", 1),
+        ("modified-after-worker", 1),
+        ("replaced-after-worker", 1),
+        ("worker-error", 1),
+        ("canceled-after-worker", 3),
+    ):
+        with tempfile.TemporaryDirectory(dir=root) as directory:
+            work = Path(directory)
+            source = work / "source"
+            if scenario == "worker-error":
+                source.write_bytes(b"not an image")
+            else:
+                shutil.copyfile(args.source, source)
+            report = work / "report.json"
+            launcher = work / "bwrap"
+            command = [
+                sys.executable,
+                "-B",
+                str(Path(__file__).resolve()),
+                "--source-probe-launch",
+                bwrap,
+                scenario,
+                str(source),
+                str(report),
+            ]
+            launcher.write_text(
+                f'#!/bin/sh\nexec {shlex.join(command)} "$@"\n', encoding="utf-8"
+            )
+            launcher.chmod(0o700)
+            for existing in (False, True) if status == 0 else (True,):
+                report.unlink(missing_ok=True)
+                result = sample(
+                    [args.public_benchmark, "export-png", source, dav.uri + "/export"],
+                    dav,
+                    root,
+                    existing,
+                    worker=args.worker,
+                    launcher=work,
+                )
+                result["source"] = json.loads(report.read_text(encoding="utf-8"))
+                result["source"]["after"] = (
+                    source_metadata(source.stat()) if source.exists() else None
+                )
+                if result["status"] != status or result["remote_leftovers"]:
+                    raise RuntimeError((scenario, result))
+                if (result["source"]["worker_status"] != 0) != (
+                    scenario == "worker-error"
+                ):
+                    raise RuntimeError((scenario, result))
+                result["error"] = None
+                for line in result["diagnostics"]:
+                    domain, _, detail = line.partition(":")
+                    code, _, message = detail.partition(": ")
+                    if domain.endswith("-quark") and code.isdecimal():
+                        result["error"] = {
+                            "domain": domain,
+                            "code": int(code),
+                            "message": message,
+                        }
+                        break
+                if status == 0:
+                    if not result["destination_exists"] or not any(
+                        method == "PUT" for method, *_ in result["requests"]
+                    ):
+                        raise RuntimeError((scenario, result))
+                elif result["requests"] or result["sha256"] != previous:
+                    raise RuntimeError((scenario, result))
+                if status:
+                    error = result["error"]
+                    if error is None:
+                        raise RuntimeError((scenario, result))
+                    if scenario == "worker-error":
+                        if error["domain"] != "image-kit-image-error-quark":
+                            raise RuntimeError((scenario, result))
+                    elif status == 3:
+                        if (error["domain"], error["code"]) != (
+                            "g-io-error-quark",
+                            G_IO_ERROR_CANCELLED,
+                        ):
+                            raise RuntimeError((scenario, result))
+                    elif (error["domain"], error["code"]) != (
+                        "g-io-error-quark",
+                        G_IO_ERROR_BUSY,
+                    ) or not error["message"].startswith("Image source"):
+                        raise RuntimeError((scenario, result))
+                results[f"{scenario}/{'replace' if existing else 'create'}"] = result
+    for remote in (False, True):
+        command = [args.public_benchmark, "export-png", dav.uri + "/source"]
+        if remote:
+            command.append(dav.uri + "/export")
+        result = sample(
+            command, dav, root, True, worker=args.worker, remote_source=args.source
+        )
+        if result["status"] or "export-source-capture" in result["phases"]:
+            raise RuntimeError(("non-native source", remote, result))
+        results[f"non-native-source/{'webdav' if remote else 'native'}"] = result
     return results
 
 
@@ -717,9 +933,20 @@ def run(args: argparse.Namespace) -> dict:
                 results["failures"] = failure_samples(args, dav, root)
         if args.public_benchmark:
             with loopback_mount(root, previous) as dav:
-                results["public_exports"] = public_samples(args, dav, root)
+                public_runs = [
+                    public_samples(args, dav, root) for _ in range(args.samples)
+                ]
+                results["public_exports"] = public_runs[0]
+                results["public_export_samples"] = public_runs
                 if not args.skip_faults:
                     results["public_failures"] = public_faults(args, dav, root)
+                if args.protected_source_cases:
+                    protected_runs = [
+                        protected_source_cases(args, dav, root)
+                        for _ in range(args.samples)
+                    ]
+                    results["protected_sources"] = protected_runs[0]
+                    results["protected_source_samples"] = protected_runs
     return results
 
 
@@ -730,6 +957,7 @@ def main() -> int:
     parser.add_argument("--sizes", type=int, nargs="+", default=[1024, 16 * MIB])
     parser.add_argument("--samples", type=int, default=3)
     parser.add_argument("--skip-faults", action="store_true")
+    parser.add_argument("--protected-source-cases", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--public-benchmark", type=lambda path: Path(path).resolve())
     parser.add_argument("--worker", type=lambda path: Path(path).resolve())
@@ -749,10 +977,14 @@ def main() -> int:
         )
     if args.public_benchmark and not args.skip_faults and not args.fault_worker:
         parser.error("Public export fault cases require --fault-worker")
+    if args.protected_source_cases and not args.public_benchmark:
+        parser.error("Protected source cases require --public-benchmark")
     os.environ["GVFS_DISABLE_FUSE"] = "1"
     args.output.write_text(json.dumps(run(args), indent=2) + "\n", encoding="utf-8")
     return 0
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--source-probe-launch":
+        raise SystemExit(launch_source_probe(*sys.argv[2:6], sys.argv[6:]))
     raise SystemExit(main())

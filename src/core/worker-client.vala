@@ -69,10 +69,11 @@ namespace ImageKit {
             string output = Path.build_filename (job, "output");
             string request_path = Path.build_filename (job, "request.json");
             try {
-                string? input = source?.get_path ();
+                string? input = null;
                 bool thumbnail = operation == "thumbnail";
                 string mtime = "";
-                if (source != null) {
+                if (source != null && protected_source == null) {
+                    input = source.get_path ();
                     started = OperationProfile.begin ();
                     FileInfo info = null;
                     try {
@@ -138,6 +139,7 @@ namespace ImageKit {
                 started = OperationProfile.begin ();
                 Subprocess process;
                 var flags = SubprocessFlags.STDOUT_SILENCE | SubprocessFlags.STDERR_PIPE;
+                cancel.set_error_if_cancelled ();
                 try {
                     if (protected_source == null) {
                         process = new Subprocess.newv (argv, flags);

@@ -28,14 +28,19 @@ namespace ImageKit {
                 throw new IOError.INVALID_ARGUMENT ("Choose a separate destination for image export");
             }
             var stop = cancel ?? new Cancellable ();
+            // Own the pin until worker execution, transfer, and publication have finished.
             void* protected_source = null;
-            if (source.file.is_native () && destination.is_native ()) {
-                int64 started = OperationProfile.begin ();
-                protected_source = yield prepare_export (source.file, destination, stop);
-                OperationProfile.record ("export-preflight", started);
-            }
             string? output = null;
             try {
+                if (source.file.is_native ()) {
+                    int64 started = OperationProfile.begin ();
+                    try {
+                        protected_source = yield prepare_export (source.file, destination, stop);
+                    } finally {
+                        OperationProfile.record ("export-preflight", started);
+                    }
+                }
+                stop.set_error_if_cancelled ();
                 output = yield worker.run (source.file, "export", transform, stop, 0, null,
                     options, false, protected_source);
                 string extension = options.format == "uhdr" ? "jpg" : options.format;

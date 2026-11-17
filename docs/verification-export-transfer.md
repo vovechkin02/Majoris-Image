@@ -1,5 +1,12 @@
 # Bounded export transfer verification
 
+Native sources use the same preflight pin and freshness checks for native
+and non-native destinations. The native transaction still checks destination
+aliases and mutations. The non-native transfer checks the source after
+validating the complete output and before handing bytes to GIO. See the
+[non-native export verification](verification-non-native-export.md) for the
+publication window and WebDAV probe.
+
 ## Native source freshness
 
 The preceding transaction pinned the source and checked only the device and

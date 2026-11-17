@@ -1,5 +1,209 @@
 # Non-native export verification
 
+## Native sources
+
+Core captures the native source's identity and opens an `O_PATH | O_CLOEXEC`
+descriptor before launching the worker. The export coroutine owns the pin
+until completion. The worker launcher duplicates it for Bubblewrap's
+read-only `/source` binding, so it can encode the selected inode even after
+the pathname moves. Core compares the descriptor and original pathname
+against the preflight metadata after reading and validating the worker's
+output. A detected change fails before GIO opens a replacement stream.
+
+The pre-publication check uses regular-file type, device, inode, size, and
+mtime and ctime at the filesystem's available resolution. Concurrent writes
+with indistinguishable metadata can escape detection. Source bytes can also
+change after the check, including while the backend writes or closes its
+stream. A check immediately before close would run after bytes have already
+been submitted to some backends. GIO has no universal way to abort or roll
+back those writes. Core retains the validated full buffer and awaits close
+to preserve compatibility and report the backend's final result.
+
+The optional loopback probe exercises the public encoder with native and
+WebDAV sources. It captures descriptor identity and timestamps, worker exit
+status, client error details, and the server's request history and stored
+output. See [Testing](TESTING.md) for commands.
+
+### Source protection results
+
+| Source | Destination | Native pin and freshness check | Observed result |
+|---|---|---|---|
+| Native | Native | Yes | Public PNG and TIFF exports and the native mutation regressions passed. |
+| Native | WebDAV | Yes | Creation and replacement passed. Four source-change scenarios returned `G_IO_ERROR_BUSY` with zero WebDAV requests. |
+| Native | Other non-native `GFile` | Yes | A `resource:///` test double returned a validated payload for unchanged input and an error for changed input. The public API rejected a source change before calling GIO. |
+| WebDAV | Native | No | Public PNG export passed using remote staging. |
+| WebDAV | WebDAV | No | Public PNG export passed using remote staging and GIO publication. |
+| Native | SMB | Same Core path | Live backend untested. |
+
+| Native source or operation | Previous WebDAV path | Updated regression result |
+|---|---|---|
+| Unchanged | Encoded and published without a pin | Published to new and existing WebDAV targets through the pin. |
+| Deleted or renamed | No post-encoding source check | `G_IO_ERROR_BUSY` with a source-path diagnostic. The real worker encoded through the pin after rename. |
+| Replaced by another inode | No post-encoding source check | `G_IO_ERROR_BUSY`; the existing WebDAV bytes survived. |
+| Modified in place, including a same-size overwrite, growth, or shrinkage | No post-encoding source check | `G_IO_ERROR_BUSY` in transfer tests. WebDAV rejected growth with the sandbox initialized and after encoding. |
+| Subsecond mtime changed or mtime restored after a write | No post-encoding source check | `G_IO_ERROR_BUSY` from the mtime or ctime comparison. |
+| Descriptor `EIO` or pathname `EACCES` | No post-encoding source check | Source diagnostics and mapped GIO codes survived. |
+| Worker failure or cancellation | Worker error or cancellation propagated | Both propagated with zero WebDAV requests and clean job directories. |
+| WebDAV rejected upload | Backend error propagated | HTTP 403, HTTP 507, and connection fault cases passed with explicit close. |
+
+The source mutation inside the sandbox lifecycle is synchronized with
+Bubblewrap's readiness and block descriptors. The change happens after
+sandbox setup, before worker exec. The other mutation happens after real
+encoding, before publication. The launcher checks the inherited source
+descriptor against host device, inode, size, mtime, and ctime. All four
+WebDAV source-change cases confirmed worker success, zero requests during
+the attempt, zero remote leftovers, and the previous destination SHA-256.
+An equivalent post-worker mutation on the baseline succeeded and issued one
+PUT to replace the previous destination.
+
+### Performance comparison
+
+Debian WSL2, GLib 2.84.4, disposable GVfs WebDAV over IPv4 loopback, baseline
+`0bbfc72`. Five fresh processes per successful workload. Times are median
+wall milliseconds with the observed range. RSS is the median client process
+peak reported by `wait4` in KiB.
+
+| Workload | Before ms [range] | After ms [range] | Client RSS before / after |
+|---|---:|---:|---:|
+| Small PNG, native replacement | 71.4 [70.9, 71.6] | 71.0 [66.2, 71.4] | 28,712 / 28,428 |
+| Small PNG, WebDAV replacement | 76.4 [76.3, 76.6] | 71.3 [70.4, 76.6] | 28,712 / 28,428 |
+| Small PNG, WebDAV creation | 76.7 [76.3, 77.0] | 75.8 [70.9, 76.5] | 28,712 / 28,428 |
+| Large TIFF fixture to PNG, native replacement | 241.9 [227.9, 262.6] | 254.6 [241.6, 279.3] | 30,136 / 30,720 |
+| Large TIFF fixture to PNG, WebDAV replacement | 241.5 [228.3, 260.8] | 263.6 [242.0, 327.9] | 30,136 / 30,720 |
+| Large TIFF fixture to PNG, WebDAV creation | 235.3 [233.5, 264.9] | 272.3 [239.6, 337.6] | 30,136 / 30,720 |
+| Large TIFF fixture to TIFF, WebDAV replacement | 256.1 [230.0, 292.1] | 254.7 [234.0, 322.5] | 30,136 / 30,720 |
+| Large TIFF fixture to JPEG XL, WebDAV replacement | 492.7 [491.4, 512.1] | 530.8 [497.7, 569.5] | 30,136 / 30,720 |
+| Large TIFF fixture to Ultra HDR, WebDAV replacement | — | 479.4 [475.6, 585.0] | — / 30,720 |
+| WebDAV source growth at sandbox readiness | No rejection check | 403.4 [401.6, 406.7] | — / 31,976 |
+| WebDAV source growth after encoding | Published in the baseline probe | 403.1 [402.5, 403.2] | — / 31,976 |
+
+Small PNG WebDAV replacement added a median 1,338 µs preflight and removed
+the 1,545 µs worker pathname query. The large PNG workload added 245 µs
+preflight and removed the 214 µs query. Median source descriptor duplication
+took 2 µs for both. Final descriptor and pathname checks took 140 and 134 µs
+on the small fixture on the Windows-mounted drive, and 2 and 6 µs on the
+large fixture on Linux storage. One source capture query and two final
+metadata queries replaced one GIO source query. There was one sandbox launch
+and one PUT per successful WebDAV export on both revisions.
+
+Median sandbox launch was 616 → 677 µs for small PNG and 615 → 718 µs
+for large PNG. Median aggregate transfer, including publication, was
+3,850 → 4,213 µs and 4,530 → 4,511 µs respectively. The summed GIO open,
+write, and close phases took 3,703 → 3,648 µs and 4,312 → 4,252 µs.
+Subtracting each sample's GIO phases from its aggregate transfer gives a
+median of 148 → 460 µs for small PNG and 247 → 271 µs for large PNG. This
+includes output validation, source revalidation where applicable, and
+asynchronous dispatch. End-to-end timings varied across samples and overlapped the
+baseline ranges. These runs do not isolate host scheduling or encoding
+variance, and the RSS samples include process startup and the full payload.
+The rejection rows use three runs with the sandbox probe launcher. The
+WebDAV-source controls took 250.9 ms to native and 250.5 ms to WebDAV
+(three-run medians) with three and four requests respectively.
+
+The three-run isolated native transfer medians were 1.065 → 0.995 ms at
+1 MiB and 118.656 → 117.699 ms at 256 MiB. Both revisions used a 256 KiB
+transfer buffer and reported a median peak RSS of 24,924 KiB. The 16 MiB
+WebDAV payload probe confirmed complete readback and one PUT per sample.
+Its explicit-close path used a 16 MiB client payload on both creation and
+replacement.
+
+### Reproduction on Debian WSL2
+
+The baseline tree was extracted with `git archive 0bbfc72`. Both comparison
+builds enabled `-Dworker_profiling=true`. Use the same large TIFF fixture for
+both builds. The small run uses `tests/fixtures/rgb8.png` as the source and
+`--formats png`. The large baseline uses `--formats png tiff jxl`.
+
+```sh
+b=/tmp/imagekit-pin-after
+before=/tmp/imagekit-pin-before
+headless=/tmp/imagekit-pin-headless
+native=/tmp/imagekit-pin-native
+san=/tmp/imagekit-pin-san
+strict=/tmp/imagekit-pin-strict
+release=/tmp/imagekit-pin-release
+meson setup "$b" -Dworker_profiling=true
+meson setup "$before" /tmp/imagekit-pin-baseline-tree -Dworker_profiling=true
+meson compile -C "$b" -j 6
+meson compile -C "$before" -j 6
+meson test -C "$before" --print-errorlogs --suite unit --suite integration --suite security
+meson test -C "$b" --print-errorlogs \
+  'Encoded export transfer validation and publication' 'Headless Core API'
+python3 -B tests/release/qualify.py "$b" --variant full --jobs 4
+meson setup "$headless" -Dgtk=false -Dglycin=disabled
+python3 -B tests/release/qualify.py "$headless" --variant headless --jobs 4
+meson setup "$native" -Dglycin=disabled -Dsequence=disabled -Dultrahdr=disabled
+python3 -B tests/release/qualify.py "$native" --variant native --jobs 3
+meson setup "$san" -Dgtk=false -Dglycin=disabled -Db_sanitize=address,undefined
+meson test -C "$san" --print-errorlogs 'Encoded export transfer validation and publication'
+meson setup "$strict" -Dwarning_level=3 -Dwerror=true
+meson compile -C "$strict" -j 3
+cc -std=gnu11 -Wall -Wextra -Werror -Wformat=2 -fsyntax-only \
+  -I src/core -I "$b/src/core" $(pkg-config --cflags gio-2.0 gee-0.8 glycin-1) \
+  src/core/export-transfer.c tests/unit/test-export-transfer.c
+python3 -B tests/benchmarks/benchmark_export_transfer.py \
+  "$b/tests/benchmarks/benchmark-export-transfer" \
+  --previous-executable "$before/tests/benchmarks/benchmark-export-transfer" \
+  --samples 3 --output /tmp/imagekit-pin-native-transfer.json
+dbus-run-session -- python3 -B tests/benchmarks/benchmark_remote_export.py \
+  "$b/tests/benchmarks/benchmark-export-transfer" tests/fixtures/rgb8.png \
+  --sizes 1024 --samples 3 --protected-source-cases --formats png tiff jxl uhdr \
+  --public-benchmark "$b/tests/benchmarks/majoris-image-benchmark" \
+  --worker "$b/src/worker/majoris-image-worker" \
+  --fault-worker "$b/tests/security/worker-fault" --source "$b/tests/large.tiff" \
+  --output /tmp/imagekit-pin-dav-final.json
+dbus-run-session -- python3 -B tests/benchmarks/benchmark_remote_export.py \
+  "$b/tests/benchmarks/benchmark-export-transfer" tests/fixtures/rgb8.png \
+  --sizes 16777216 --samples 3 --skip-faults --output /tmp/imagekit-pin-transfer-16m.json
+```
+
+Use `--samples 5 --skip-faults` for performance-only comparisons, selecting
+each revision's built executables. For release qualification, the configured
+build uses the manifest-pinned RAW corpus and enabled codecs. These are the
+release and Debian package commands.
+
+```sh
+meson setup "$release" --prefix=/tmp/imagekit-pin-installed --libdir=lib \
+  -Dextended_tests=true -Dglycin=enabled -Dsequence=enabled -Dultrahdr=enabled \
+  -Dintrospection=enabled -Draw_fixtures=/tmp/majoris-image-raw.dD1oId
+meson compile -C "$release" -j 5
+dpkg-buildpackage -us -uc -b -j4
+dpkg-buildpackage -us -uc -b -Ppkg.majoris-image.gainmap -j4
+python3 -B tests/release/qualify.py "$release" --variant release --jobs 4 --installed
+```
+
+The package commands ran in disposable source trees with Git-tracked modes.
+The release runner used the arguments above. Only its
+`installed_consumers.py` subprocess ran in a Bubblewrap view of the extracted
+Debian packages with the packaged worker and thumbnailer bound at their
+system paths. The gain-map package view separately ran
+`python3 -B tests/release/installed_consumers.py --gainmap`.
+
+The full profile passed 25 tests, headless passed 14, and the Glycin-disabled
+GTK profile passed 24, with zero failures or skips in all three. Meson
+registered the same 26 tests with the same names, suites, and timeouts on
+both comparison builds. The export-transfer suite increased from 79 to
+101 cases and passed with ASan and UBSan enabled. The strict C diagnostic
+and Ruff checks passed. Both repository-wide strict builds stopped at the
+same five existing Vala warnings. The full Core and GTK ABI baselines
+matched 285 and 77 symbols. Both GIR and VAPI files matched across the
+comparison builds. The headless and Glycin-disabled profiles matched
+the 280-symbol Core baseline.
+
+Full release qualification passed 28 functional tests, including all 25
+mandatory tests, and 35 performance benchmarks, with zero failures or
+skips. Both Debian package profiles built successfully. Each package build
+passed 25 tests and skipped the external RAW corpus check. Release
+qualification ran the RAW corpus check successfully. The extracted package
+views passed installed Core, GTK, GtkBuilder, introspection, Photos export,
+thumbnail, and gain-map consumers.
+
+The updated WebDAV run passed 44 transport fault cases, five deterministic
+stream faults, 22 public publication cases, and three repetitions of ten
+protected-source and compatibility cases. The connection fault run emitted
+GLib warnings and critical diagnostics on both revisions. The assertions
+for client status, server state, and cleanup passed on both revisions.
+
 ## A. Backend investigation
 
 **Core keeps the validated full-buffer compatibility path and now checks

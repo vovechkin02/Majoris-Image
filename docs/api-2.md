@@ -72,8 +72,9 @@ quality, bit depth, color profile and metadata policy.
 The encoded worker output must be a nonempty regular file of at most 256 MiB.
 Core rejects an identical source and destination. For two native files, it also
 rejects paths, symlinks, and hard links that refer to the same source inode.
-Bubblewrap binds the pinned inode read-only for encoding. Immediately before
-publication, Core checks the pinned descriptor and the original pathname
+For every native source, Core pins the inode before worker execution and
+Bubblewrap binds it read-only for encoding. Before publication, Core checks
+the pinned descriptor and the original pathname
 against the regular file's preflight device, inode, size, and nanosecond mtime
 and ctime. Detected changes and missing or invalid paths return
 `G_IO_ERROR_BUSY`. Other metadata-query failures retain their mapped GIO
@@ -111,11 +112,14 @@ visibility where supported. Synchronization covers the staged file. The director
 entry can still be lost after sudden power loss.
 
 For other `GFile` backends, Core validates the complete encoded payload in
-memory, opens an asynchronous GIO replacement with no expected ETag or backup,
-writes all bytes, and awaits the stream's close. Open, write, and close errors
+memory and rechecks the native source, if present, before opening an
+asynchronous GIO replacement with no expected ETag or backup. It writes all
+bytes and awaits the stream's close. Open, write, and close errors
 propagate to the caller. A successful close confirms completion according to
 the backend's contract. Later cancellation leaves that result valid.
 
+The source can change while the asynchronous replacement is in progress.
+GIO provides no universal abort or rollback for a replacement stream.
 The backend controls visibility, atomicity, and durability. A transport error
 or cancellation during finalization can occur after the server published the
 file, so the destination state may be uncertain. A write failure can also leave

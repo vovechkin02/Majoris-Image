@@ -228,10 +228,17 @@ decode the downloaded artifacts, add the following arguments and have
 --worker build/src/worker/majoris-image-worker
 --fault-worker build/tests/security/worker-fault
 --source build/tests/large.tiff
+--protected-source-cases
 ```
 
 The fault worker exits successfully without creating an encoded file so the
 runner can verify that validation fails before any PUT and cleans up the job.
+The protected-source cases inspect the descriptor passed to Bubblewrap, gate
+the real sandbox at known stages, and check the server's request log, stored
+bytes, and temporary objects. Run with the same fixture and `--samples` on
+both revisions for a performance comparison. The JSON includes individual
+native, WebDAV creation, and WebDAV replacement samples. Use a small PNG and
+the generated large TIFF in separate runs.
 See the [non-native export verification](verification-non-native-export.md)
 for results and backend limitations.
 

@@ -610,10 +610,12 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(ExportSource, image_export_source_free)
 
 int image_export_source_dup(const ExportSource *source, GError **error)
 {
+    gint64 started = g_get_monotonic_time();
     int fd = fcntl(source->fd, F_DUPFD_CLOEXEC, 3);
     if (fd < 0) {
         set_io_error(error, "Cannot duplicate image source descriptor", errno);
     }
+    record_phase("export-source-duplicate", started, 1);
     return fd;
 }
 
@@ -633,17 +635,16 @@ static void run_preparation(GTask *task, gpointer object, gpointer data, GCancel
     if (g_task_return_error_if_cancelled(task)) {
         return;
     }
-    if (preparation->source == NULL || preparation->destination == NULL) {
+    if (preparation->source == NULL) {
         g_task_return_pointer(task, NULL, NULL);
         return;
     }
 
     g_autoptr(ExportSource) source = g_new0(ExportSource, 1);
     source->path = g_strdup(preparation->source);
-    source->fd = open(source->path, O_PATH | O_CLOEXEC);
     g_autoptr(GError) error = NULL;
-    g_auto(Destination) destination = {.directory = -1, .file = -1};
     gint64 started = g_get_monotonic_time();
+    source->fd = open(source->path, O_PATH | O_CLOEXEC);
     if (source->fd < 0 || fstat(source->fd, &source->identity) < 0) {
         set_io_error(&error, "Cannot inspect image source", errno);
         g_task_return_error(task, g_steal_pointer(&error));
@@ -651,16 +652,21 @@ static void run_preparation(GTask *task, gpointer object, gpointer data, GCancel
     }
     record_phase("export-source-capture", started, 1);
     if (!S_ISREG(source->identity.st_mode)) {
-        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-                            "The image source must be a regular file");
-    } else if (resolve_destination(preparation->destination, &destination, &error) &&
-               (destination.file < 0 ||
-                check_source_alias(source, &destination.existing, &error))) {
-        g_task_return_pointer(task, g_steal_pointer(&source),
-                              (GDestroyNotify)image_export_source_free);
+        g_task_return_new_error(task, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                "The image source must be a regular file");
         return;
     }
-    g_task_return_error(task, g_steal_pointer(&error));
+    if (preparation->destination != NULL) {
+        g_auto(Destination) destination = {.directory = -1, .file = -1};
+        if (!resolve_destination(preparation->destination, &destination, &error) ||
+            (destination.file >= 0 &&
+             !check_source_alias(source, &destination.existing, &error))) {
+            g_task_return_error(task, g_steal_pointer(&error));
+            return;
+        }
+    }
+    g_task_return_pointer(task, g_steal_pointer(&source),
+                          (GDestroyNotify)image_export_source_free);
 }
 
 void image_export_prepare_async(GFile *source, GFile *destination, GCancellable *cancel,
@@ -668,9 +674,21 @@ void image_export_prepare_async(GFile *source, GFile *destination, GCancellable 
 {
     g_autoptr(GTask) task = g_task_new(NULL, cancel, callback, user_data);
     ExportPreparation *preparation = g_new(ExportPreparation, 1);
-    preparation->source = g_file_is_native(source) ? g_file_get_path(source) : NULL;
-    preparation->destination = g_file_is_native(destination) ? g_file_get_path(destination) : NULL;
+    gboolean native_source = g_file_is_native(source);
+    gboolean native_destination = g_file_is_native(destination);
+    preparation->source = native_source ? g_file_get_path(source) : NULL;
+    preparation->destination = native_destination ? g_file_get_path(destination) : NULL;
     g_task_set_task_data(task, preparation, release_preparation);
+    if (native_source && preparation->source == NULL) {
+        g_task_return_new_error(task, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                "Cannot obtain the native image source path");
+        return;
+    }
+    if (native_source && native_destination && preparation->destination == NULL) {
+        g_task_return_new_error(task, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                "Cannot obtain the native export destination path");
+        return;
+    }
     g_task_run_in_thread(task, run_preparation);
 }
 
@@ -700,7 +718,9 @@ static void run_transfer(GTask *task, gpointer source, gpointer task_data, GCanc
         } else {
             g_autofree guint8 *bytes = g_malloc(initial.st_size);
             if (transfer_output(input, &initial, -1, bytes, cancel, &error) &&
-                close_file(&input, "Cannot close encoded output", &error)) {
+                close_file(&input, "Cannot close encoded output", &error) &&
+                !g_cancellable_set_error_if_cancelled(cancel, &error) &&
+                validate_source(transfer->source, &error)) {
                 payload = g_bytes_new_take(g_steal_pointer(&bytes), initial.st_size);
             }
         }

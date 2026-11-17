@@ -346,7 +346,9 @@ private async void verify_export_source_change (EncoderRegistry encoder, Bytes o
     var previous = yield existing.load_bytes_async (null, null);
     var identity = existing.query_info (FileAttribute.UNIX_INODE, 0);
     try {
-        foreach (var destination in new File[] { existing, missing }) {
+        var remote = File.new_for_uri ("resource:///imagekit/export-source-change");
+        assert (!remote.is_native ());
+        foreach (var destination in new File[] { existing, missing, remote }) {
             yield file.replace_contents_bytes_async (original, null, false, FileCreateFlags.NONE,
                 null, null);
             try {

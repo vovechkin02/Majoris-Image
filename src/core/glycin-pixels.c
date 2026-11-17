@@ -3,14 +3,20 @@
 
 #include <glycin.h>
 
-static double linear_sample(const guint8 *data, int depth)
+// Glycin stores integer components in native byte order, with no alignment guarantee.
+static inline guint16 read_sample16(const guint8 *data)
 {
     guint16 value;
+    memcpy(&value, data, sizeof value);
+    return value;
+}
+
+static double linear_sample(const guint8 *data, int depth)
+{
     if (depth == 8) {
         return *data / 255.0;
     }
-    memcpy(&value, data, sizeof value);
-    return value / 65535.0;
+    return read_sample16(data) / 65535.0;
 }
 
 static inline double decode_transfer(double value, gboolean gray_gamma)
@@ -35,6 +41,25 @@ static const double *transfer_table(gboolean gray_gamma)
     if (g_once_init_enter(ready)) {
         for (unsigned i = 0; i < 256; i++) {
             table[i] = decode_transfer(i / 255.0, gray_gamma);
+        }
+        g_once_init_leave(ready, 1);
+    }
+    return table;
+}
+
+static const double *transfer_table16(gboolean gray_gamma)
+{
+    static double srgb[65536];
+    static double gray[65536];
+    static gsize srgb_ready, gray_ready;
+    double *table = gray_gamma ? gray : srgb;
+    gsize *ready = gray_gamma ? &gray_ready : &srgb_ready;
+
+    // Publish only a complete table. Each transfer touches its own 512 KiB.
+    if (g_once_init_enter(ready)) {
+        for (unsigned i = 0; i < 65536; i++) {
+            // Preserve the formula path's double precision through accumulation.
+            table[i] = decode_transfer(i / 65535.0, gray_gamma);
         }
         g_once_init_leave(ready, 1);
     }
@@ -116,7 +141,8 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
                             "Glycin color transfer or pixel layout is unavailable");
         return NULL;
     }
-    int component = *depth / 8, pixel = bands * component;
+    int sample_depth = *depth;
+    int component = sample_depth / 8, pixel = bands * component;
     gsize size;
     const guint8 *input = g_bytes_get_data(gly_frame_get_buf_bytes(frame), &size);
     if (!w || !h || edge < 1 || edge > 4096 || (guint64)w * h > 67108864 ||
@@ -141,9 +167,23 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
     }
     gboolean premultiplied = gly_memory_format_is_premultiplied(format);
     gboolean gray_gamma = gray_icc && r == g;
-    // Unpremultiplication produces values between table entries.
-    const double *table =
-        *depth == 8 && !premultiplied && !linear_rgb ? transfer_table(gray_gamma) : NULL;
+    const double *table = NULL;
+    // Linear input needs no transfer. Unpremultiplication can land between entries.
+    if (!premultiplied && !linear_rgb) {
+        if (sample_depth == 8) {
+            table = transfer_table(gray_gamma);
+        } else {
+            // Small conversions use the formula to avoid a cold 65,536-entry fill.
+            gsize sampled_pixels = nearest ? count / 4 : (gsize)crop_w * crop_h;
+            if (sampled_pixels >= 32768) {
+                if (g_cancellable_set_error_if_cancelled(stop, error)) {
+                    g_free(out);
+                    return NULL;
+                }
+                table = transfer_table16(gray_gamma);
+            }
+        }
+    }
     int channels[] = {r, g, b};
     double dx = (double)crop_w / *width, dy = (double)crop_h / *height;
     // Integrate the source-pixel area of each destination sample. This keeps
@@ -172,18 +212,25 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
                 for (int sx = (int)sx0; sx < (int)ceil(sx1); sx++) {
                     double area = row_weight * (MIN(sx + 1, sx1) - MAX(sx, sx0));
                     const guint8 *src = input + (gsize)sy * stride + (gsize)sx * pixel;
-                    double alpha = a < 0 ? 1 : linear_sample(src + a * component, *depth);
+                    double alpha = a < 0 ? 1 : linear_sample(src + a * component, sample_depth);
                     if (!alpha) {
                         continue;
                     }
                     double weight = area * alpha;
                     if (table != NULL) {
-                        for (int c = 0; c < 3; c++) {
-                            sum[c] += weight * table[src[channels[c]]];
+                        if (sample_depth == 8) {
+                            for (int c = 0; c < 3; c++) {
+                                sum[c] += weight * table[src[channels[c]]];
+                            }
+                        } else {
+                            for (int c = 0; c < 3; c++) {
+                                sum[c] += weight * table[read_sample16(src + 2 * channels[c])];
+                            }
                         }
                     } else {
                         for (int c = 0; c < 3; c++) {
-                            double value = linear_sample(src + channels[c] * component, *depth);
+                            double value =
+                                linear_sample(src + channels[c] * component, sample_depth);
                             if (premultiplied) {
                                 value = MIN(value / alpha, 1.0);
                             }

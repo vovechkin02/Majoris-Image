@@ -1,6 +1,7 @@
 #include <math.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <unistd.h>
 
 #include <glycin.h>
 
@@ -60,29 +61,40 @@ static FrameData *frame_data(GlyFrame *frame)
     return g_object_get_data(G_OBJECT(frame), "frame-data");
 }
 
+guint32 __real_gly_frame_get_width(GlyFrame *frame);
+guint32 __real_gly_frame_get_height(GlyFrame *frame);
+guint32 __real_gly_frame_get_stride(GlyFrame *frame);
+GlyMemoryFormat __real_gly_frame_get_memory_format(GlyFrame *frame);
+GBytes *__real_gly_frame_get_buf_bytes(GlyFrame *frame);
+
 guint32 __wrap_gly_frame_get_width(GlyFrame *frame)
 {
-    return frame_data(frame)->width;
+    FrameData *data = frame_data(frame);
+    return data ? data->width : __real_gly_frame_get_width(frame);
 }
 
 guint32 __wrap_gly_frame_get_height(GlyFrame *frame)
 {
-    return frame_data(frame)->height;
+    FrameData *data = frame_data(frame);
+    return data ? data->height : __real_gly_frame_get_height(frame);
 }
 
 guint32 __wrap_gly_frame_get_stride(GlyFrame *frame)
 {
-    return frame_data(frame)->stride;
+    FrameData *data = frame_data(frame);
+    return data ? data->stride : __real_gly_frame_get_stride(frame);
 }
 
 GlyMemoryFormat __wrap_gly_frame_get_memory_format(GlyFrame *frame)
 {
-    return frame_data(frame)->layout->format;
+    FrameData *data = frame_data(frame);
+    return data ? data->layout->format : __real_gly_frame_get_memory_format(frame);
 }
 
 GBytes *__wrap_gly_frame_get_buf_bytes(GlyFrame *frame)
 {
-    return frame_data(frame)->bytes;
+    FrameData *data = frame_data(frame);
+    return data ? data->bytes : __real_gly_frame_get_buf_bytes(frame);
 }
 
 static GCancellable *cancel_during_conversion;
@@ -112,8 +124,8 @@ static unsigned sample(const Layout *layout, unsigned x, unsigned y, int channel
 {
     unsigned max = layout->depth == 8 ? 255 : 65535;
     if (channel == 3) {
-        const unsigned alpha[] = {0, 1, 128, 254, 255};
-        return layout->channels[3] < 0 ? max : alpha[(x + y) % 5] * (max / 255);
+        const unsigned alpha[] = {0, 1, (max + 1) / 2, max - 1, max};
+        return layout->channels[3] < 0 ? max : alpha[(x + y) % G_N_ELEMENTS(alpha)];
     }
     if (layout->bands <= 2) {
         channel = 0;
@@ -198,6 +210,99 @@ static float expected_sample(const Layout *layout, guint x, guint y, int c, gboo
     return alpha * value / alpha;
 }
 
+static void check_pixels(const Result *result, const FrameData *data, gboolean gray,
+                         gboolean linear)
+{
+    g_assert_no_error(result->error);
+    g_assert_cmpint(result->width, ==, (int)data->width);
+    g_assert_cmpint(result->height, ==, (int)data->height);
+    g_assert_cmpint(result->depth, ==, data->layout->depth);
+    g_assert_cmpuint(g_bytes_get_size(result->bytes), ==,
+                     (gsize)data->width * data->height * 4 * sizeof(float));
+    const float *actual = g_bytes_get_data(result->bytes, NULL);
+    for (guint y = 0; y < data->height; y++) {
+        for (guint x = 0; x < data->width; x++) {
+            for (int c = 0; c < 4; c++) {
+                float expected = expected_sample(data->layout, x, y, c, gray, linear);
+                g_assert_cmpfloat(actual[4 * (y * data->width + x) + c], ==, expected);
+            }
+        }
+    }
+}
+
+static void test_concurrent_16bit(void)
+{
+    const guint indices[] = {9, 9, 15, 0, 9};
+    g_autoptr(GMainLoop) loop = g_main_loop_new(NULL, FALSE);
+    g_autoptr(GCancellable) stop = g_cancellable_new();
+    FrameData data[G_N_ELEMENTS(indices)];
+    GObject *frames[G_N_ELEMENTS(indices)];
+    Result results[G_N_ELEMENTS(indices)] = {0};
+    cancel_during_conversion = stop;
+    cancellation_checks = 0;
+    for (guint i = 0; i < G_N_ELEMENTS(indices); i++) {
+        make_frame(&data[i], &layouts[indices[i]], 257, 129);
+        frames[i] = g_object_new(G_TYPE_OBJECT, NULL);
+        g_object_set_data(frames[i], "frame-data", &data[i]);
+        results[i].loop = loop;
+    }
+    for (guint i = 0; i < G_N_ELEMENTS(indices); i++) {
+        start(frames[i], &results[i], 257, FALSE, FALSE, indices[i] == 15, FALSE,
+              i == 4 ? stop : NULL);
+    }
+    for (guint i = 0; i < G_N_ELEMENTS(indices); i++) {
+        wait_for_conversion(&results[i]);
+        if (i == 4) {
+            g_assert_error(results[i].error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+            g_assert_null(results[i].bytes);
+            g_clear_error(&results[i].error);
+        } else {
+            check_pixels(&results[i], &data[i], indices[i] == 15, FALSE);
+            g_bytes_unref(results[i].bytes);
+        }
+        g_object_unref(frames[i]);
+        g_bytes_unref(data[i].bytes);
+    }
+    cancel_during_conversion = NULL;
+}
+
+static void test_16bit_sample_range(void)
+{
+    enum { EDGE = 256, SAMPLES = EDGE * EDGE };
+    g_autoptr(GMainLoop) loop = g_main_loop_new(NULL, FALSE);
+    g_autoptr(GObject) frame = g_object_new(G_TYPE_OBJECT, NULL);
+    guint16 *samples = g_new(guint16, SAMPLES);
+    for (guint i = 0; i < SAMPLES; i++) {
+        samples[i] = i;
+    }
+    g_autoptr(GBytes) bytes = g_bytes_new_take(samples, SAMPLES * sizeof(*samples));
+    FrameData data = {bytes, EDGE, EDGE, EDGE * sizeof(*samples), &layouts[15]};
+    g_object_set_data(frame, "frame-data", &data);
+    for (int gray = 0; gray < 2; gray++) {
+        Result result = {.loop = loop};
+        start(frame, &result, EDGE, FALSE, FALSE, gray, FALSE, NULL);
+        wait_for_conversion(&result);
+        g_assert_no_error(result.error);
+        g_assert_cmpint(result.width, ==, EDGE);
+        g_assert_cmpint(result.height, ==, EDGE);
+        g_assert_cmpint(result.depth, ==, 16);
+        g_assert_cmpuint(g_bytes_get_size(result.bytes), ==, SAMPLES * 4 * sizeof(float));
+        const float *pixels = g_bytes_get_data(result.bytes, NULL);
+        // Includes 0, 1, the sRGB breakpoint (2650/2651), and both endpoints.
+        for (guint i = 0; i < SAMPLES; i++) {
+            double value = i / 65535.0;
+            float expected =
+                gray ? pow(value, 2.2)
+                     : (value <= .04045 ? value / 12.92 : pow((value + .055) / 1.055, 2.4));
+            for (int c = 0; c < 3; c++) {
+                g_assert_cmpfloat(pixels[4 * i + c], ==, expected);
+            }
+            g_assert_cmpfloat(pixels[4 * i + 3], ==, 1);
+        }
+        g_bytes_unref(result.bytes);
+    }
+}
+
 static void test_layouts(void)
 {
     g_autoptr(GMainLoop) loop = g_main_loop_new(NULL, FALSE);
@@ -206,25 +311,13 @@ static void test_layouts(void)
     g_object_set_data(frame, "frame-data", &data);
     for (guint i = 0; i < G_N_ELEMENTS(layouts); i++) {
         const Layout *layout = &layouts[i];
-        make_frame(&data, layout, 257, 7);
+        guint height = layout->depth == 16 ? 129 : 7;
+        make_frame(&data, layout, 257, height);
         for (int mode = 0; mode < 3; mode++) {
             Result result = {.loop = loop};
             start(frame, &result, 257, FALSE, FALSE, mode == 1, mode == 2, NULL);
             wait_for_conversion(&result);
-            g_assert_no_error(result.error);
-            g_assert_cmpint(result.width, ==, 257);
-            g_assert_cmpint(result.height, ==, 7);
-            g_assert_cmpint(result.depth, ==, layout->depth);
-            g_assert_cmpuint(g_bytes_get_size(result.bytes), ==, 257 * 7 * 4 * sizeof(float));
-            const float *actual = g_bytes_get_data(result.bytes, NULL);
-            for (guint y = 0; y < 7; y++) {
-                for (guint x = 0; x < 257; x++) {
-                    for (int c = 0; c < 4; c++) {
-                        float expected = expected_sample(layout, x, y, c, mode == 1, mode == 2);
-                        g_assert_cmpfloat(actual[4 * (y * 257 + x) + c], ==, expected);
-                    }
-                }
-            }
+            check_pixels(&result, &data, mode == 1, mode == 2);
             g_bytes_unref(result.bytes);
         }
         g_bytes_unref(data.bytes);
@@ -343,6 +436,7 @@ static void test_errors(void)
     g_atomic_int_set(&fail_output_allocation, 1);
     expect_error(frame, loop, 32, NULL, G_IO_ERROR_NO_SPACE);
     cancel_during_conversion = stop;
+    cancellation_checks = 0;
     expect_error(frame, loop, 32, stop, G_IO_ERROR_CANCELLED);
     g_assert_cmpuint(cancellation_checks, ==, 5);
     cancel_during_conversion = NULL;
@@ -353,6 +447,53 @@ static gint64 cpu_time(const struct rusage *usage)
 {
     return (usage->ru_utime.tv_sec + usage->ru_stime.tv_sec) * G_USEC_PER_SEC +
            usage->ru_utime.tv_usec + usage->ru_stime.tv_usec;
+}
+
+static long resident_kib(void)
+{
+    g_autofree char *statm = NULL;
+    if (!g_file_get_contents("/proc/self/statm", &statm, NULL, NULL)) {
+        return -1;
+    }
+    const char *resident = strchr(statm, ' ');
+    return resident ? g_ascii_strtoll(resident, NULL, 10) * sysconf(_SC_PAGESIZE) / 1024 : -1;
+}
+
+static void benchmark_real_frame(const char *path, gboolean gray)
+{
+    g_autoptr(GFile) file = g_file_new_for_path(path);
+    g_autoptr(GMainLoop) loop = g_main_loop_new(NULL, FALSE);
+    for (int i = 0; i < 6; i++) {
+        g_autoptr(GError) error = NULL;
+        struct rusage before, after;
+        long rss = resident_kib();
+        getrusage(RUSAGE_SELF, &before);
+        gint64 started = g_get_monotonic_time();
+        g_autoptr(GlyLoader) loader = gly_loader_new(file);
+        gly_loader_set_sandbox_selector(loader, GLY_SANDBOX_SELECTOR_BWRAP);
+        g_autoptr(GlyImage) image = gly_loader_load(loader, &error);
+        g_assert_no_error(error);
+        g_autoptr(GlyFrame) frame = gly_image_next_frame(image, &error);
+        g_assert_no_error(error);
+        gint64 loaded = g_get_monotonic_time();
+        GlyMemoryFormat format = gly_frame_get_memory_format(frame);
+        g_autoptr(GEnumClass) formats = g_type_class_ref(gly_memory_format_get_type());
+        Result result = {.loop = loop};
+        start(G_OBJECT(frame), &result, 701, FALSE, FALSE, gray, FALSE, NULL);
+        wait_for_conversion(&result);
+        gint64 converted = g_get_monotonic_time();
+        getrusage(RUSAGE_SELF, &after);
+        g_assert_no_error(result.error);
+        g_autofree char *hash = g_compute_checksum_for_bytes(G_CHECKSUM_SHA256, result.bytes);
+        g_print("%s,%s,%ux%u,%s,%d,%dx%d,%" G_GINT64_FORMAT ",%" G_GINT64_FORMAT
+                ",%" G_GINT64_FORMAT ",%ld,%ld,%ld,%s\n",
+                i == 0 ? "cold" : "warm", g_enum_get_value(formats, format)->value_name,
+                gly_frame_get_width(frame), gly_frame_get_height(frame),
+                gly_memory_format_is_premultiplied(format) ? "premultiplied" : "straight",
+                result.depth, result.width, result.height, loaded - started, converted - loaded,
+                cpu_time(&after) - cpu_time(&before), rss, resident_kib(), after.ru_maxrss, hash);
+        g_bytes_unref(result.bytes);
+    }
 }
 
 static void benchmark(const char *name)
@@ -367,8 +508,18 @@ static void benchmark(const char *name)
         {"rgba8", 2, 1601, 1203, 701, FALSE, FALSE, FALSE, FALSE},
         {"premultiplied-rgba8", 6, 1601, 1203, 701, FALSE, FALSE, FALSE, FALSE},
         {"gray8", 12, 1601, 1203, 701, FALSE, TRUE, FALSE, FALSE},
+        {"small-rgb16", 9, 31, 19, 31, FALSE, FALSE, FALSE, FALSE},
+        {"threshold-rgb16", 9, 256, 128, 16, FALSE, FALSE, FALSE, FALSE},
         {"rgb16", 9, 1601, 1203, 701, FALSE, FALSE, FALSE, FALSE},
         {"rgba16", 10, 1601, 1203, 701, FALSE, FALSE, FALSE, FALSE},
+        {"gray16", 15, 1601, 1203, 701, FALSE, TRUE, FALSE, FALSE},
+        {"gray-alpha16", 16, 1601, 1203, 701, FALSE, TRUE, FALSE, FALSE},
+        {"premultiplied-rgba16", 11, 1601, 1203, 701, FALSE, FALSE, FALSE, FALSE},
+        {"premultiplied-gray-alpha16", 17, 1601, 1203, 701, FALSE, TRUE, FALSE, FALSE},
+        {"linear-rgb16", 9, 1601, 1203, 701, FALSE, FALSE, TRUE, FALSE},
+        {"fractional-rgb16", 9, 1601, 1203, 113, TRUE, FALSE, FALSE, FALSE},
+        {"concurrent-rgb16", 9, 1601, 1203, 701, FALSE, FALSE, FALSE, TRUE},
+        {"concurrent-rgb16-gray16", 9, 1601, 1203, 701, FALSE, FALSE, FALSE, TRUE},
         {"linear-rgb", 0, 1601, 1203, 701, FALSE, FALSE, TRUE, FALSE},
         {"large-downscale", 0, 2501, 1703, 113, FALSE, FALSE, FALSE, FALSE},
         {"fractional-crop", 2, 1601, 1203, 713, TRUE, FALSE, FALSE, FALSE},
@@ -384,26 +535,40 @@ static void benchmark(const char *name)
     FrameData data;
     make_frame(&data, &layouts[cases[index].layout], cases[index].width, cases[index].height);
     g_object_set_data(frame, "frame-data", &data);
-    int repetitions = index == 0 ? 101 : 6;
+    gboolean mixed = strcmp(name, "concurrent-rgb16-gray16") == 0;
+    g_autoptr(GObject) gray_frame = NULL;
+    FrameData gray_data = {0};
+    if (mixed) {
+        gray_frame = g_object_new(G_TYPE_OBJECT, NULL);
+        make_frame(&gray_data, &layouts[15], data.width, data.height);
+        g_object_set_data(gray_frame, "frame-data", &gray_data);
+    }
+    int repetitions = cases[index].width == 31 ? 101 : 6;
     for (int i = 0; i < repetitions; i++) {
         struct rusage before, after;
         Result first = {.loop = loop}, second = {.loop = loop};
+        long rss = resident_kib();
         getrusage(RUSAGE_SELF, &before);
         gint64 started = g_get_monotonic_time();
         start(frame, &first, cases[index].edge, cases[index].crop, FALSE, cases[index].gray,
               cases[index].linear, NULL);
         if (cases[index].concurrent) {
-            start(frame, &second, cases[index].edge, cases[index].crop, FALSE, cases[index].gray,
-                  cases[index].linear, NULL);
+            start(mixed ? gray_frame : frame, &second, cases[index].edge, cases[index].crop, FALSE,
+                  mixed || cases[index].gray, cases[index].linear, NULL);
             wait_for_conversion(&second);
         }
         wait_for_conversion(&first);
         gint64 elapsed = g_get_monotonic_time() - started;
         getrusage(RUSAGE_SELF, &after);
         g_assert_no_error(first.error);
+        g_autofree char *second_hash = NULL;
         if (cases[index].concurrent) {
             g_assert_no_error(second.error);
-            g_assert_true(g_bytes_equal(first.bytes, second.bytes));
+            if (mixed) {
+                second_hash = g_compute_checksum_for_bytes(G_CHECKSUM_SHA256, second.bytes);
+            } else {
+                g_assert_true(g_bytes_equal(first.bytes, second.bytes));
+            }
             g_bytes_unref(second.bytes);
         }
         g_autofree char *hash = g_compute_checksum_for_bytes(G_CHECKSUM_SHA256, first.bytes);
@@ -411,21 +576,29 @@ static void benchmark(const char *name)
         guint height = cases[index].crop ? floor(.81 * data.height + 1e-7) : data.height;
         double throughput = (double)width * height * (cases[index].concurrent ? 2 : 1) *
                             G_USEC_PER_SEC / MAX(elapsed, 1);
-        g_print("%s,%s,%" G_GINT64_FORMAT ",%" G_GINT64_FORMAT ",%ld,%dx%d,%.0f,%s\n", name,
-                i == 0 ? "cold" : "warm", elapsed, cpu_time(&after) - cpu_time(&before),
-                after.ru_maxrss, first.width, first.height, throughput, hash);
+        g_print("%s,%s,%" G_GINT64_FORMAT ",%" G_GINT64_FORMAT ",%ld,%dx%d,%.0f,%s,%ld,%ld,%s\n",
+                name, i == 0 ? "cold" : "warm", elapsed, cpu_time(&after) - cpu_time(&before),
+                after.ru_maxrss, first.width, first.height, throughput, hash, rss, resident_kib(),
+                second_hash ? second_hash : "");
         g_bytes_unref(first.bytes);
     }
+    g_clear_pointer(&gray_data.bytes, g_bytes_unref);
     g_bytes_unref(data.bytes);
 }
 
 int main(int argc, char **argv)
 {
+    if (argc == 4 && strcmp(argv[1], "--real-frame") == 0) {
+        benchmark_real_frame(argv[2], strcmp(argv[3], "gray-icc") == 0);
+        return 0;
+    }
     if (argc == 3 && strcmp(argv[1], "--benchmark") == 0) {
         benchmark(argv[2]);
         return 0;
     }
     g_test_init(&argc, &argv, NULL);
+    g_test_add_func("/glycin/concurrent-16bit-transfer", test_concurrent_16bit);
+    g_test_add_func("/glycin/complete-16bit-sample-range", test_16bit_sample_range);
     g_test_add_func("/glycin/concurrent-cropped-resampling", test_concurrent_crop);
     g_test_add_func("/glycin/layouts-and-transfer", test_layouts);
     g_test_add_func("/glycin/resampling-and-alpha", test_resampling);

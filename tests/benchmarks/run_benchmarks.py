@@ -183,7 +183,12 @@ def loopback_fixture(fixture: Path) -> Iterator[str]:
 
 
 def measure(
-    executable: Path, operation: str, source: str, root: Path, worker: Path
+    executable: Path,
+    operation: str,
+    source: str,
+    root: Path,
+    worker: Path,
+    fault_worker: Path | None = None,
 ) -> dict:
     cache = root / "sample-cache"
     cache.mkdir()
@@ -199,6 +204,8 @@ def measure(
         MAJORIS_IMAGE_WORKER=str(worker),
         MAJORIS_IMAGE_PROFILE="1",
     )
+    if fault_worker:
+        env["IMAGEKIT_BENCHMARK_FAULT_WORKER"] = str(fault_worker.resolve())
     command = [executable, operation, source]
     if operation == "gvfs-write-error":
         command = ["prlimit", "--fsize=131072:131072", "--", *command]
@@ -267,6 +274,7 @@ def measure(
         None,
     )
     phases = {}
+    fallback_metadata = {}
     for line in output.splitlines():
         if line.startswith("ImageKit-profile "):
             _, stage, elapsed, quantity = line.split()
@@ -274,6 +282,10 @@ def measure(
             total["events"] += 1
             total["us"] += int(elapsed)
             total["quantity"] += int(quantity)
+        if line.startswith("Fallback-pixels "):
+            fallback_metadata["output_sha256"] = line.split()[1]
+        if line.startswith("Fallback-color "):
+            fallback_metadata["color_diagnostic"] = line.removeprefix("Fallback-color ")
     worker_launches = len(starts.read_text().splitlines())
     if operation == "cancel" and worker_launches != 1:
         raise RuntimeError("Worker cancellation requires exactly one sandbox launch")
@@ -294,6 +306,7 @@ def measure(
         "sampled_concurrent_workers": concurrency,
         "sampled_temp_and_cache_bytes": temporary_bytes,
         **exported,
+        **fallback_metadata,
     }
 
 
@@ -462,8 +475,8 @@ def main() -> int:
                 and not args.loopback_gvfs
             ):
                 parser.error(f"{mode} requires --loopback-gvfs")
-            if mode == "cancel" and not args.fault_worker:
-                parser.error("cancel workload requires --fault-worker")
+            if mode in {"cancel", "fallback16"} and not args.fault_worker:
+                parser.error(f"{mode} workload requires --fault-worker")
             worker = (
                 args.fault_worker
                 if mode in {"fallback", "cancel"} and args.fault_worker
@@ -479,14 +492,22 @@ def main() -> int:
                     ]
             else:
                 samples = [
-                    measure(args.executable.resolve(), mode, source, root, worker)
+                    measure(
+                        args.executable.resolve(),
+                        mode,
+                        source,
+                        root,
+                        worker,
+                        args.fault_worker if mode == "fallback16" else None,
+                    )
                     for _ in range(args.samples)
                 ]
             key = "warm_open_seconds" if mode == "warm" else "wall_seconds"
+            phase = "fallback-open" if mode == "fallback16" else "workload"
             durations = sorted(
                 sample[key]
                 if mode == "warm"
-                else sample["phases"].get("workload", {}).get("us", 0) / 1e6
+                else sample["phases"].get(phase, {}).get("us", 0) / 1e6
                 or sample[key]
                 for sample in samples
             )

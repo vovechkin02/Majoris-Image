@@ -88,6 +88,41 @@ private async void verify_custom_backend_order (string directory) throws Error {
     }
 }
 
+private async void verify_srgb16_fallback (DecoderRegistry registry, string directory) throws Error {
+    var options = new DecodeOptions ();
+    options.required_capabilities |= ImageCapabilities.COLOR_MANAGED;
+    string[] layouts = { "rgb", "rgba", "gray", "gray-alpha" };
+    for (int i = 0; i < layouts.length; i++) {
+        var path = Path.build_filename (directory, "glycin-%s16.png".printf (layouts[i]));
+        var source = new ImageSource (File.new_for_path (path));
+        var document = yield registry.open (source, options);
+        bool alpha = i == 1 || i == 3;
+        assert (document.decoder == "Glycin" && document.color_managed);
+        assert (document.bit_depth == 16 && document.source_bit_depth == 16);
+        assert (document.has_alpha == alpha && document.pixel_buffer_bit_depth == 32);
+        assert (document.width == 257 && document.height == 129);
+        var pixels = document.preview;
+        assert (pixels.width == 257 && pixels.height == 129);
+        assert (pixels.bytes.get_size () == 257 * 129 * 4 * sizeof (float));
+        for (int channel = 0; channel < 4; channel++) {
+            double expected = 0.21405;
+            if (channel == 3) {
+                expected = alpha ? 32768.0 / 65535 : 1.0;
+            } else if (i < 2 && channel != 0) {
+                expected = channel == 1 ? 0.05088 : 0.00516;
+            }
+            assert (Math.fabs (sample_float_channel (pixels, 0, channel) - expected) < 0.0001);
+            float second = channel == 3 && !alpha ? 1.0f : 0.0f;
+            assert (sample_float_channel (pixels, 1, channel) == second);
+        }
+        var crop = yield document.render_region (1, 0, 1, 1, 1);
+        assert (crop.width == 1 && crop.height == 1);
+        assert (sample_float_channel (crop, 0, 0) == 0);
+        string hash = Checksum.compute_for_bytes (ChecksumType.SHA256, pixels.bytes);
+        stdout.printf ("%s RGBA32F SHA-256 %s\n", layouts[i], hash);
+    }
+}
+
 async void verify_decoder_selection_and_frames (string[] args) throws Error {
     var registry = new DecoderRegistry ();
     var registration = new KeyFile ();
@@ -248,6 +283,7 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
     }
     registry.register_backend (new MissingFixtureCodec (args[4]));
     if (catalog.contains ("image/png")) {
+        yield verify_srgb16_fallback (registry, directory);
         var fallback_p3 = yield registry.open (png_p3);
         assert (fallback_p3.decoder == "Glycin" && fallback_p3.bit_depth == 16);
         assert (!fallback_p3.color_managed && fallback_p3.color_diagnostic.contains ("ICC"));

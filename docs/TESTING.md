@@ -141,19 +141,26 @@ memory layout. They call the production asynchronous converter without starting
 a loader. Each workload launches a fresh process, then repeats conversions in
 that process. Each CSV row contains the workload, cold or warm status, wall
 and process CPU time in microseconds, peak RSS in KiB, output dimensions,
-source pixels per second, and SHA-256 of the complete RGBA32F output. The
+source pixels per second, SHA-256 of the complete RGBA32F output, RSS before
+and after the conversion, and the second output hash for mixed conversions. The
 frame fixture substitutes Glycin's accessors because Glycin 1 has no public
-frame constructor. The decoder-selection integration test and the public API
-`fallback` workload exercise installed loaders. The standalone public API runner
-needs `--fault-worker BUILD/tests/security/worker-fault` for the QOI fallback
-workload on hosts whose native stack decodes QOI.
+frame constructor. The sandboxed frame benchmarks report the actual Glycin
+memory format, loader time, and conversion time for real fixtures. The
+decoder-selection integration test and the public API `fallback` and
+`fallback16` workloads exercise installed loaders through Core. Pass
+`--fault-worker BUILD/tests/security/worker-fault` to force QOI fallback on
+hosts whose native stack decodes QOI and to run `fallback16`. The latter uses
+the fault worker only as a custom backend so the real worker can verify color.
 
 ```sh
 meson test -C build --benchmark --verbose 'Glycin pixel conversion (large-rgb8)'
+meson test -C build --benchmark --verbose 'Glycin pixel conversion (concurrent-rgb16-gray16)'
+meson test -C build --benchmark --verbose 'Sandboxed Glycin loading and conversion (RGB16 PNG)'
 meson test -C build --benchmark --verbose 'Render recipe copy' 'Render recipe default-comparison'
 ```
 
 See the [render options and Glycin verification report](verification-render-glycin.md)
+and the [16-bit Glycin conversion study](verification-glycin-16bit.md)
 for the before-and-after measurements.
 
 For a standalone baseline, pass the built benchmark and worker to

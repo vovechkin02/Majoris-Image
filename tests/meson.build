@@ -64,6 +64,10 @@ if get_option('tests')
       'linear.qoi',
       'partial-repeat.heic',
       'wide.apng',
+      'glycin-rgb16.png',
+      'glycin-rgba16.png',
+      'glycin-gray16.png',
+      'glycin-gray-alpha16.png',
     ],
     command: [python, '@INPUT@', profiled_png_fixture, '@OUTPUT@'],
   )

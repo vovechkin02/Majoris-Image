@@ -57,7 +57,10 @@ benchmark(
   timeout: 900,
 )
 if get_option('glycin').enabled()
-  workloads += ['fallback=' + (fixture_build_dir / 'fallback.qoi')]
+  workloads += [
+    'fallback=' + (fixture_build_dir / 'fallback.qoi'),
+    'fallback16=' + (fixture_build_dir / 'glycin-rgb16.png'),
+  ]
 endif
 if get_option('raw_fixtures') != ''
   workloads += [
@@ -192,8 +195,18 @@ if glycin.found()
     'rgba8',
     'premultiplied-rgba8',
     'gray8',
+    'small-rgb16',
+    'threshold-rgb16',
     'rgb16',
     'rgba16',
+    'gray16',
+    'gray-alpha16',
+    'premultiplied-rgba16',
+    'premultiplied-gray-alpha16',
+    'linear-rgb16',
+    'fractional-rgb16',
+    'concurrent-rgb16',
+    'concurrent-rgb16-gray16',
     'linear-rgb',
     'large-downscale',
     'fractional-crop',
@@ -203,6 +216,22 @@ if glycin.found()
       'Glycin pixel conversion (' + workload + ')',
       glycin_pixels_test,
       args: ['--benchmark', workload],
+      suite: 'performance',
+      timeout: 60,
+    )
+  endforeach
+  foreach fixture : [
+    ['RGB16 PNG', extra_formats[27], 'srgb'],
+    ['RGBA16 PNG', extra_formats[28], 'srgb'],
+    ['Grayscale16 PNG', extra_formats[29], 'srgb'],
+    ['Grayscale-alpha16 PNG', extra_formats[30], 'srgb'],
+    ['Profiled grayscale PNG', fixtures[7], 'gray-icc'],
+    ['Profiled TIFF', fixtures[5], 'srgb'],
+  ]
+    benchmark(
+      'Sandboxed Glycin loading and conversion (' + fixture[0] + ')',
+      glycin_pixels_test,
+      args: ['--real-frame', fixture[1], fixture[2]],
       suite: 'performance',
       timeout: 60,
     )

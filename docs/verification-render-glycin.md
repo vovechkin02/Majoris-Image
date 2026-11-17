@@ -178,6 +178,9 @@ compositor and physical HDR display checks were unavailable in this run.
 
 ## F. Deferred conversion changes
 
+The [follow-up 16-bit conversion study](verification-glycin-16bit.md) evaluates
+actual loader frames and documents the selective tables now in use.
+
 A temporary two-table, 16-bit candidate preserved the output digests. Its
 warm median wall times were 11.1 ms for RGB16 and 12.7 ms for RGBA16,
 compared with 138.6 ms and 115.9 ms in the original converter. The candidate

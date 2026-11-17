@@ -1,6 +1,12 @@
 using ImageKit;
 
 private class BenchmarkBackend : Object, DecoderBackend {
+    private string worker;
+
+    public BenchmarkBackend (string worker) {
+        this.worker = worker;
+    }
+
     public string id {
         get {
             return "benchmark-png";
@@ -9,13 +15,14 @@ private class BenchmarkBackend : Object, DecoderBackend {
 
     public string executable {
         get {
-            return Environment.get_variable ("MAJORIS_IMAGE_WORKER") ?? "";
+            return worker;
         }
     }
 
     public ImageCapabilities capabilities {
         get {
-            return ImageCapabilities.STILL | ImageCapabilities.METADATA;
+            return ImageCapabilities.STILL | ImageCapabilities.METADATA |
+                ImageCapabilities.COLOR_MANAGED;
         }
     }
 
@@ -190,7 +197,16 @@ private async void measure (string mode, ImageSource source) throws Error {
             source = yield stage_stream (source.file);
         }
         if (mode == "custom") {
-            registry.register_backend (new BenchmarkBackend ());
+            registry.register_backend (new BenchmarkBackend (
+                Environment.get_variable ("MAJORIS_IMAGE_WORKER") ?? ""));
+        }
+        if (mode == "fallback16") {
+            string? fault_worker = Environment.get_variable ("IMAGEKIT_BENCHMARK_FAULT_WORKER");
+            if (fault_worker == null) {
+                throw new IOError.INVALID_ARGUMENT ("An RGB16 fallback benchmark needs a fault worker");
+            }
+            registry.register_backend (new BenchmarkBackend (fault_worker));
+            options.required_capabilities |= ImageCapabilities.COLOR_MANAGED;
         }
         if (mode == "gvfs") {
             assert (!source.file.is_native ());
@@ -203,7 +219,11 @@ private async void measure (string mode, ImageSource source) throws Error {
         if (mode == "full") {
             options.preview_size = 4096;
         }
+        int64 opening = get_monotonic_time ();
         var document = yield registry.open (source, options);
+        if (mode == "fallback16") {
+            record_phase ("fallback-open", opening);
+        }
         stdout.printf ("%s %d × %d\n", document.decoder, document.width, document.height);
         switch (mode) {
             case "warm":
@@ -243,6 +263,13 @@ private async void measure (string mode, ImageSource source) throws Error {
                 break;
             case "fallback":
                 assert (document.decoder == "Glycin");
+                break;
+            case "fallback16":
+                assert (document.decoder == "Glycin" && document.bit_depth == 16 &&
+                    document.color_managed);
+                stdout.printf ("Fallback-pixels %s\nFallback-color %s\n",
+                    Checksum.compute_for_bytes (ChecksumType.SHA256, document.preview.bytes),
+                    document.color_diagnostic);
                 break;
             case "stream":
             case "custom":

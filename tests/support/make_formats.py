@@ -136,6 +136,21 @@ def write_color_fixtures(bad_icc: Path, srgb: Path, cicp: Path) -> None:
         )
 
 
+def write_srgb16_png(path: Path, color_type: int, width: int, height: int) -> None:
+    color = (32768, 16384, 4096) if color_type in (2, 6) else (32768,)
+    alpha = (32768,) if color_type in (4, 6) else ()
+    first = struct.pack(">" + "H" * (len(color) + len(alpha)), *color, *alpha)
+    second = bytes(len(first))
+    row = b"\0" + (first + second) * (width // 2) + first * (width % 2)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 16, color_type, 0, 0, 0))
+        + chunk(b"sRGB", bytes(1))
+        + chunk(b"IDAT", zlib.compress(row * height))
+        + chunk(b"IEND")
+    )
+
+
 def write_heic_fixtures(
     indefinite: Path,
     offset_edit: Path,
@@ -243,7 +258,7 @@ def write_profiled_animation(profiled: Path, apng: Path, wide_apng: Path) -> Non
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profiled", type=Path)
-    parser.add_argument("outputs", nargs=27, type=Path)
+    parser.add_argument("outputs", nargs=31, type=Path)
     args = parser.parse_args()
     profiled, qoi, apng, *formats = args.profiled, *args.outputs
     oriented = formats[:8]
@@ -265,6 +280,10 @@ def main() -> int:
         qoi_linear,
         partial_repeat,
         wide_apng,
+        rgb16,
+        rgba16,
+        gray16,
+        gray_alpha16,
     ) = formats[8:]
 
     write_partial_fixtures(qoi, apng)
@@ -277,6 +296,10 @@ def main() -> int:
     write_linear_qoi(qoi_linear)
     write_fractional_heic(heic, partial_repeat)
     write_profiled_animation(profiled, apng, wide_apng)
+    for path, color_type in zip(
+        (rgb16, rgba16, gray16, gray_alpha16), (2, 6, 0, 4), strict=True
+    ):
+        write_srgb16_png(path, color_type, 257, 129)
     return 0
 
 

@@ -8,6 +8,8 @@ native_vala_flags = [
 worker_sources = files(
   'color-adjustments.vala',
   'export-engine.vala',
+  'lossless-jpeg.vala',
+  'lossless-jpeg.c',
   'float-ops.vala',
   'image-inspector.vala',
   'image-processor.vala',
@@ -26,11 +28,12 @@ worker = executable(
   'main.vala',
   worker_sources,
   worker_contract,
-  dependencies: [gio, json, gexiv],
+  dependencies: [gio, json, gexiv, c_compiler.find_library('turbojpeg')],
   # Link the codec archive without passing its C-only packages to valac.
   link_with: native_bridge,
-  include_directories: include_directories('../../native'),
+  include_directories: include_directories('../../native', '.'),
   vala_args: native_vala_flags,
   install: true,
   install_dir: get_option('libexecdir'),
 )
+

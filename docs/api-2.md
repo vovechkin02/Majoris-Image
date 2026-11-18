@@ -501,3 +501,19 @@ pan, use the GTK demo with the generated 200 MP TIFF and profile compositor
 frame times through Sysprof on the target desktop.
 
 See the [test guide](TESTING.md) for fixture staging, test suites, and release qualification.
+
+## Lossless JPEG export (2.0.1)
+
+`EncoderRegistry.encode()` with JPEG format and `ExportOptions.lossless=true`
+performs a perfect TurboJPEG coefficient transform in the isolated worker.
+Only `RenderOptions.turns` may differ from defaults. Scale, dimensions, HDR,
+profile conversion and metadata filtering are rejected. The source profile and
+metadata are retained; orientation is normalized and stale EXIF thumbnails are
+removed. Unaligned edges that cannot be transformed perfectly raise
+`ImageError.UNSUPPORTED`; no crop or re-encode fallback occurs. Explicitly
+setting `lossless=false` selects ordinary encoding, which can lose quality.
+The existing source pin, identity checks, cancellation and separate-destination
+publication apply to both paths. Hosts must obtain consent before falling back
+to JPEG re-encoding. Quality and bit-depth settings do not quantize coefficients
+in the lossless path. The worker bounds compressed input and output to 256 MiB;
+its address-space and CPU limits also apply to coefficient storage.

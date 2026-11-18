@@ -5,7 +5,7 @@ Maintainer: Majoris contributors <packages@majoris.invalid>
 Build-Depends: debhelper-compat (= 13), meson (>= 1.4), ninja-build, valac, pkgconf,
  libglib2.0-dev, libgee-0.8-dev, libjson-glib-dev, zlib1g-dev,
  libgtk-4-dev (>= 4.16), libglycin-1-dev, glycin-loaders,
- libvips-dev, libraw-dev, liblcms2-dev, libheif-dev, libjxl-dev, libopenexr-dev,
+ libvips-dev, libturbojpeg0-dev, libraw-dev, liblcms2-dev, libheif-dev, libjxl-dev, libopenexr-dev,
  librsvg2-dev, libgexiv2-dev, bubblewrap (>= 0.10.0), xvfb, xauth, libxtst-dev <!nocheck>,
  girepository-tools,
  libheif-plugin-libde265, libheif-plugin-dav1d,

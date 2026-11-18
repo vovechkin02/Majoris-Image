@@ -248,3 +248,7 @@ if get_option('gtk')
     )
   endif
 endif
+
+lossless_jpeg_test = executable('test-lossless-jpeg', 'test-lossless-jpeg.vala', dependencies: [core_api, gexiv])
+test('Lossless JPEG public export', python, suite: 'integration',
+  args: isolated + [lossless_jpeg_test, fixture_dir], depends: worker, env: worker_env, timeout: 90)

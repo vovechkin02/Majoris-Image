@@ -1,3 +1,10 @@
+majoris-image (2.0.1) unstable; urgency=medium
+
+  * Add sandboxed perfect lossless JPEG quarter-turn export through the public API.
+  * Test EXIF orientations, coefficient-preserving round trips, cancellation and refusal.
+
+ -- Majoris contributors <packages@majoris.invalid>  Wed, 18 Nov 2026 12:00:00 +1100
+
 majoris-image (2.0.0) unstable; urgency=medium
 
   * Move the public API to ImageKit and bump both library SONAMEs to 2.

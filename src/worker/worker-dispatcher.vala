@@ -22,6 +22,13 @@ namespace ImageKit {
                 FileUtils.set_contents (output, MetadataReader.color_probe (source));
                 return;
             }
+            // Perfect JPEG transforms operate on coefficients before any pixel decode.
+            if (operation == "export" && request.export_options.lossless &&
+                request.export_options.format in new string[] { "jpeg", "jpg" }) {
+                LosslessJpeg.write (source, output + "." + request.export_options.format,
+                                    request.export_options, request.transform);
+                return;
+            }
             Vips.Image? prepared;
             var probe = ImageInspector.inspect_and_prepare_pixels (source, request.hdr_hint, options.page,
                 out prepared, request.sequence_frames);

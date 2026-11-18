@@ -81,7 +81,8 @@ namespace ImageKit {
             } else if (probe.timed_sequence && !probe.animated) {
                 warning = "The installed decoder supplied a still preview of this timed sequence";
             } else {
-                warning = probe.loader == "Glycin" ? probe.color_diagnostic : "";
+                warning = DecoderRoute.from_label (probe.loader) == DecoderRoute.FALLBACK
+                    ? probe.color_diagnostic : "";
             }
             metadata = new ImageMetadata (probe.metadata);
         }
@@ -104,16 +105,17 @@ namespace ImageKit {
             bool animation_frame = false) throws Error {
             var stop = cancel ?? new Cancellable ();
             yield verify_source (stop);
-            if (decoder == "Glycin" && !animated && index == 0) {
+            var route = DecoderRoute.from_label (decoder);
+            if (route == DecoderRoute.FALLBACK && !animated && index == 0) {
                 return this;
             }
             var requested = options.copy ();
             requested.page = index;
-            if (decoder == "libheif-sequence") {
+            if (route == DecoderRoute.SEQUENCE) {
                 requested.sequence_frames = frame_count;
             }
             if (animated && mime_type == "image/apng" &&
-                (index != frame || (animation_frame && decoder != "Glycin"))) {
+                (index != frame || (animation_frame && route != DecoderRoute.FALLBACK))) {
                 try {
                     return yield GlycinFallback.open (source, requested, stop,
                         new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"), 120, probe);
@@ -164,13 +166,14 @@ namespace ImageKit {
             transform.crop_height = (double) height / this.height;
             var requested = options.copy ();
             requested.source_hdr = hdr ? 1 : 0;
-            if (decoder == "libheif-sequence") {
+            var route = DecoderRoute.from_label (decoder);
+            if (route == DecoderRoute.SEQUENCE) {
                 requested.sequence_frames = frame_count;
             }
             requested.sdr_presentation = tone_map;
             var stop = cancel ?? new Cancellable ();
             yield verify_source (stop);
-            if (decoder == "Glycin") {
+            if (route == DecoderRoute.FALLBACK) {
                 requested.preview_size = edge;
                 var fallback = yield GlycinFallback.open (source, requested, stop,
                     new ImageError.UNSUPPORTED ("Glycin could not re-decode this region"), 120,

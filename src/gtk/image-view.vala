@@ -371,10 +371,11 @@ namespace ImageKit {
 
         private async void present_document (ImageDocument value, uint request, Cancellable stop) throws Error {
             string animation_error = "";
-            if (can_play (value) && value.mime_type == "image/apng" && value.decoder != "Glycin") {
+            if (can_play (value) && value.mime_type == "image/apng" &&
+                DecoderRoute.from_label (value.decoder) != DecoderRoute.FALLBACK) {
                 try {
                     value = yield value.open_frame (value.frame, stop);
-                    if (value.decoder != "Glycin") {
+                    if (DecoderRoute.from_label (value.decoder) != DecoderRoute.FALLBACK) {
                         animation_error = _("APNG animation requires Glycin.");
                     }
                 } catch (Error error) {

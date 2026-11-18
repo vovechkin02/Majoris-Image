@@ -7,6 +7,7 @@ core_sources = files(
   'image-metadata.vala',
   'image-document.vala',
   'decoder-backend.vala',
+  'decoder-policy.vala',
   'image-probe.vala',
   'decoder-registry.vala',
   'glycin-fallback.vala',

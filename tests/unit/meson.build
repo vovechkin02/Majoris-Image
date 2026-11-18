@@ -4,6 +4,18 @@ scheduler_source = configure_file(
   copy: true,
 )
 
+decoder_policy_test_source = configure_file(
+  input: '../../src/core/decoder-policy.vala',
+  output: 'decoder-policy-test-impl.vala',
+  copy: true,
+)
+decoder_policy_test = executable(
+  'test-decoder-policy',
+  ['test-decoder-policy.vala', decoder_policy_test_source],
+  dependencies: gio,
+)
+test('Private decoder routing compatibility', decoder_policy_test, suite: 'unit')
+
 exr_tests = executable('test-exr', 'test-exr.cpp', dependencies: native_api)
 color_tests = executable(
   'test-imaging',

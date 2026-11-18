@@ -13,6 +13,7 @@ worker_sources = files(
   'float-ops.vala',
   'image-inspector.vala',
   'image-processor.vala',
+  'loader-policy.vala',
   'metadata-reader.vala',
   'tone-adjustments.vala',
   'tone-mapper.vala',

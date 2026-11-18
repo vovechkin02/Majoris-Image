@@ -67,7 +67,10 @@ consumer builds. To exercise licensed camera inputs, configure
 `-Draw_fixtures=/absolute/path/to/raw-only-directory`.
 
 See the [integration examples and ABI 2 capability matrix](docs/api-2.md) for formats,
-sandbox requirements and integration examples. The [2.0.0 verification report](docs/verification-2.0.0.md) records the build, package and test results.
+sandbox requirements and integration examples. Version 2.0.1 adds lossless JPEG
+quarter-turn export; see the [2.0.1 feature verification](docs/verification-files-lossless-jpeg.md).
+The [2.0.0 verification report](docs/verification-2.0.0.md) remains the historical
+baseline for that release.
 
 On Debian, the thumbnailer package generates its desktop entry from the
 installed system codecs. Package triggers refresh it when loader packages
@@ -79,8 +82,8 @@ Create a source release with Git metadata so Debian rules retain their
 executable mode. From a committed release tree, use:
 
 ```sh
-git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-2.0.0/ HEAD > majoris-image-2.0.0.tar.gz
-python3 tests/release/check_release_modes.py majoris-image-2.0.0.tar.gz
+git -c tar.umask=0022 archive --format=tar.gz --prefix=majoris-image-2.0.1/ HEAD > majoris-image-2.0.1.tar.gz
+python3 tests/release/check_release_modes.py majoris-image-2.0.1.tar.gz
 ```
 
 The check verifies both executable scripts in Git and after tar extraction.

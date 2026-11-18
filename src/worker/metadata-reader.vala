@@ -178,7 +178,7 @@ namespace ImageKit {
             if (!probe.raw) {
                 Vips.Image? image = prepared;
                 if (image == null) {
-                    if (probe.loader == "openexr-native") {
+                    if (WorkerLoaderPolicy.uses_native_exr (probe.loader)) {
                         image = ImageNative.exr_image (path, page);
                     } else if (page > 0) {
                         image = Vips.Image.from_file (path, "page", page, "n", 1, null);

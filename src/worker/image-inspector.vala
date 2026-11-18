@@ -298,7 +298,7 @@ namespace ImageKit {
             if (probe.gain_map) {
                 return ImageNative.ultra_decode (source, false);
             }
-            if (probe.loader == "openexr-native") {
+            if (WorkerLoaderPolicy.uses_native_exr (probe.loader)) {
                 return ImageNative.exr_image (source, options.page);
             }
             var image = options.page == 0 ? Vips.Image.from_file (source, "fail_on", 2, null) :
@@ -306,7 +306,7 @@ namespace ImageKit {
             if (image == null) {
                 throw new ImageError.CORRUPT ("%s", Vips.error_buffer ());
             }
-            if (probe.loader.contains ("heif")) {
+            if (WorkerLoaderPolicy.needs_heif_annotation (probe.loader)) {
                 ImageNative.annotate_heif (image, source);
             }
             if (probe.raw && !options.raw_preview_only) {

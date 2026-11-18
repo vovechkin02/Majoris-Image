@@ -1,12 +1,12 @@
 # Contributing
 
-Apply Majoris Cross-Project Engineering Standards v1.6. The authoritative
-organization document supplied for this adoption is
-[Majoris_Engineering_Standards_v1.6.md](C:/Users/Admin/Downloads/Majoris_Engineering_Standards_v1.6.md) (SHA-256
+Apply Majoris Cross-Project Engineering Standards v1.6 using the
+[versioned repository copy](docs/engineering-standards-v1.6.md) (SHA-256
 `197d6efe4898541d81d21be166ff7b855e7966444eed9e4e305783290df1a3b6`).
+This pinned copy permits offline development and source-archive review; the
+organization's approved master remains authoritative for future revisions.
 The [project architecture decisions](docs/verification-structural-refactor.md#standards-v16-architecture-contracts)
-and [adoption evidence](docs/verification-gof-vala.md) record its application;
-the organization standard is not duplicated here.
+and [adoption evidence](docs/verification-gof-vala.md) record its application.
 
 Prefer `var` for clearly inferred Vala locals and typed collection iteration.
 Keep explicit API signatures, fields, numeric widths/precision, nullable state,

@@ -3,6 +3,11 @@
 The [baseline inventory](test-inventory-2.0.0.md) records the original tests,
 dependencies, fixtures, and assertion gaps. See the
 [qualification report](verification-test-quality.md) for observed results.
+The [v1.6 adoption evidence](verification-gof-vala.md) records current routing,
+ownership, ABI, compiler, and matched performance checks. The unit registration
+`Private decoder routing compatibility` protects exact legacy loader identities
+and preserves worker routing for unknown/custom labels. Existing decoder,
+protocol, lifecycle, and tile suites exercise the behavior behind those routes.
 
 Test sources live under `tests/unit/`, `tests/integration/`, and
 `tests/security/`. Shared runners and fixture generators are in

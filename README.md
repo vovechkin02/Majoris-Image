@@ -100,6 +100,9 @@ See the [test guide](docs/TESTING.md) for isolated, extended, sanitizer, benchma
 and release qualification workflows.
 The [final closure report](docs/verification-release-2.0.md) records the current
 source-validation fix, strict-build blockers, and release qualification status.
+The [GoF and Vala v1.6 adoption report](docs/verification-gof-vala.md) records
+private backend routing, declaration policy, compatibility evidence, and bounded
+verification exceptions.
 
 ## License
 

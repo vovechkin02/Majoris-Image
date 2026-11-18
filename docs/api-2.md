@@ -17,6 +17,10 @@ recipes and worker manifests use `nearest-neighbour` and `colour-managed`.
 
 ## Components
 
+The [private architecture contracts](verification-structural-refactor.md#standards-v16-architecture-contracts)
+describe backend routing, component ownership, and cleanup. These implementation
+details add no public API or worker protocol extension.
+
 - `majoris-image-1` links the headless GObject API. Native format parsing,
   metadata extraction, orientation, ICC conversion, RAW processing and export
   run in the worker. The core receives bounded manifests and straight-alpha

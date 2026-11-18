@@ -133,3 +133,108 @@ considering coalescing because clients can observe redraw and signal ordering.
 The existing benchmark harness can also measure buffer materialization and
 tile planning in a subsequent performance pass. Physical HDR output and
 native touch require hardware validation.
+
+## Standards v1.6 architecture contracts
+
+This section records the current GoF review; the earlier sections are historical
+refactor evidence. The v1.6 adoption is finite and does not authorize the
+speculative optimization described in the historical deferred-work section.
+See [verification and exceptions](verification-gof-vala.md) and the authoritative
+standard identity in [Contributing](../CONTRIBUTING.md).
+
+| Intent / classification | Actual participants and source | Selection, ownership, and lifetime |
+| --- | --- | --- |
+| Strategy: backend acceptance policy | `DecoderBackend.accepts`, application implementations, and `DecoderRegistry.select` in `src/core/decoder-backend.vala` and `decoder-registry.vala`; `MissingFixtureCodec` in `tests/integration/test-decoder-selection.vala` exercises different capabilities and worker executables | Registry owns registered backend references. A locked snapshot preserves registration order; capability filtering precedes `accepts`. Signature input is bounded to 64 KiB. Selection returns a worker client, not a decoder object. The Strategy contract covers acceptance/selection, not interchangeable in-process pixel decoding. Duplicate IDs retain the existing error contract. |
+| Adapter-like functional boundary, not a GoF object Adapter hierarchy | `GlycinFallback` in `src/core/glycin-fallback.vala`, `src/core/glycin-pixels.c`, `native/glycin-discovery.c`, and handwritten VAPI/native bindings | Translates Glycin interfaces, capabilities, provenance, errors, and owned frames into Core documents/pixels. Only missing/unsupported codecs permit fallback. Owns admission, timeout, cancellation subscription, and source validation. Glycin and worker decoding do not implement one common object interface; no Adapter/Strategy hierarchy is claimed or added. |
+| Facade | `ImageDocument` in `src/core/image-document.vala`, `ImageView` in `src/gtk/image-view.vala`, `EncoderRegistry` in `src/core/encoder-registry.vala` | Documents retain source, options, probe, preview, worker, and freshness identity. Views coordinate GTK input/drawing and delegate tiles, presentation, and playback. Encoders coordinate protected-source preparation, isolated encoding, validated transfer, and remote publication. Each delegates substantive processing to its owning component. |
+| Observer using GObject signals | `TileCache.changed` in `src/gtk/tile-cache.vala`; `ImageView` notifications and monitor/surface subscriptions; `AnimationController` in `src/gtk/animation-controller.vala` | Each view owns its tile cache/controller. GTK operations and async publication resume on the initiating GTK main context. Generations, cancellation, and tile identity reject stale results; cache state is updated and its queue pumped before synchronous `changed` emission. Invalidation clears/cancels tiles. Monitor/surface handler IDs are disconnected before replacement/disposal. Widget-owned event controllers and self-notifications share widget lifetime. No parallel observer bus is needed. |
+| Singleton: shared production admission queue | `JobScheduler.shared`, `JobTicket` in `src/core/job-scheduler.vala`; `WorkerClient.run` and Glycin admission | One process-wide queue enforces four active jobs and reserves the fourth slot from thumbnail/preload work. Initialization is locked; queue/accounting use a mutex. Tickets retain their initiating `MainContext`, and wake through an attached idle source. Canceled granted jobs release their slots. The instance has process lifetime. Tests run in their own process, drain all acquired slots, and use seeded trials; internal construction remains possible for isolated tests. |
+| Security client / proxy-like, not complete GoF Proxy | `WorkerClient` in `src/core/worker-client.vala`, Bubblewrap, worker `main.vala` and `worker-dispatcher.vala` | Parent owns private staging, process, timeout, cancellation subscription, bounded output validation, and cleanup. Worker owns risky parsing/processing. There is no shared Subject interface implemented by both client and worker, so this is not labeled a GoF Proxy. Isolation remains a mandatory boundary. |
+| Explicit state machines, not GoF State objects | `ViewState`, `RawState`, `OutputCapability`, `PresentationDecision`, playback generations and flags in Core/GTK | Enums and explicit transitions remain local to their owners. Playback owns its timer/cancellable/prefetched frame and holds a weak widget link. Disposal invalidates work, cancels frame/tile requests, stops timers, disconnects output watchers, and detaches playback. Unmap suspends display work without becoming disposal. |
+
+### Bounded mismatch and its resolution
+
+Previously, `image-document.vala` compared `Glycin` and `libheif-sequence` in
+warning, page/frame, and region paths; `image-view.vala` compared `Glycin` while
+preparing APNG playback. These scattered display-name decisions now use
+`DecoderRoute` in `src/core/decoder-policy.vala`. The only mapping from labels to
+private routing values lives there. Unknown and custom labels retain worker
+routing; exact case-sensitive identity remains significant. The regression
+`tests/unit/test-decoder-policy.vala` protects native/custom names and near-match
+labels; existing decoder/animation tests cover the operations behind the map.
+
+The route is an unregistered private enum (`has_type_id = false`), with a direct
+static mapping and no object, provider, virtual method, cached document field,
+pixel copy, or heap allocation. Core and GTK compile the same source because
+GTK cannot consume hidden Core symbols through the installed public VAPI.
+Meson copies it to a build-local filename for GTK and the isolated unit target,
+avoiding Vala/Meson cross-directory generated-C collisions. There is no new
+production library or installed interface.
+
+The compatibility boundary deliberately still accepts `Glycin` and
+`libheif-sequence`: `ImageProbe.loader` and `ImageDocument.decoder` preserve
+their historical public/worker identities. Native codec emission, protocol
+operation strings, MIME names, and error diagnostics are not renamed.
+Routing is not a new extensibility promise; independent application backends
+continue using `DecoderBackend` and protocol 1.
+
+### Dependency and cleanup rules
+
+Core depends on GIO/GObject, its JSON/collection contracts, private native
+transfer/read helpers, and optionally Glycin. It does not depend on GTK.
+GTK depends on Core's public API, GTK/GDK, and private presentation/tile/playback
+components. Worker processing depends on the shared request/probe/options
+sources and private native codecs, not GTK. `DecoderRoute` has no codec or
+widget dependency. Shared protocol declarations remain explicitly typed.
+
+The parent validates worker output before use, verifies source freshness, and
+cleans private jobs in `finally`. `worker-output-reader.c` pins and bounds
+responses before allocation/read. `export-transfer.c` owns protected native
+source/destination descriptors and bounded transfer; `non-native-publication.vala`
+borrows payload bytes while its coroutine owns the payload, reports close-time
+remote errors, and requests canceled cleanup on write failure. The 256 MiB
+limits, native publication semantics, lookup tables, tile planning, and playback
+algorithms are unchanged.
+
+Generated C connects `TileCache.changed` using `g_signal_connect_object` with
+the view as target. Async work may retain the cache, but that subscription does
+not retain the widget and is disconnected with the target's lifetime. Signal
+delivery is synchronous after cache bookkeeping, without holding a scheduler
+lock; reentrant invalidation increments the generation before later callbacks
+can publish. Playback separately retains request documents/cancellables and
+uses document/playback generations plus its weak view link.
+
+### Inapplicable patterns
+
+No demonstrated force calls for Abstract Factory, Builder, Factory Method,
+Prototype, Bridge, Composite, Decorator, Flyweight, Chain of Responsibility,
+Command, Interpreter, Mediator, Memento, Template Method, or Visitor. Options
+copies are not automatically Prototype/Memento; JSON parsing is not Interpreter;
+IPC operation strings are not Command objects; fixed codec fallback is not a
+general Chain of Responsibility. Native Gee/array iteration already supplies
+Iterator behavior; no project-owned Iterator is needed. The existing explicit
+state machines do not need State objects, and worker access does not need a
+new Proxy interface. These conclusions close this review rather than creating
+a pattern implementation backlog.
+
+### Vala declaration policy
+
+Existing constructor locals such as `var requested = options.copy ()` and
+`var stop = cancel ?? new Cancellable ()` already express concrete intent.
+The adoption also uses `var output = yield worker.run (...)` in documents,
+`var catalog = yield WorkerClient.read_text (...)` in the registry, and
+`foreach (var field in image.fields ())` in export processing. Each converted
+initializer/collection was reviewed for static type and ownership; no regex-only
+rewrite or usage-percentage target was used.
+
+Explicit `int64` profiling times, `size_t` byte counts, `uint` generations,
+`ulong` signal handlers, `float` samples, `double` geometry, initialized struct
+literals, nullable pending objects/errors, borrowed `unowned` pixel arrays,
+native pointers/compact image boundaries, delegates, and all public signatures
+remain intentional. For example, `FileInfo info = null`,
+`unowned uint8[] data = payload.get_data ()`, and
+`DecoderBackend[] snapshot` must not be treated as redundant declarations.
+Explicit locals at nullable third-party return boundaries, including
+`ContentType.get_mime_type`, GExiv2 tag reads, and native file paths, also retain
+their original declared contracts instead of broadening the inferred type.
+Generated-C equivalence and compiler results are recorded in the adoption report.

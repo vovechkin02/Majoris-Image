@@ -1,5 +1,27 @@
 # Contributing
 
+Apply Majoris Cross-Project Engineering Standards v1.6. The authoritative
+organization document supplied for this adoption is
+[Majoris_Engineering_Standards_v1.6.md](C:/Users/Admin/Downloads/Majoris_Engineering_Standards_v1.6.md) (SHA-256
+`197d6efe4898541d81d21be166ff7b855e7966444eed9e4e305783290df1a3b6`).
+The [project architecture decisions](docs/verification-structural-refactor.md#standards-v16-architecture-contracts)
+and [adoption evidence](docs/verification-gof-vala.md) record its application;
+the organization standard is not duplicated here.
+
+Prefer `var` for clearly inferred Vala locals and typed collection iteration.
+Keep explicit API signatures, fields, numeric widths/precision, nullable state,
+base/interface contracts, and ownership qualifiers. Review declarations using
+the supported Vala compiler and compare generated C when ownership could differ.
+Keep declaration-only edits separate from structural changes. Do not rewrite
+locals with a regex or enforce a percentage of `var` declarations.
+
+Apply GoF patterns only where their participant contracts solve an actual
+variation problem. Preserve ABI 2, worker protocol 1, and native GLib/GTK
+lifecycle and signal facilities. Keep implementation labels at the private
+`DecoderRoute.from_label` boundary instead of adding label comparisons to
+consumers. Do not add an abstraction to pixel, tile, or frame hot loops without
+matched correctness, latency, and memory evidence.
+
 Use four spaces in C, C++, Vala, and Python, and two spaces in Meson.
 Keep control-flow bodies multiline and braced in C, C++, and Vala.
 Use American English for new internal names and diagnostics. Keep existing

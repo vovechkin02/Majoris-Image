@@ -5,11 +5,11 @@ namespace ImageKit {
             var input = File.new_for_path (path).read ();
             var signature = input.read_bytes (8);
             unowned uint8[] bytes = signature.get_data ();
-            bool color_known = false;
-            bool reached_pixels = false;
-            bool explicit_transfer = false;
-            bool have_cicp = false;
-            bool have_icc = false;
+            var color_known = false;
+            var reached_pixels = false;
+            var explicit_transfer = false;
+            var have_cicp = false;
+            var have_icc = false;
             if (bytes.length == 8 && bytes[0] == 137 && bytes[1] == 'P' &&
                 bytes[2] == 'N' && bytes[3] == 'G') {
                 // Examine PNG color declaration chunks without decoding pixel data.
@@ -195,7 +195,7 @@ namespace ImageKit {
                     parser.load_from_data (ImageNative.image_details (image));
                     output.set_member ("colour", parser.get_root ().copy ());
                     var details = new Json.Object ();
-                    foreach (string field in image.fields ()) {
+                    foreach (var field in image.fields ()) {
                         if (field.has_prefix ("exr") || field == "compression" || field == "xres" ||
                             field == "yres") {
                             string value;

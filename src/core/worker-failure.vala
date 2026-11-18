@@ -29,9 +29,9 @@ namespace ImageKit {
 #endif
 
         public static string serialize (Error error) {
-            string message = error.message.make_valid ();
-            string lower = message.down ();
-            string kind = "decoder-failure";
+            var message = error.message.make_valid ();
+            var lower = message.down ();
+            var kind = "decoder-failure";
             if (error is ImageError.CORRUPT) {
                 kind = "corrupt";
             } else if (error is ImageError.UNSUPPORTED) {
@@ -71,7 +71,7 @@ namespace ImageKit {
 #if !WORKER_PROCESS
         public static Error deserialize (string diagnostic) {
             try {
-                string text = diagnostic.strip ();
+                var text = diagnostic.strip ();
                 int last = text.last_index_of ("\n{");
                 if (last >= 0) {
                     text = text.substring (last+1);
@@ -87,7 +87,7 @@ namespace ImageKit {
                     root.get_member ("kind").get_value_type () != typeof (string)) {
                     throw new IOError.INVALID_DATA ("Invalid decoder diagnostic");
                 }
-                string message = root.get_string_member ("message");
+                var message = root.get_string_member ("message");
                 switch (root.get_string_member ("kind")) {
                     case "raw-unsupported":
                         return new ImageError.RAW_UNSUPPORTED ("%s", message);

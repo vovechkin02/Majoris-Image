@@ -5,7 +5,7 @@ namespace ImageKit {
             Vips.Image image = input;
             options.validate ();
             if (options.width > 0 || options.height > 0 || options.scale != 1) {
-                bool alpha = image.has_alpha ();
+                var alpha = image.has_alpha ();
                 if (alpha) {
                     Vips.Image premultiplied;
                     ImageProcessor.check (Vips.premultiply (image, out premultiplied, "max_alpha", 1.0, null));
@@ -36,14 +36,14 @@ namespace ImageKit {
             }
             // Privacy policy is independent of the color profile. Remove opaque
             // source blobs before encoding; filtered metadata is reattached below.
-            foreach (string field in image.fields ()) {
+            foreach (var field in image.fields ()) {
                 if (options.metadata == "remove-all" &&
                     (field.has_prefix ("exif-") || field.has_prefix ("xmp-") ||
                     field == "exif-data" || field == "xmp-data" || field == "iptc-data")) {
                     image.remove (field);
                 }
             }
-            string format = options.format;
+            var format = options.format;
             if (options.hdr) {
                 if (format == "uhdr" || format == "avif" || format == "heif" || format == "heic") {
                     ImageNative.ultra_encode (image, target, format == "avif" ? 2 : format == "uhdr"
@@ -70,11 +70,11 @@ namespace ImageKit {
                 }
                 throw new ImageError.EXPORT (_("This encoder has no verified HDR output path."));
             }
-            bool eight_only = format == "jpg" || format == "jpeg" || format == "webp";
+            var eight_only = format == "jpg" || format == "jpeg" || format == "webp";
             if (eight_only && options.bit_depth != 8) {
                 throw new ImageError.EXPORT (_("This format supports 8-bit output. Select 8-bit explicitly."));
             }
-            bool heif = format == "avif" || format == "heif" || format == "heic";
+            var heif = format == "avif" || format == "heif" || format == "heic";
             if (heif ? !(options.bit_depth in new int[] {
                 8, 10, 12
             }) : !(options.bit_depth in new int[] {
@@ -87,7 +87,7 @@ namespace ImageKit {
             }
             var encoded = ImageNative.convert_profile (image, options.profile, options.bit_depth > 8 ? 16 : 8);
             // These describe the internal working image, not encoded pixels.
-            foreach (string field in encoded.fields ()) {
+            foreach (var field in encoded.fields ()) {
                 if (field.has_prefix ("majoris-image-")) {
                     encoded.remove (field);
                 }
@@ -116,18 +116,18 @@ namespace ImageKit {
                 }
                 metadata.try_delete_gps_info ();
                 if (options.metadata == "remove-identifying") {
-                    foreach (string tag in metadata.get_exif_tags ()) {
-                        string name = tag.down ();
+                    foreach (var tag in metadata.get_exif_tags ()) {
+                        var name = tag.down ();
                         if (name.contains ("serial") || name.contains ("owner") ||
                             name.contains ("artist") || name.contains ("copyright") ||
                             name.contains ("usercomment") || name.contains ("makernote")) {
                             metadata.try_clear_tag (tag);
                         }
                     }
-                    foreach (string tag in metadata.get_xmp_tags ()) {
+                    foreach (var tag in metadata.get_xmp_tags ()) {
                         metadata.try_clear_tag (tag);
                     }
-                    foreach (string tag in metadata.get_iptc_tags ()) {
+                    foreach (var tag in metadata.get_iptc_tags ()) {
                         metadata.try_clear_tag (tag);
                     }
                 }

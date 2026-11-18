@@ -96,7 +96,7 @@ private async void verify_srgb16_fallback (DecoderRegistry registry, string dire
         var path = Path.build_filename (directory, "glycin-%s16.png".printf (layouts[i]));
         var source = new ImageSource (File.new_for_path (path));
         var document = yield registry.open (source, options);
-        bool alpha = i == 1 || i == 3;
+        var alpha = i == 1 || i == 3;
         assert (document.decoder == "Glycin" && document.color_managed);
         assert (document.bit_depth == 16 && document.source_bit_depth == 16);
         assert (document.has_alpha == alpha && document.pixel_buffer_bit_depth == 32);
@@ -118,7 +118,7 @@ private async void verify_srgb16_fallback (DecoderRegistry registry, string dire
         var crop = yield document.render_region (1, 0, 1, 1, 1);
         assert (crop.width == 1 && crop.height == 1);
         assert (sample_float_channel (crop, 0, 0) == 0);
-        string hash = Checksum.compute_for_bytes (ChecksumType.SHA256, pixels.bytes);
+        var hash = Checksum.compute_for_bytes (ChecksumType.SHA256, pixels.bytes);
         stdout.printf ("%s RGBA32F SHA-256 %s\n", layouts[i], hash);
     }
 }
@@ -127,7 +127,7 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
     var registry = new DecoderRegistry ();
     var registration = new KeyFile ();
     registration.load_from_file (args[9], KeyFileFlags.NONE);
-    string[] registered = registration.get_string_list ("Thumbnailer Entry", "MimeType");
+    var registered = registration.get_string_list ("Thumbnailer Entry", "MimeType");
     var advertised = yield registry.thumbnail_mime_types ();
     foreach (var mime in registered) {
         assert (mime in advertised);
@@ -143,9 +143,9 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
                 channel) > 0.9f) == ((corner[i] & (4 >> channel)) != 0));
         }
     }
-    string generated_directory = Path.get_dirname (args[1]);
+    var generated_directory = Path.get_dirname (args[1]);
     yield verify_custom_backend_order (generated_directory);
-    foreach (string name in new string[] {
+    foreach (var name in new string[] {
         "navigation.jpg", "still.webp", "jpeg2000.jp2", "animated.gif", "animated.webp"
     }) {
         var file = File.new_for_path (Path.build_filename (generated_directory, name));
@@ -261,7 +261,7 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
     assert (sample_float_channel (animation.preview, 0, 0) > 0.99f);
 
     var qoi = new ImageSource (File.new_for_path (args[1]));
-    string catalog = yield registry.installed_codecs ();
+    var catalog = yield registry.installed_codecs ();
     if (!catalog.contains ("\"operation\":\"glycin\"")) {
         assert (args[3] != "enabled");
         stdout.printf ("Glycin loader unavailable; native APNG metadata passed\n");

@@ -180,7 +180,7 @@ namespace ImageKit {
                     animated ? probe : null, transform);
                 return fallback.preview;
             }
-            string output = yield worker.run (source.file, "tile", transform, stop, edge, requested);
+            var output = yield worker.run (source.file, "tile", transform, stop, edge, requested);
             try {
                 var pixels = yield WorkerClient.read_pixels (output, stop);
                 yield verify_source (stop);

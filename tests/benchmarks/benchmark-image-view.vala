@@ -113,7 +113,7 @@ private async void benchmark_view (Gtk.Box parent, ImageView[] views, File file)
         views.length, views[0].get_width (), views[0].get_height (),
         preview.to_string (), first.to_string (), complete.to_string ());
 
-    foreach (bool moving in new bool[] { false, true }) {
+    foreach (var moving in new bool[] { false, true }) {
         int64[] samples = new int64[SNAPSHOT_SAMPLES];
         for (int sample = 0; sample < samples.length; sample++) {
             var timer = new Timer ();
@@ -166,7 +166,7 @@ private async void run_benchmarks (File file) throws Error {
     }
     string memory;
     FileUtils.get_contents ("/proc/self/status", out memory);
-    foreach (string line in memory.split ("\n")) {
+    foreach (var line in memory.split ("\n")) {
         if (line.has_prefix ("VmHWM:")) {
             stdout.printf ("%s\n", line);
         }

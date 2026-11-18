@@ -230,7 +230,7 @@ namespace ImageKit {
         }
 
         private ImageTile tile_at (int x, int y, TileCoverage plan) {
-            string key = "%d:%d:%d:%s".printf (plan.extent, x, y, plan.level.to_string ());
+            var key = "%d:%d:%d:%s".printf (plan.extent, x, y, plan.level.to_string ());
             var tile = tiles[key];
             if (tile == null) {
                 tile = new ImageTile ();
@@ -265,7 +265,7 @@ namespace ImageKit {
             foreach (var tile in planned_visible) {
                 queue_tile (tile);
             }
-            bool visible_waiting = !pending.is_empty;
+            var visible_waiting = !pending.is_empty;
             foreach (var tile in planned_prefetch) {
                 if (viewport_changed && visible_waiting) {
                     tile.request?.cancel ();

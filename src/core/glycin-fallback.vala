@@ -117,11 +117,11 @@ namespace ImageKit {
             }
             OperationProfile.event ("glycin-attempt");
             var identity = yield source.stamp (stop);
-            string mime = animation != null ? animation.mime : yield sniff (source.file, stop, preload);
+            var mime = animation != null ? animation.mime : yield sniff (source.file, stop, preload);
             if (mime == "") {
                 throw original;
             }
-            string[] loaders = installed ();
+            var loaders = installed ();
             if (!has_loader (mime, loaders)) {
                 throw original;
             }
@@ -130,7 +130,7 @@ namespace ImageKit {
 
             var job = new Cancellable ();
             ulong handler = stop.connect (() => job.cancel ());
-            bool timed_out = false;
+            var timed_out = false;
             var timeout = new TimeoutSource.seconds (seconds.clamp (1, 120));
             timeout.set_callback (() => {
                 timed_out = true;
@@ -139,10 +139,10 @@ namespace ImageKit {
             });
             timeout.attach (MainContext.get_thread_default ());
             var scheduler = JobScheduler.shared ();
-            bool admitted = false;
+            var admitted = false;
             try {
                 var color = yield color_metadata (source, job, preload);
-                bool tagged = color.get_boolean_member_with_default ("icc", false);
+                var tagged = color.get_boolean_member_with_default ("icc", false);
                 if (color.get_boolean_member_with_default ("icc-invalid", false)) {
                     throw new ImageError.COLOR_PROFILE ("Invalid embedded ICC profile");
                 }
@@ -150,7 +150,7 @@ namespace ImageKit {
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot verify the source transfer and primaries");
                 }
                 int source_depth = (int) color.get_int_member_with_default ("source-bit-depth", 0);
-                bool known_header = color.get_boolean_member_with_default ("header-read", false);
+                var known_header = color.get_boolean_member_with_default ("header-read", false);
                 // PNG sRGB has no ICC transform to observe. The PNG loader publishes
                 // its encoded samples in the declared sRGB space on this path.
                 var provenance = (mime == "image/png" || mime == "image/apng") &&
@@ -168,7 +168,7 @@ namespace ImageKit {
                 if (qoi_transfer == 1) {
                     provenance = GlycinColorProvenance.QOI_LINEAR;
                 }
-                bool verified = provenance == GlycinColorProvenance.TAGGED_SRGB ||
+                var verified = provenance == GlycinColorProvenance.TAGGED_SRGB ||
                     provenance == GlycinColorProvenance.TAGGED_QOI_SRGB;
                 if (!verified && (request.required_capabilities & ImageCapabilities.COLOR_MANAGED) != 0) {
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded color state");
@@ -274,7 +274,7 @@ namespace ImageKit {
                     }
                     job.set_error_if_cancelled ();
                 }
-                string message = error.message.down ();
+                var message = error.message.down ();
                 if (message.contains ("bwrap") || message.contains ("sandbox")) {
                     throw new ImageError.SANDBOX ("%s", error.message);
                 }

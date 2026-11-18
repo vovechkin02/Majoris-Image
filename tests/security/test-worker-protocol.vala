@@ -10,13 +10,13 @@ void check_protocol_round_trips () {
         int width = random.int_range (-1000000, 2000000);
         int page = random.int_range (-50000, 150000);
         int version = random.int_range (0, 3);
-        string manifest = ("{\"protocol-version\":%d,\"width\":%d,\"height\":1,"
+        var manifest = ("{\"protocol-version\":%d,\"width\":%d,\"height\":1,"
             + "\"loader\":\"test\"}").printf (version, width);
-        string request = "{\"version\":%d,\"options\":{\"page\":%d}}".printf (version, page);
+        var request = "{\"version\":%d,\"options\":{\"page\":%d}}".printf (version, page);
         if (Environment.get_variable ("IMAGEKIT_TEST_TRACE") == "1") {
             stderr.printf ("trial %d: %s / %s\n", trial, manifest, request);
         }
-        bool valid_manifest = version == 1 && width >= 1 && width <= 1000000;
+        var valid_manifest = version == 1 && width >= 1 && width <= 1000000;
         try {
             var probe = ImageProbe.deserialize (manifest);
             assert (valid_manifest && probe.width == width && probe.height == 1);
@@ -24,7 +24,7 @@ void check_protocol_round_trips () {
         } catch (Error error) {
             assert (!valid_manifest && error is ImageError.INVALID_RESPONSE);
         }
-        bool valid_request = version == 1 && page >= 0 && page <= 100000;
+        var valid_request = version == 1 && page >= 0 && page <= 100000;
         try {
             var parsed = WorkerRequest.deserialize (request);
             assert (valid_request && parsed.options.page == page);

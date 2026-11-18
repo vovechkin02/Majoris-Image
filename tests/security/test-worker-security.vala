@@ -44,9 +44,9 @@ private string configure_launcher_fixture () throws Error {
     if (launcher == null) {
         throw new IOError.NOT_FOUND ("Bubblewrap is required for the worker security test");
     }
-    string directory = DirUtils.make_tmp ("launcher-test-XXXXXX");
-    string wrapper = Path.build_filename (directory, "bwrap");
-    string script = """#!/bin/sh
+    var directory = DirUtils.make_tmp ("launcher-test-XXXXXX");
+    var wrapper = Path.build_filename (directory, "bwrap");
+    var script = """#!/bin/sh
 if [ -f "$IMAGEKIT_LAUNCHER_TEST/arm" ]; then
     (
         count=0
@@ -87,14 +87,14 @@ private async void wait_for_pipe_holder (string path) throws Error {
 
 private async void verify_launcher_cancellation (DecoderRegistry registry, ImageSource source,
     string directory) throws Error {
-    string arm = Path.build_filename (directory, "arm");
-    string ready = Path.build_filename (directory, "ready");
-    string released = Path.build_filename (directory, "release");
-    string done = Path.build_filename (directory, "done");
+    var arm = Path.build_filename (directory, "arm");
+    var ready = Path.build_filename (directory, "ready");
+    var released = Path.build_filename (directory, "release");
+    var done = Path.build_filename (directory, "done");
     FileUtils.set_contents (arm, "");
     var cancel = new Cancellable ();
     int64 deadline = get_monotonic_time () + 2 * TimeSpan.SECOND;
-    bool canceled = false;
+    var canceled = false;
     uint timer = Timeout.add (5, () => {
         if (!canceled &&
             (FileUtils.test (ready, FileTest.EXISTS) || get_monotonic_time () >= deadline)) {
@@ -126,7 +126,7 @@ private async void verify_replacement_during_decode (DecoderRegistry registry, I
     throws Error {
     string path = source.file.get_path ();
     FileUtils.set_contents (path, "H");
-    bool replaced = false;
+    var replaced = false;
     Error? mutation_error = null;
     var deadline = get_monotonic_time () + 3 * TimeSpan.SECOND;
     var cancel = new Cancellable ();
@@ -146,7 +146,7 @@ private async void verify_replacement_during_decode (DecoderRegistry registry, I
                 if (!name.has_prefix ("majoris-image-")) {
                     continue;
                 }
-                string job = Path.build_filename (Environment.get_tmp_dir (), name);
+                var job = Path.build_filename (Environment.get_tmp_dir (), name);
                 if (FileUtils.test (Path.build_filename (job, "ready"), FileTest.EXISTS)) {
                     FileUtils.set_contents (path, "Y");
                     FileUtils.set_contents (Path.build_filename (job, "release"), "");
@@ -174,7 +174,7 @@ private async void verify_replacement_during_decode (DecoderRegistry registry, I
 
 private async void verify_output_consumption (DecoderRegistry registry, ImageSource source)
     throws Error {
-    foreach (bool cancel_read in new bool[] { false, true }) {
+    foreach (var cancel_read in new bool[] { false, true }) {
         var cancel = new Cancellable ();
         arm_output_fault (cancel_read ? cancel : null);
         try {
@@ -195,12 +195,12 @@ async void verify_worker_failures_and_isolation (string worker_path, string laun
     var registry = new DecoderRegistry ();
     registry.timeout_seconds = 1;
     registry.register_backend (new FaultBackend (worker_path));
-    string dir = DirUtils.make_tmp ("majoris-worker-test-XXXXXX");
-    string input = Path.build_filename (dir, "original");
-    string secret = Path.build_filename (dir, "app-data");
+    var dir = DirUtils.make_tmp ("majoris-worker-test-XXXXXX");
+    var input = Path.build_filename (dir, "original");
+    var secret = Path.build_filename (dir, "app-data");
     var source = new ImageSource (File.new_for_path (input));
     try {
-        foreach (string mode in new string[] {
+        foreach (var mode in new string[] {
             "C", "C", "X"
         }) {
             FileUtils.set_contents (input, mode);
@@ -243,7 +243,7 @@ async void verify_worker_failures_and_isolation (string worker_path, string laun
         FileUtils.get_contents (input, out original);
         assert (original == "R");
 
-        foreach (string mode in new string[] {
+        foreach (var mode in new string[] {
             "I", "J", "N", "Q", "Z", "E", "K", "W", "j", "s", "f", "u"
         }) {
             FileUtils.set_contents (input, mode);
@@ -272,12 +272,12 @@ async void verify_worker_failures_and_isolation (string worker_path, string laun
 
         // The synthetic worker uses the actual Bubblewrap header and prlimit.
         FileUtils.set_contents (secret, "private test application data");
-        string network = FileUtils.read_link ("/proc/self/ns/net");
+        var network = FileUtils.read_link ("/proc/self/ns/net");
         FileUtils.set_contents (input, "!%s %s".printf (network, secret));
         var recovered = yield registry.inspect (source);
         assert (recovered.width == 1 && recovered.loader == "fault-test");
 
-        foreach (string mode in new string[] {
+        foreach (var mode in new string[] {
             "S", "L", "p", "x"
         }) {
             FileUtils.set_contents (input, mode);

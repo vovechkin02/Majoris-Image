@@ -44,9 +44,9 @@ private void record_phase (string stage, int64 started) {
 
 private async void measure_export (string workload, ImageSource source, File? remote)
     throws Error {
-    string[] fields = workload.split ("-", 2);
-    string format = fields[0];
-    string action = fields.length == 2 ? fields[1] : "";
+    var fields = workload.split ("-", 2);
+    var format = fields[0];
+    var action = fields.length == 2 ? fields[1] : "";
     var options = new ExportOptions ();
     options.format = format;
     options.lossless = true;
@@ -82,7 +82,7 @@ private async void measure_export (string workload, ImageSource source, File? re
 }
 
 private bool job_file_exists (string filename, int minimum_size) throws Error {
-    string temporary_path = Environment.get_tmp_dir ();
+    var temporary_path = Environment.get_tmp_dir ();
     var temporary = Dir.open (temporary_path);
     string? name;
     while ((name = temporary.read_name ()) != null) {
@@ -105,7 +105,7 @@ private async void measure_cancellation (ImageSource source, DecoderRegistry reg
     string readiness_file, int minimum_size) throws Error {
     var cancel = new Cancellable ();
     int64 canceled_at = 0;
-    bool ready = false;
+    var ready = false;
     Error? probe_error = null;
     var deadline = get_monotonic_time () + 5 * TimeSpan.SECOND;
     uint timer = Timeout.add (5, () => {

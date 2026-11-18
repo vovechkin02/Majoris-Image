@@ -61,7 +61,7 @@ namespace ImageKit {
         internal async string stamp (Cancellable stop) throws Error {
             var info = yield query_regular_info (ThumbnailService.STAMP_ATTRIBUTES, stop);
             int64 started = OperationProfile.begin ();
-            string stamp = ThumbnailService.source_stamp (file, info);
+            var stamp = ThumbnailService.source_stamp (file, info);
             OperationProfile.record ("source-stamp", started);
             return stamp;
         }

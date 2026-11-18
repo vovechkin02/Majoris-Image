@@ -43,7 +43,7 @@ namespace ImageKit {
                 stop.set_error_if_cancelled ();
                 output = yield worker.run (source.file, "export", transform, stop, 0, null,
                     options, false, protected_source);
-                string extension = options.format == "uhdr" ? "jpg" : options.format;
+                var extension = options.format == "uhdr" ? "jpg" : options.format;
                 int64 started = OperationProfile.begin ();
                 try {
                     var payload = yield transfer_output (output + "." + extension, destination,

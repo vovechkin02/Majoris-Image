@@ -138,7 +138,7 @@ private async void benchmark_viewport (ImageDocument document, int width, int he
         (double) redraw_time / redraws);
 
     string[] workloads = { "unchanged", "small pan", "large pan", "zoom", "reset" };
-    foreach (string workload in workloads) {
+    foreach (var workload in workloads) {
         var samples = new Gee.ArrayList<int64?> ();
         for (int sample = 0; sample < PLAN_SAMPLES; sample++) {
             int64 start = get_monotonic_time ();
@@ -185,7 +185,7 @@ private async void benchmark_tile_cache (string path) throws Error {
     }
     string memory;
     FileUtils.get_contents ("/proc/self/status", out memory);
-    foreach (string line in memory.split ("\n")) {
+    foreach (var line in memory.split ("\n")) {
         if (line.has_prefix ("VmHWM:")) {
             stdout.printf ("%s\n", line);
         }
@@ -326,7 +326,7 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
                 for (int x = 0; x < texture.width; x++) {
                     int source_x = (tile.decode_x + x) % 127;
                     size_t offset = y * row_bytes + x * 4;
-                    bool matches = pixels[offset] == (source_x < 61 ? 255 : 0) &&
+                    var matches = pixels[offset] == (source_x < 61 ? 255 : 0) &&
                         pixels[offset + 1] == (source_y < 67 ? 255 : 0) &&
                         pixels[offset + 2] == (source_x + source_y < 111 ? 255 : 0) &&
                         pixels[offset + 3] == 255;
@@ -342,8 +342,8 @@ private async void verify_tile_cache_coverage_and_cancellation (string path, str
         assert (retained_bytes <= TileCoverage.MAX_BYTES);
         string memory;
         FileUtils.get_contents ("/proc/self/status", out memory);
-        bool measured_peak = false;
-        foreach (string line in memory.split ("\n")) {
+        var measured_peak = false;
+        foreach (var line in memory.split ("\n")) {
             if (!line.has_prefix ("VmHWM:")) {
                 continue;
             }

@@ -370,7 +370,7 @@ namespace ImageKit {
         }
 
         private async void present_document (ImageDocument value, uint request, Cancellable stop) throws Error {
-            string animation_error = "";
+            var animation_error = "";
             if (can_play (value) && value.mime_type == "image/apng" &&
                 DecoderRoute.from_label (value.decoder) != DecoderRoute.FALLBACK) {
                 try {
@@ -695,7 +695,7 @@ namespace ImageKit {
         }
 
         private void rotated_image_size (out int width, out int height) {
-            bool quarter_turn = turns % 2 != 0;
+            var quarter_turn = turns % 2 != 0;
             width = quarter_turn ? image_height : image_width;
             height = quarter_turn ? image_width : image_height;
         }
@@ -735,7 +735,7 @@ namespace ImageKit {
             transform_width = get_width ();
             transform_height = get_height ();
             double scale = zoom;
-            bool allocated = transform_width > 0 && transform_height > 0;
+            var allocated = transform_width > 0 && transform_height > 0;
             if (allocated) {
                 int rotated_width;
                 int rotated_height;
@@ -909,7 +909,7 @@ namespace ImageKit {
             var viewport = TileBounds.from_view (get_width (), get_height (), center_x, center_y,
                 offset_x, offset_y, scale, turns, flipped_x, flipped_y);
             var visible = tiles.visible (viewport, pixel_zoom);
-            bool ready = false;
+            var ready = false;
             foreach (var tile in visible) {
                 if (tile.texture != null) {
                     ready = true;

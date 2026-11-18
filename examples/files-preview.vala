@@ -38,7 +38,7 @@ private async void verify_files_preview_workflow (ImageView view, File image, Fi
             }
         });
         stop.cancel ();
-        bool finished = false;
+        var finished = false;
         Error? thumbnail_error = null;
         thumbnails.generate.begin (staged, 128, null, (obj, result) => {
             try {

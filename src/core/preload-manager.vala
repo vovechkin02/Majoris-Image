@@ -108,7 +108,7 @@ namespace ImageKit {
                 OperationProfile.record ("source-query", started);
             }
             started = OperationProfile.begin ();
-            string stamp = ThumbnailService.source_stamp (source.file, info);
+            var stamp = ThumbnailService.source_stamp (source.file, info);
             OperationProfile.record ("source-stamp", started);
             if (stamp == "") {
                 return null;

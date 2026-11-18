@@ -8,7 +8,7 @@ namespace ImageKit {
             if (!Path.is_absolute (backend.executable) || backend.id == "") {
                 throw new IOError.INVALID_ARGUMENT ("Decoder workers require an ID and an absolute executable path");
             }
-            bool duplicate = false;
+            var duplicate = false;
             lock (custom_workers) {
                 foreach (var existing in custom_workers) {
                     if (existing.id == backend.id) {
@@ -40,7 +40,7 @@ namespace ImageKit {
                 var bytes = yield read_sniff_stream (stream, 65536, priority, stop);
                 OperationProfile.record ("source-header-read", header_read, bytes.get_size ());
                 bool uncertain;
-                string content_type = ContentType.guess (null, bytes.get_data (), out uncertain);
+                var content_type = ContentType.guess (null, bytes.get_data (), out uncertain);
                 string mime = ContentType.get_mime_type (content_type);
                 foreach (var backend in snapshot) {
                     if ((backend.capabilities & required) == required && backend.accepts (mime, bytes)) {
@@ -56,9 +56,9 @@ namespace ImageKit {
         /** Runtime catalog produced using the same codec stack as decoding. */
         public async string installed_codecs (Cancellable? cancel = null) throws Error {
             var stop = cancel ?? new Cancellable ();
-            string output = yield new WorkerClient ().run (null, "codecs", null, stop);
+            var output = yield new WorkerClient ().run (null, "codecs", null, stop);
             try {
-                string catalog = yield WorkerClient.read_text (output, stop);
+                var catalog = yield WorkerClient.read_text (output, stop);
                 var parser = new Json.Parser ();
                 parser.load_from_data (catalog);
                 var root = parser.get_root ();
@@ -128,7 +128,7 @@ namespace ImageKit {
             bool preload) throws Error {
             var worker = yield select (source, ImageCapabilities.METADATA, stop, preload);
             try {
-                string output = yield worker.run (source.file, "probe", null, stop, 0, null, null, preload);
+                var output = yield worker.run (source.file, "probe", null, stop, 0, null, null, preload);
                 try {
                     return ImageProbe.deserialize (yield WorkerClient.read_text (output, stop));
                 } finally {
@@ -195,11 +195,11 @@ namespace ImageKit {
             if (request.preview_size < 1 || request.preview_size > 4096) {
                 throw new IOError.INVALID_ARGUMENT ("Preview edge must be between 1 and 4096");
             }
-            string identity = verified_identity ?? (yield source.stamp (stop));
-            string output = yield worker.run (source.file, "decode", null, stop,
+            var identity = verified_identity ?? (yield source.stamp (stop));
+            var output = yield worker.run (source.file, "decode", null, stop,
                 request.preview_size, request, null, preload);
             try {
-                string manifest = Path.build_filename (Path.get_dirname (output), "image.json");
+                var manifest = Path.build_filename (Path.get_dirname (output), "image.json");
                 var probe = ImageProbe.deserialize (yield WorkerClient.read_text (manifest, stop));
                 if ((probe.capabilities & request.required_capabilities) != request.required_capabilities) {
                     throw new ImageError.UNSUPPORTED ("Image does not meet the requested decoder capabilities");
@@ -230,9 +230,9 @@ namespace ImageKit {
             var worker = yield select (source, request.required_capabilities, stop);
             transform.validate ();
             request.preview_size = edge;
-            string identity = yield source.stamp (stop);
+            var identity = yield source.stamp (stop);
             try {
-                string output = yield worker.run (source.file, "decode", transform, stop, edge, request);
+                var output = yield worker.run (source.file, "decode", transform, stop, edge, request);
                 try {
                     var path = Path.build_filename (Path.get_dirname (output), "image.json");
                     var probe = ImageProbe.deserialize (yield WorkerClient.read_text (path, stop));

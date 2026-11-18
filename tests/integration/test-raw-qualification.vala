@@ -18,22 +18,22 @@ async void verify_raw_manifest_samples (string directory, string manifest) throw
     string contents;
     FileUtils.get_contents (manifest, out contents);
     int count = 0, previews = 0;
-    foreach (string line in contents.split ("\n")) {
+    foreach (var line in contents.split ("\n")) {
         if (line.strip () == "" || line.has_prefix ("#")) {
             continue;
         }
-        string[] fields = line.split ("\t");
+        var fields = line.split ("\t");
         if (fields.length != 11) {
             throw new IOError.INVALID_DATA ("Invalid RAW manifest entry: %s", line);
         }
-        string name = fields[0];
+        var name = fields[0];
         var file = File.new_for_path (Path.build_filename (directory, name));
         if (file.query_file_type (FileQueryInfoFlags.NOFOLLOW_SYMLINKS) != FileType.REGULAR) {
             throw new IOError.NOT_FOUND ("Missing required RAW fixture: %s", file.get_path ());
         }
         var source = new ImageSource (file);
         var registry = new DecoderRegistry ();
-        string before = yield compute_fixture_sha256 (file);
+        var before = yield compute_fixture_sha256 (file);
         if (before != fields[8]) {
             throw new IOError.INVALID_DATA ("RAW checksum mismatch for %s: expected %s, got %s",
                 name, fields[8], before);

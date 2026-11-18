@@ -36,7 +36,7 @@ int main (string[] args) {
         return 2;
     }
     const int repetitions = 20000;
-    bool copying = args[1] == "copy";
+    var copying = args[1] == "copy";
     int64 started = get_monotonic_time ();
     int matches = copying ? copy_recipes (repetitions) : compare_defaults (repetitions);
     int64 elapsed = get_monotonic_time () - started;

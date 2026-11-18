@@ -75,7 +75,7 @@ private async void verify_transparent_tile_replacement (ImageView view) throws E
     var after_pixels = after.download_bytes (out after_stride);
     assert (before_stride == after_stride && before_pixels.compare (after_pixels) == 0);
     unowned uint8[] pixels = before_pixels.get_data ();
-    bool translucent = false;
+    var translucent = false;
     for (int offset = 3; offset < pixels.length; offset += 4) {
         if (pixels[offset] > 0 && pixels[offset] < 255) {
             translucent = true;
@@ -117,7 +117,7 @@ async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other
     assert (view.zoom > old_zoom && view.zoom == (double) view.get_width () / view.image_width);
     view.fit_to_view ();
 
-    bool obsolete_finished = false;
+    var obsolete_finished = false;
     view.load_file.begin (png, null, null, (obj, result) => {
         try {
             view.load_file.end (result);
@@ -159,7 +159,7 @@ async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other
     view.fit_to_view ();
     assert (view.fit_mode == FitMode.CONTAIN);
 
-    bool replacement_done = false;
+    var replacement_done = false;
     ulong followup = view.notify["document"].connect (() => {
         if (view.document == null || view.document.mime_type != "image/tiff") {
             return;
@@ -212,7 +212,7 @@ async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other
     assert (view.fit_mode == FitMode.CUSTOM && view.zoom == 3);
 
     var dying = new ImageView ();
-    bool disposed_callback = false;
+    var disposed_callback = false;
     dying.load_file.begin (tiff, null, null, (obj, result) => {
         try {
             dying.load_file.end (result);
@@ -226,11 +226,11 @@ async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other
     yield wait_for ("disposed viewer callback", () => disposed_callback);
     assert (disposed_callback && dying.document == null);
 
-    foreach (string animation in animations) {
+    foreach (var animation in animations) {
         var file = File.new_for_path (animation);
         yield view.load_file (file);
         assert (view.animated && view.frame_duration_ms > 0);
-        bool hdr_animation = view.document.hdr;
+        var hdr_animation = view.document.hdr;
         assert (view.presentation_status == (hdr_animation ?
             PresentationStatus.SDR_TONE_MAPPED : PresentationStatus.SDR));
         if (animation.has_suffix (".apng")) {

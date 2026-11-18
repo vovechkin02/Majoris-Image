@@ -27,7 +27,7 @@ private class FailingInputStream : InputStream {
 }
 
 private async void verify_failed_stream_ownership () throws Error {
-    foreach (bool cancel_read in new bool[] { false, true }) {
+    foreach (var cancel_read in new bool[] { false, true }) {
         var stream = new FailingInputStream (cancel_read);
         try {
             yield ImageSource.from_stream (stream, new Cancellable ());
@@ -86,7 +86,7 @@ private async File verify_staged_document (DecoderRegistry registry, ImageSource
 
 private async void verify_source_replacement (DecoderRegistry registry, ImageSource first,
     ImageSource second) throws Error {
-    string directory = DirUtils.make_tmp ("majoris-source-test-XXXXXX");
+    var directory = DirUtils.make_tmp ("majoris-source-test-XXXXXX");
     var path = File.new_for_path (Path.build_filename (directory, "image"));
     var source = new ImageSource (path);
     try {
@@ -119,7 +119,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     yield verify_failed_stream_ownership ();
     var recipe = RenderOptions.deserialize ("{\"version\":2,\"nearest-neighbour\":true}");
     assert (recipe.nearest_neighbor);
-    string saved = recipe.serialize ();
+    var saved = recipe.serialize ();
     assert (saved.contains ("\"nearest-neighbour\"") && !saved.contains ("\"nearest-neighbor\""));
     assert (RenderOptions.deserialize (saved).nearest_neighbor);
     var source = new ImageSource (File.new_for_path (Path.build_filename (directory, "rgb16.png")));
@@ -136,7 +136,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     var pixels = yield document.render_region (0, 0, 1, 1, 1);
     assert (pixels.width == 1 && pixels.height == 1 && pixels.bytes.get_size () == 16);
     // Hold the expired entry open while the actual cache maintenance runs.
-    string cache_path = Path.build_filename (Environment.get_user_cache_dir (), "majoris-image",
+    var cache_path = Path.build_filename (Environment.get_user_cache_dir (), "majoris-image",
         "thumbnails-v2");
     assert (DirUtils.create_with_parents (cache_path, 0700) == 0);
     var expired = File.new_for_path (Path.build_filename (cache_path, string.nfill (64, '0') + ".png"));
@@ -258,7 +258,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     var changed = yield preloader.open (changing);
     assert (changed != cached_source && changed.bit_depth == 8);
 
-    bool superseded = false;
+    var superseded = false;
     preloader.preload.begin ({ large_source }, null, (obj, reply) => {
         preloader.preload.end (reply);
         superseded = true;
@@ -276,7 +276,7 @@ async void verify_headless_core_api (string directory, string large_path) throws
     assert (too_large.preview.bytes.get_size () > 64 * 1024 * 1024);
     assert (too_large != (yield preloader.open (large_source, heavy)));
     preloader.clear ();
-    string temp = DirUtils.make_tmp ("majoris-export-test-XXXXXX");
+    var temp = DirUtils.make_tmp ("majoris-export-test-XXXXXX");
     var target = File.new_for_path (Path.build_filename (temp, "export.png"));
     try {
         var encoder = new EncoderRegistry ();
@@ -321,12 +321,12 @@ private string install_export_test_launcher () throws Error {
     if (bwrap == null) {
         throw new IOError.NOT_FOUND ("Bubblewrap is required for the export integration test");
     }
-    string temporary = Environment.get_tmp_dir ();
-    string directory = DirUtils.make_tmp ("export-test-launcher-XXXXXX");
-    string launcher = Path.build_filename (directory, "bwrap");
-    string source = Shell.quote (Path.build_filename (temporary, "mutable-export-source.png"));
-    string executable = Shell.quote (bwrap);
-    string render_action = Shell.quote (Path.build_filename (temporary, "render-action"));
+    var temporary = Environment.get_tmp_dir ();
+    var directory = DirUtils.make_tmp ("export-test-launcher-XXXXXX");
+    var launcher = Path.build_filename (directory, "bwrap");
+    var source = Shell.quote (Path.build_filename (temporary, "mutable-export-source.png"));
+    var executable = Shell.quote (bwrap);
+    var render_action = Shell.quote (Path.build_filename (temporary, "render-action"));
     // The real sandbox and worker finish encoding before the launcher changes the source.
     FileUtils.set_contents (launcher, "#!/bin/sh\n" +
         "if [ -f " + render_action + " ]; then\n" +
@@ -358,16 +358,16 @@ private async void verify_direct_rendering (DecoderRegistry registry, ImageSourc
                                             PixelBuffer reference) throws Error {
     var file = File.new_for_path (Path.build_filename (Environment.get_tmp_dir (),
         "mutable-render-source.png"));
-    string action = Path.build_filename (Environment.get_tmp_dir (), "render-action");
-    string launches = Path.build_filename (Environment.get_tmp_dir (), "render-launches");
-    string ready = Path.build_filename (Environment.get_tmp_dir (), "render-ready");
-    string gate = Path.build_filename (Environment.get_tmp_dir (), "render-gate");
+    var action = Path.build_filename (Environment.get_tmp_dir (), "render-action");
+    var launches = Path.build_filename (Environment.get_tmp_dir (), "render-launches");
+    var ready = Path.build_filename (Environment.get_tmp_dir (), "render-ready");
+    var gate = Path.build_filename (Environment.get_tmp_dir (), "render-gate");
     var original = yield fixture.file.load_bytes_async (null, null);
     var source = new ImageSource (file);
     var transform = new RenderOptions ();
     transform.turns = 1;
-    string quoted = Shell.quote (file.get_path ());
-    string count = "printf x >> " + Shell.quote (launches) + "\n";
+    var quoted = Shell.quote (file.get_path ());
+    var count = "printf x >> " + Shell.quote (launches) + "\n";
     try {
         yield file.replace_contents_bytes_async (original, null, false, FileCreateFlags.NONE,
             null, null);
@@ -392,7 +392,7 @@ private async void verify_direct_rendering (DecoderRegistry registry, ImageSourc
                 ".replacement " + quoted,
             "rm " + quoted
         };
-        foreach (string mutation in mutations) {
+        foreach (var mutation in mutations) {
             yield file.replace_contents_bytes_async (original, null, false,
                 FileCreateFlags.NONE, null, null);
             FileUtils.set_contents (action, count + mutation + "\n");
@@ -474,7 +474,7 @@ private async void verify_direct_rendering (DecoderRegistry registry, ImageSourc
         assert (original.compare (yield file.load_bytes_async (null, null)) == 0);
         assert_render_cleanup ();
     } finally {
-        foreach (string path in new string[] { file.get_path (), action, launches, ready, gate }) {
+        foreach (var path in new string[] { file.get_path (), action, launches, ready, gate }) {
             FileUtils.unlink (path);
         }
     }
@@ -482,7 +482,7 @@ private async void verify_direct_rendering (DecoderRegistry registry, ImageSourc
 
 private async void verify_export_source_change (EncoderRegistry encoder, Bytes original,
                                                  File existing) throws Error {
-    string temporary = Environment.get_tmp_dir ();
+    var temporary = Environment.get_tmp_dir ();
     var file = File.new_for_path (Path.build_filename (temporary, "mutable-export-source.png"));
     var missing = existing.get_parent ().get_child ("incomplete.png");
     var previous = yield existing.load_bytes_async (null, null);
@@ -524,10 +524,10 @@ private async void verify_export_source_change (EncoderRegistry encoder, Bytes o
 
 private async void verify_export_alias (EncoderRegistry encoder, ImageSource source,
                                         string directory) throws Error {
-    string alias_path = Path.build_filename (directory, "source-link");
+    var alias_path = Path.build_filename (directory, "source-link");
     assert (FileUtils.symlink (source.file.get_path (), alias_path) == 0);
     var alias = File.new_for_path (alias_path);
-    string attributes = "unix::device,unix::inode";
+    var attributes = "unix::device,unix::inode";
     var original = yield source.file.query_info_async (attributes, FileQueryInfoFlags.NONE);
     var before = yield source.file.load_bytes_async (null, null);
     try {
@@ -553,8 +553,8 @@ private async void verify_export_alias (EncoderRegistry encoder, ImageSource sou
 
 private async void verify_jxl_export (DecoderRegistry registry, ImageSource source,
                                       PixelBuffer reference) throws Error {
-    string directory = DirUtils.make_tmp ("majoris-jxl-export-XXXXXX");
-    string path = Path.build_filename (directory, "export.jxl");
+    var directory = DirUtils.make_tmp ("majoris-jxl-export-XXXXXX");
+    var path = Path.build_filename (directory, "export.jxl");
     var target = File.new_for_path (path);
     try {
         var options = new ExportOptions ();

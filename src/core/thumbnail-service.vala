@@ -20,12 +20,12 @@ namespace ImageKit {
             var info = yield source.file.query_info_async (STAMP_ATTRIBUTES, 0, Priority.LOW, stop);
             OperationProfile.record ("source-query", started);
             started = OperationProfile.begin ();
-            string key = source_stamp (source.file, info);
+            var key = source_stamp (source.file, info);
             OperationProfile.record ("source-stamp", started);
             var directory = File.new_for_path (Path.build_filename (Environment.get_user_cache_dir (), "majoris-image", "thumbnails-v2"));
             File? saved = null;
             if (key != "" && DirUtils.create_with_parents (directory.get_path (), 0700) == 0) {
-                string cache_key = Checksum.compute_for_string (ChecksumType.SHA256,
+                var cache_key = Checksum.compute_for_string (ChecksumType.SHA256,
                     "%s:%d:%d".printf (key, edge, page));
                 saved = directory.get_child (cache_key + ".png");
                 var cached = yield read_cached (saved, edge, stop);
@@ -41,7 +41,7 @@ namespace ImageKit {
             try {
                 if (saved != null) {
                     // Stable striped lock files avoid unbounded inode growth and unlink races.
-                    string lock_path = Path.build_filename (directory.get_path (),
+                    var lock_path = Path.build_filename (directory.get_path (),
                         saved.get_basename ().substring (0, 3) + ".lock");
                     while ((fd = try_lock (lock_path)) == -2) {
                         stop.set_error_if_cancelled ();
@@ -71,7 +71,7 @@ namespace ImageKit {
                 options.page = page;
                 Bytes? png = null;
                 try {
-                    string output = yield worker.run (source.file, "thumbnail", null, stop, edge, options);
+                    var output = yield worker.run (source.file, "thumbnail", null, stop, edge, options);
                     try {
                         png = yield WorkerClient.read_output (output + ".png", MAX_PNG, stop);
                     } finally {
@@ -84,7 +84,7 @@ namespace ImageKit {
                     }
                     options.preview_size = edge;
                     var fallback = yield GlycinFallback.open (source, options, stop, error);
-                    string mtime = info.has_attribute (FileAttribute.TIME_MODIFIED) ?
+                    var mtime = info.has_attribute (FileAttribute.TIME_MODIFIED) ?
                         info.get_attribute_uint64 (FileAttribute.TIME_MODIFIED).to_string () : "";
                     png = encode_srgb_png (fallback.preview.bytes, fallback.preview.width,
                         fallback.preview.height,
@@ -108,7 +108,7 @@ namespace ImageKit {
                     } catch (Error e) {
                         debug ("Thumbnail cache write: %s", e.message);
                     }
-                    bool maintain = false;
+                    var maintain = false;
                     lock (next_eviction) {
                         if (next_eviction <= get_monotonic_time ()) {
                             next_eviction = get_monotonic_time () + 5 * TimeSpan.MINUTE;

@@ -50,7 +50,7 @@ namespace ImageKit {
             image = ImageNative.to_linear (image);
             if (preview > 0 && (image.width () > preview || image.height () > preview)) {
                 double factor = double.min ((double)preview/image.width (), (double)preview/image.height ());
-                bool alpha = image.has_alpha ();
+                var alpha = image.has_alpha ();
                 if (alpha) {
                     check (Vips.premultiply (image, out next, "max_alpha", 1.0, null));
                     image = next;

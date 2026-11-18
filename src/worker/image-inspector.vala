@@ -156,7 +156,7 @@ namespace ImageKit {
                     }
                 }
             }
-            bool raw_signature = signature.length > 12 &&
+            var raw_signature = signature.length > 12 &&
                 ((signature[0] == 'I' && signature[1] == 'I' && signature[8] == 'C' &&
                 signature[9] == 'R') ||
                 (signature[0] == 'F' && signature[1] == 'U' && signature[2] == 'J' && signature[3] == 'I'));
@@ -178,12 +178,12 @@ namespace ImageKit {
                     throw new ImageError.CODEC_MISSING ("Additional APNG frames require Glycin");
                 }
             }
-            bool exr = signature.length >= 4 && signature[0] == 0x76 && signature[1] == 0x2f &&
+            var exr = signature.length >= 4 && signature[0] == 0x76 && signature[1] == 0x2f &&
                 signature[2] == 0x31 && signature[3] == 0x01;
             Vips.Image? image = exr ? ImageNative.exr_image (path, page) : page > 0
                 ? Vips.Image.from_file (path, "page", page, "n", 1, null) : Vips.Image.from_file (path, null);
             if (image == null) {
-                string detail = Vips.error_buffer ();
+                var detail = Vips.error_buffer ();
                 if (detail.contains ("not a known file format")) {
                     if (probe.mime.has_prefix ("image/")) {
                         throw new ImageError.CODEC_MISSING ("%s", detail);

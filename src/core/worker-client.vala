@@ -64,20 +64,20 @@ namespace ImageKit {
                                       ExportOptions? encoding, void* protected_source)
             throws Error {
             int64 started = OperationProfile.begin ();
-            string job = DirUtils.make_tmp ("majoris-image-XXXXXX");
+            var job = DirUtils.make_tmp ("majoris-image-XXXXXX");
             OperationProfile.record ("job-directory", started);
-            string output = Path.build_filename (job, "output");
-            string request_path = Path.build_filename (job, "request.json");
+            var output = Path.build_filename (job, "output");
+            var request_path = Path.build_filename (job, "request.json");
             try {
                 string? input = null;
-                bool thumbnail = operation == "thumbnail";
-                string mtime = "";
+                var thumbnail = operation == "thumbnail";
+                var mtime = "";
                 if (source != null && protected_source == null) {
                     input = source.get_path ();
                     started = OperationProfile.begin ();
                     FileInfo info = null;
                     try {
-                        string attributes = thumbnail ? "standard::type,time::modified"
+                        var attributes = thumbnail ? "standard::type,time::modified"
                             : FileAttribute.STANDARD_TYPE;
                         info = yield source.query_info_async (attributes, 0, Priority.DEFAULT,
                             cancel);
@@ -128,7 +128,7 @@ namespace ImageKit {
                     argv += input;
                     argv += "/source";
                 }
-                foreach (string arg in new string[] {
+                foreach (var arg in new string[] {
                     "/usr/bin/prlimit", "--as=2147483648", "--cpu=90",
                           "--nofile=128", "--fsize=1073741824", "--core=0",
                           "/worker", operation, "/source", "/job/output", "/job/request.json", size.to_string ()
@@ -160,7 +160,7 @@ namespace ImageKit {
                     process.force_exit ();
                     diagnostic_stop.cancel ();
                 });
-                bool timed_out = false;
+                var timed_out = false;
                 var timeout = new TimeoutSource.seconds (timeout_seconds);
                 timeout.set_callback (() => {
                     timed_out = true;
@@ -169,7 +169,7 @@ namespace ImageKit {
                     return Source.REMOVE;
                 });
                 timeout.attach (MainContext.get_thread_default ());
-                string diagnostic = "";
+                var diagnostic = "";
                 try {
                     try {
                         diagnostic = yield read_diagnostics (process.get_stderr_pipe (),
@@ -269,7 +269,7 @@ namespace ImageKit {
 
         internal static void cleanup (string output) {
             int64 started = OperationProfile.begin ();
-            string dir = Path.get_dirname (output);
+            var dir = Path.get_dirname (output);
             try {
                 var files = Dir.open (dir);
                 string? name;
@@ -336,7 +336,7 @@ namespace ImageKit {
             stream.add_bytes (new Bytes (header));
             stream.add_bytes (pixels.bytes);
             var staged = yield ImageSource.from_stream (stream, stop);
-            string output = yield run (staged.file,
+            var output = yield run (staged.file,
                 "render-buffer", transform, stop, edge, options);
             try {
                 return yield WorkerClient.read_pixels (output, stop);

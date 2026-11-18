@@ -118,7 +118,7 @@ private void check_normalized_preview () {
         nearest_neighbor = true,
         exposure = -0.0
     };
-    string default_json = new RenderOptions ().serialize ();
+    var default_json = new RenderOptions ().serialize ();
     foreach (int version in new int[] {1, 2}) {
         edits.version = version;
         var normalized = edits.copy ();

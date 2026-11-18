@@ -18,7 +18,7 @@ private async void verify_job_priorities_and_cancellation () throws Error {
     yield scheduler.acquire (0, open);
 
     var order = new Gee.ArrayList<int> ();
-    bool cancellation_seen = false;
+    var cancellation_seen = false;
     scheduler.acquire.begin (JobScheduler.PRELOAD_PRIORITY, canceled, (source, result) => {
         try {
             scheduler.acquire.end (result);
@@ -68,7 +68,7 @@ private async void verify_seeded_queue () {
     const int total = 120;
     for (int index = 0; index < total; index++) {
         int priority = random.int_range (0, JobScheduler.PRELOAD_PRIORITY + 1);
-        bool should_cancel = random.int_range (0, 5) == 0;
+        var should_cancel = random.int_range (0, 5) == 0;
         var stop = new Cancellable ();
         scheduler.acquire.begin (priority, stop, (source, result) => {
             try {

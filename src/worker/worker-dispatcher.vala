@@ -95,7 +95,7 @@ namespace ImageKit {
             var image = ImageProcessor.render_image (input, request.transform, edge);
             if (operation == "export") {
                 request.export_options.validate ();
-                string extension = request.export_options.format == "uhdr" ? "jpg"
+                var extension = request.export_options.format == "uhdr" ? "jpg"
                     : request.export_options.format;
                 ExportEngine.write (image, output + "." + extension, request.export_options, probe.hdr);
             } else if (operation == "thumbnail") {
@@ -117,7 +117,7 @@ namespace ImageKit {
             Vips.Image srgb;
             ImageProcessor.check (Vips.colorspace (image, out srgb, 22, null));
             ImageNative.tag_srgb (srgb);
-            foreach (string field in srgb.fields ()) {
+            foreach (var field in srgb.fields ()) {
                 if (field.has_prefix ("exif-") || field.has_prefix ("png-comment-") ||
                         field == "exif-data" || field == "xmp-data" || field == "iptc-data") {
                     srgb.remove (field);

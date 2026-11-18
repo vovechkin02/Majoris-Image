@@ -94,8 +94,8 @@ private async void probe_remote (string mode, File input, File destination) thro
         } else {
             // This probe deliberately exercises GIO streams without Core validation.
             // It must only be used with generated fixtures and disposable destinations.
-            bool push = mode == "remote-push-stage";
-            bool staging = push || mode == "remote-stage";
+            var push = mode == "remote-push-stage";
+            var staging = push || mode == "remote-stage";
             var target = destination;
             if (staging) {
                 target = destination.get_parent ().get_child (".probe-" + Uuid.string_random ());
@@ -189,11 +189,11 @@ private async void transfer (bool baseline, File input, File destination, Cancel
 }
 
 private async void measure_transfer (string mode, string path) throws Error {
-    bool baseline = mode.has_prefix ("transfer-baseline");
-    bool cancel_transfer = mode.has_suffix ("-cancel");
+    var baseline = mode.has_prefix ("transfer-baseline");
+    var cancel_transfer = mode.has_suffix ("-cancel");
     var input = File.new_for_path (path);
-    string directory = Environment.get_tmp_dir ();
-    string destination_path = Path.build_filename (directory, "benchmark-export");
+    var directory = Environment.get_tmp_dir ();
+    var destination_path = Path.build_filename (directory, "benchmark-export");
     var destination = File.new_for_path (destination_path);
     if (mode.has_suffix ("-symlink")) {
         var referent = File.new_for_path (Path.build_filename (directory, "benchmark-referent"));
@@ -236,7 +236,7 @@ private async void run (string mode, string path, string? uri) throws Error {
 }
 
 int main (string[] args) {
-    bool remote = args.length == 4 && args[1] in new string[] {
+    var remote = args.length == 4 && args[1] in new string[] {
         "remote-fallback", "remote-fallback-precanceled", "remote-fallback-cancel-after-success",
         "remote-bytes-baseline",
         "remote-stream", "remote-stage",

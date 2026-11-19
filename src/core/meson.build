@@ -12,6 +12,7 @@ core_sources = files(
   'decoding/image-probe.vala',
   'decoding/decoder-registry.vala',
   'decoding/glycin-fallback.vala',
+  'decoding/source-precision.vala',
   'export/encoder-registry.vala',
   'export/export-transfer.c',
   'render-options.vala',

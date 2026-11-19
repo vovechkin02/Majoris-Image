@@ -6,7 +6,7 @@ benchmark_program = executable(
 )
 scheduler_benchmark = executable(
   'benchmark-scheduler',
-  ['benchmark-scheduler.vala', '../../src/core/execution/job-scheduler.vala'],
+  ['benchmark-scheduler.vala', scheduler_source],
   dependencies: [gio, gee],
 )
 foreach count : ['120', '1200', '4800']
@@ -112,11 +112,11 @@ if get_option('glycin').enabled()
   workloads += [
     'fallback=' + (fixture_build_dir / 'fallback.qoi'),
     'fallback16=' + (fixture_build_dir / 'glycin-rgb16.png'),
-    'animation-apng=' + partial_apng_fixture,
-    'animation-apng-10=' + apng_perf_fixtures[0],
-    'animation-apng-50=' + apng_perf_fixtures[1],
-    'animation-apng-100=' + apng_perf_fixtures[2],
-    'animation-apng-composite=' + apng_perf_fixtures[3],
+    'animation-apng=' + (fixture_build_dir / 'partial.apng'),
+    'animation-apng-10=' + (fixture_build_dir / 'animation-10.apng'),
+    'animation-apng-50=' + (fixture_build_dir / 'animation-50.apng'),
+    'animation-apng-100=' + (fixture_build_dir / 'animation-100.apng'),
+    'animation-apng-composite=' + (fixture_build_dir / 'animation-composite.apng'),
   ]
 endif
 if get_option('raw_fixtures') != ''

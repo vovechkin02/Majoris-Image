@@ -67,6 +67,65 @@ private async void await_tiled_views (Gtk.Grid parent, Gee.ArrayList<ImageView> 
     throw new IOError.TIMED_OUT ("Not all large-image viewers presented a decoded tile");
 }
 
+/** Tracks finalization of a viewer without extending the lifetime of its GObject. */
+private class ViewerLifetimeProbe : Object {
+    private WeakRef observed = WeakRef (null);
+
+    /** Tracks an ImageView without retaining a strong reference to it. */
+    public ViewerLifetimeProbe (ImageView view) {
+        observed.set (view);
+    }
+
+    /** Reports whether the original viewer remains alive after normal release. */
+    public bool is_alive () {
+        return observed.get () != null;
+    }
+}
+
+/** Loads one image view and returns only container-owned references. */
+private async void attach_benchmark_view (File file, Gtk.Grid parent,
+                                          Gee.ArrayList<ImageView> views,
+                                          Gee.ArrayList<ViewerLifetimeProbe> probes,
+                                          int viewer, bool tiled) throws Error {
+    var view = new ImageView ();
+    parent.attach (view, viewer % 4, viewer / 4, 1, 1);
+    views.add (view);
+    probes.add (new ViewerLifetimeProbe (view));
+    yield view.load_file (file);
+    var loaded = view.document;
+    if (loaded == null) {
+        throw new IOError.FAILED ("Viewer did not load the benchmark image");
+    }
+    if (tiled) {
+        if (!loaded.supports_regions || view.image_width < 4096 ||
+            view.image_height < 2048) {
+            throw new IOError.INVALID_DATA (
+                "Large-image benchmark requires a high-resolution tiled source");
+        }
+        view.actual_size ();
+    }
+}
+
+/** Waits for weak viewer probes to clear after references and GTK parents are released. */
+private async void assert_viewers_released (Gee.ArrayList<ViewerLifetimeProbe> probes,
+                                            int cycle) throws Error {
+    for (int attempt = 0; attempt < 15; attempt++) {
+        int retained = 0;
+        foreach (var probe in probes) {
+            if (probe.is_alive ()) {
+                retained++;
+            }
+        }
+        if (retained == 0) {
+            stdout.printf ("Viewer-lifetime cycle=%d released_viewers=%d\n",
+                cycle, probes.size);
+            return;
+        }
+        yield quiesce ();
+    }
+    throw new IOError.FAILED ("GTK retained one or more ImageView objects after release");
+}
+
 /** Reads one Linux process-residency counter, in KiB, without changing allocations. */
 private int64 memory_kib (string field) throws Error {
     string contents;
@@ -104,23 +163,9 @@ private async void measure_lifecycle (File file, int cycles, int viewers_per_cyc
         window.child = parent;
         window.present ();
         var views = new Gee.ArrayList<ImageView> ();
+        var probes = new Gee.ArrayList<ViewerLifetimeProbe> ();
         for (int viewer = 0; viewer < viewers_per_cycle; viewer++) {
-            var view = new ImageView ();
-            parent.attach (view, viewer % 4, viewer / 4, 1, 1);
-            views.add (view);
-            yield view.load_file (file);
-            var loaded = view.document;
-            if (loaded == null) {
-                throw new IOError.FAILED ("Viewer did not load the benchmark image");
-            }
-            if (tiled) {
-                if (!loaded.supports_regions || view.image_width < 4096 ||
-                    view.image_height < 2048) {
-                    throw new IOError.INVALID_DATA (
-                        "Large-image benchmark requires a high-resolution tiled source");
-                }
-                view.actual_size ();
-            }
+            yield attach_benchmark_view (file, parent, views, probes, viewer, tiled);
         }
         // Keep every viewer alive simultaneously before sampling host memory.
         // This exercises per-view caches rather than sequentially disposing them.
@@ -137,8 +182,9 @@ private async void measure_lifecycle (File file, int cycles, int viewers_per_cyc
         // Normal reference release is the measured path; do not force dispose.
         views.clear ();
         window.destroy ();
-        // Let delayed GObject and GTK finalization finish before the next cycle.
-        yield quiesce ();
+        // Weak references prove that the viewer objects were released; stable
+        // RSS alone cannot distinguish allocator arenas from retained objects.
+        yield assert_viewers_released (probes, cycle + 1);
         yield quiesce ();
         int64 current = memory_kib ("VmRSS");
         int64 peak = memory_kib ("VmHWM");

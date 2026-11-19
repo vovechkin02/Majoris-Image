@@ -123,6 +123,54 @@ private async void verify_srgb16_fallback (DecoderRegistry registry, string dire
     }
 }
 
+/** Verifies both APNG request orders without relying on a fixed completion order. */
+private async void verify_overlapping_apng (ImageDocument animation,
+                                            ImageDocument first,
+                                            ImageDocument second,
+                                            bool reverse) throws Error {
+    ImageDocument? earlier = null;
+    ImageDocument? later = null;
+    string? failure = null;
+    int remaining = 2;
+    int earlier_index = reverse ? 2 : 1;
+    int later_index = reverse ? 1 : 2;
+    animation.open_frame.begin (earlier_index, null, (source, result) => {
+        try {
+            earlier = animation.open_frame.end (result);
+        } catch (Error error) {
+            failure = error.message;
+        }
+        remaining--;
+    });
+    animation.open_frame.begin (later_index, null, (source, result) => {
+        try {
+            later = animation.open_frame.end (result);
+        } catch (Error error) {
+            failure = error.message;
+        }
+        remaining--;
+    });
+    while (remaining != 0) {
+        var idle = new TimeoutSource (5);
+        idle.set_callback (() => {
+            verify_overlapping_apng.callback ();
+            return Source.REMOVE;
+        });
+        idle.attach (MainContext.get_thread_default ());
+        yield;
+    }
+    if (failure != null) {
+        throw new IOError.FAILED ("Overlapping APNG decoding failed: %s", failure);
+    }
+    assert (earlier != null && later != null);
+    var expected_earlier = earlier_index == 1 ? first : second;
+    var expected_later = later_index == 1 ? first : second;
+    assert (((ImageDocument) earlier).preview.bytes.compare (
+        expected_earlier.preview.bytes) == 0);
+    assert (((ImageDocument) later).preview.bytes.compare (
+        expected_later.preview.bytes) == 0);
+}
+
 async void verify_decoder_selection_and_frames (string[] args) throws Error {
     var registry = new DecoderRegistry ();
     var registration = new KeyFile ();
@@ -455,47 +503,10 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
     var after_cancel = yield animation.open_frame (2);
     assert (after_cancel.preview.bytes.compare (advanced.preview.bytes) == 0);
 
-    // Overlapping frame requests must remain correct regardless of completion
-    // order. An older completion must not supersede a newer cursor publication.
-    ImageDocument? concurrent_one = null;
-    ImageDocument? concurrent_two = null;
-    string? concurrent_failure = null;
-    int remaining = 2;
-    animation.open_frame.begin (1, null, (source, result) => {
-        try {
-            concurrent_one = animation.open_frame.end (result);
-        } catch (Error error) {
-            concurrent_failure = error.message;
-        }
-        remaining--;
-    });
-    animation.open_frame.begin (2, null, (source, result) => {
-        try {
-            concurrent_two = animation.open_frame.end (result);
-        } catch (Error error) {
-            concurrent_failure = error.message;
-        }
-        remaining--;
-    });
-    // Do not run a nested main loop inside this asynchronous integration test:
-    // yield through the current context until both callbacks have completed.
-    while (remaining != 0) {
-        var idle = new TimeoutSource (5);
-        idle.set_callback (() => {
-            verify_decoder_selection_and_frames.callback ();
-            return Source.REMOVE;
-        });
-        idle.attach (MainContext.get_thread_default ());
-        yield;
-    }
-    if (concurrent_failure != null) {
-        throw new IOError.FAILED ("Overlapping APNG decoding failed: %s", concurrent_failure);
-    }
-    assert (concurrent_one != null && concurrent_two != null);
-    var overlapped_one = (ImageDocument) concurrent_one;
-    var overlapped_two = (ImageDocument) concurrent_two;
-    assert (overlapped_one.preview.bytes.compare (second.preview.bytes) == 0);
-    assert (overlapped_two.preview.bytes.compare (advanced.preview.bytes) == 0);
+    // Exercise both initiation orders. Network/process scheduling can complete
+    // either request first; pixels and subsequent seeking must remain correct.
+    yield verify_overlapping_apng (animation, second, advanced, false);
+    yield verify_overlapping_apng (animation, second, advanced, true);
     // A newly initiated rewind must still replace the forward cursor.
     var fresh_rewind = yield animation.open_frame (0);
     var fresh_forward = yield animation.open_frame (1);

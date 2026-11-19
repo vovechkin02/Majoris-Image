@@ -228,7 +228,7 @@ namespace ImageKit {
                 if (color.get_boolean_member_with_default ("unverified-transfer", false)) {
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot verify the source transfer and primaries");
                 }
-                int source_depth = (int) color.get_int_member_with_default ("source-bit-depth", 0);
+                int64 color_source_depth = color.get_int_member_with_default ("source-bit-depth", 0);
                 var known_header = color.get_boolean_member_with_default ("header-read", false);
                 // PNG sRGB has no ICC transform to observe. The PNG loader publishes
                 // its encoded samples in the declared sRGB space on this path.
@@ -310,9 +310,10 @@ namespace ImageKit {
                     color.get_boolean_member_with_default ("gray-icc", false), qoi_transfer == 1, job,
                     out width, out height, out depth);
                 OperationProfile.record ("glycin-pixel-conversion", profile_started);
-                if (source_depth > depth) {
-                    throw new ImageError.UNSUPPORTED ("Glycin would reduce precision from the source samples");
-                }
+                // Both independent probes constrain precision. A missing or lower
+                // color-probe value must not conceal a deeper animated source.
+                int source_depth = checked_source_sample_depth (color_source_depth,
+                    animation != null ? animation.source_bit_depth : 0, depth);
                 job.set_error_if_cancelled ();
                 profile_started = OperationProfile.begin ();
                 if (identity != "" && identity != (yield source.stamp (job))) {
@@ -340,7 +341,6 @@ namespace ImageKit {
                     probe.pages = animation.pages;
                     probe.loop_count = animation.loop_count;
                     probe.frame_duration_ms = (int) (frame.get_delay () / 1000).clamp (0, int.MAX);
-                    probe.source_bit_depth = animation.source_bit_depth;
                 }
                 if ((probe.capabilities & request.required_capabilities) != request.required_capabilities) {
                     throw new ImageError.UNSUPPORTED ("Glycin output does not satisfy the requested precision");

@@ -3,15 +3,15 @@ namespace ImageKit {
     public sealed class ImageDocument : Object {
         /** Original source object retained by this document. */
         public ImageSource source { get; private set; }
-        /** Image width in source pixels, or requested output pixels when set on export options. */
+        /** Width of the oriented decoded page in source pixels. */
         public int width { get; private set; }
-        /** Image height in source pixels, or requested output pixels when set on export options. */
+        /** Height of the oriented decoded page in source pixels. */
         public int height { get; private set; }
         /** Zero-based page index requested or represented by this image. */
         public int page { get; private set; }
         /** Number of document pages, distinct from its animation frame count. */
         public int page_count { get; private set; }
-        /** Bit depth of the represented buffer or target export, according to its owning type. */
+        /** Decoder-reported sample precision in bits per channel; the preview uses float32. */
         public int bit_depth { get; private set; }
         /** Source sample precision, or zero when the decoder cannot establish it. */
         public int source_bit_depth { get; private set; }
@@ -27,7 +27,7 @@ namespace ImageKit {
         public bool color_managed { get; private set; }
         /** Human-readable diagnostic describing color-profile interpretation or fallback. */
         public string color_diagnostic { get; private set; }
-        /** Whether the source or requested output uses HDR image data, per its owning type. */
+        /** Whether the opened source contains high-dynamic-range image data. */
         public bool hdr { get; private set; }
         /** Whether source HDR values have been converted for SDR presentation. */
         public bool tone_mapped { get; private set; }
@@ -61,7 +61,7 @@ namespace ImageKit {
         public string mime_type { get; private set; }
         /** Nonfatal decoder or presentation diagnostic shown to the caller. */
         public string warning { get; private set; }
-        /** Image metadata object or serialized metadata content, according to the owning type. */
+        /** Parsed image metadata associated with the currently opened page or frame. */
         public ImageMetadata metadata { get; private set; }
         /** Decoded preview pixels retained for immediate display; held by the document. */
         public PixelBuffer preview { get; private set; }

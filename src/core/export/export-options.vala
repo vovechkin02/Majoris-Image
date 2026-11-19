@@ -5,21 +5,21 @@ namespace ImageKit {
         public string format { get; set; default = "png"; }
         /** Output encoder quality setting; exact interpretation is codec-specific. */
         public int quality { get; set; default = 90; }
-        /** Bit depth of the represented buffer or target export, according to its owning type. */
+        /** Requested encoder sample depth in bits per channel; codec support varies. */
         public int bit_depth { get; set; default = 16; }
         /** Output resizing factor; 1 keeps the source scale. */
         public double scale { get; set; default = 1; }
-        /** Image width in source pixels, or requested output pixels when set on export options. */
+        /** Requested output width in pixels; zero leaves the width unconstrained. */
         public int width { get; set; }
-        /** Image height in source pixels, or requested output pixels when set on export options. */
+        /** Requested output height in pixels; zero leaves the height unconstrained. */
         public int height { get; set; }
         /** Output color-profile policy or target profile identifier. */
         public string profile { get; set; default = "source"; }
-        /** Image metadata object or serialized metadata content, according to the owning type. */
+        /** Metadata retention/removal policy, such as preserve or remove-all. */
         public string metadata { get; set; default = "preserve"; }
-        /** Whether the source or requested output uses HDR image data, per its owning type. */
+        /** Whether the export must preserve high-dynamic-range output. */
         public bool hdr { get; set; }
-        /** Tone-mapping mode selected for decoding or export. */
+        /** Requested HDR-to-SDR tone-mapping policy for exported output. */
         public string tone_mode { get; set; default = "automatic"; }
         /** Request lossless output where the selected encoder supports it. */
         public bool lossless { get; set; }

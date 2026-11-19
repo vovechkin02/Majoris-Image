@@ -29,6 +29,8 @@ Applications do not need to implement their own image decode pipelines.
   cameras, with capability negotiation per input file.
 - High-depth and float RGBA processing; HDR input, ICC/CICP interpretation
   where supported, and color-managed SDR tone mapping.
+- Source-precision checks that reconcile independent animation and color
+  probe metadata before accepting Glycin fallback output.
 - Region rendering, zoom, pan, rotation, flipping, progressive viewport
   tiles and a bounded cache in the optional GTK4 viewer.
 - Built-in image thumbnailing and a freedesktop desktop thumbnailer.
@@ -378,8 +380,10 @@ Every APNG frame contributes its geometry, timing and pixels to one output
 fingerprint. The performance suite also measures cancellation-heavy scheduler
 queues and **eight simultaneously loaded ImageView instances**, in both a
 small-preview workload and a high-resolution tiled-TIFF workload, followed by
-normal reference-release and host-memory quiescence. A completed build or a
-successful benchmark command is not a performance pass: the qualification
+normal reference-release and host-memory quiescence. The lifecycle benchmark
+also checks that weak references to all eight viewer objects clear after
+normal release; stable process RSS is not accepted as proof of finalization.
+A completed build or a successful benchmark command is not a performance pass: the qualification
 gate requires independently collected results from a matched earlier source.
 
 First prepare the previous source with the **identical benchmark harness**
@@ -387,7 +391,7 @@ First prepare the previous source with the **identical benchmark harness**
 
 ```sh
 python3 tests/release/prepare_baseline.py \
-  --archive /path/to/Majoris-Image\(20261119-040730\).zip \
+  --archive /path/to/Majoris-Image\(20261119-051853\).zip \
   --candidate . --destination /tmp/majoris-image-reference \
   --report /tmp/majoris-reference-setup.json
 python3 tests/release/qualify_performance.py \
@@ -408,16 +412,24 @@ python3 tests/release/qualify_performance.py \
 
 Baseline capture records `baseline_recorded`, **not** `passed`. A missing,
 unmatched or noisy baseline cannot pass. The default gate allows no more than
-15% median timing/live-RSS regression, 20% median-absolute-deviation fraction,
-64 MiB additional settled viewer RSS and 128 MiB additional live viewer RSS;
-all limits are explicit in the report. The gate rejects missing tiled-viewer
+15% median timing/live-RSS regression, 20% measurement-variability fraction,
+64 MiB additional settled viewer RSS and 128 MiB additional live viewer RSS.
+For memory, the median, p95 and maximum must *each* satisfy the appropriate
+budget. The gate measures Linux `VmHWM` separately from sampled live RSS in
+both preview and tiled-viewer workloads, so temporary decoding peaks cannot
+be hidden between samples. Peak RSS uses the live-memory growth budgets.
+The gate recomputes reported timing **and** memory statistics from independent
+samples and rejects unstable samples or inconsistent summaries as inconclusive;
+all limits are explicit in the comparison report. The gate rejects missing tiled-viewer
 results, missing APNG frame fingerprints, mismatched units and changed
 collector/fixture methodology. Host RSS is not physical GPU memory.
 The gate also records separate APNG color-probe/source-stamp costs, output
 fingerprints and scheduler queue/cancellation/drain timing. It never silently
 changes ICC validation or source freshness to improve benchmark scores.
 
-See [the final qualification gate corrections](docs/verification/verification-performance-gates-v1.8.md),
+See [the raw-timing and process-VmHWM qualification correction](docs/verification/verification-performance-evidence-v1.8.md),
+[the memory high-water and viewer-finalization hardening](docs/verification/verification-memory-high-water-v1.8.md),
+[the previous qualification gate corrections](docs/verification/verification-performance-gates-v1.8.md),
 [the next-pass qualification contract](docs/verification/verification-performance-next-pass-v1.8.md)
 and the [earlier qualification implementation](docs/verification/verification-performance-qualification-v1.8.md).
 Host RSS under Xvfb does not measure physical GPU memory.

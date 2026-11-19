@@ -29,7 +29,7 @@ namespace ImageKit {
         public int page_count { get; private set; }
         /** Zero-based page currently shown in the view. */
         public int current_page { get; private set; }
-        /** Image metadata object or serialized metadata content, according to the owning type. */
+        /** Parsed metadata for the displayed document, or null before a document is ready. */
         public ImageMetadata? metadata { get; private set; }
         /** Human-readable name of the decoder that opened the image. */
         public string decoder { get; private set; default = ""; }
@@ -96,6 +96,10 @@ namespace ImageKit {
         private Cancellable pending = new Cancellable ();
         private uint generation;
         private bool disposed;
+        // GTK owns these controllers. Using fields avoids capturing the controllers
+        // and the view together in their signal closures.
+        private unowned Gtk.EventControllerScroll scroll_controller;
+        private unowned Gtk.GestureZoom pinch_controller;
         private TileCache tiles = new TileCache ();
         private double custom_zoom = 1;
         private FitMode applied_fit_mode = FitMode.CONTAIN;
@@ -166,9 +170,10 @@ namespace ImageKit {
             });
             add_controller (motion);
             var scroll = new Gtk.EventControllerScroll (Gtk.EventControllerScrollFlags.BOTH_AXES);
+            scroll_controller = scroll;
             scroll.propagation_phase = Gtk.PropagationPhase.BUBBLE;
             scroll.scroll.connect ((dx, dy) => {
-                var modifiers = scroll.get_current_event_state ();
+                var modifiers = scroll_controller.get_current_event_state ();
                 if (scroll_zoom_mode == ScrollZoomMode.DISABLED || dy == 0 ||
                     Math.fabs (dx) >= Math.fabs (dy) ||
                     (modifiers & (Gdk.ModifierType.SHIFT_MASK | shortcut_modifiers ())) != 0 ||
@@ -195,13 +200,14 @@ namespace ImageKit {
             });
             add_controller (drag);
             var pinch = new Gtk.GestureZoom ();
+            pinch_controller = pinch;
             pinch.begin.connect (() => pinch_start = zoom);
             pinch.scale_changed.connect (scale => {
                 if (!allow_zoom) {
                     return;
                 }
                 double x, y;
-                if (pinch.get_bounding_box_center (out x, out y)) {
+                if (pinch_controller.get_bounding_box_center (out x, out y)) {
                     interactive_zoom (pinch_start * scale, x, y);
                 }
             });

@@ -16,6 +16,25 @@ decoder_policy_test = executable(
 )
 test('Private decoder routing compatibility', decoder_policy_test, suite: 'unit')
 
+# Compile the production precision policy directly to exercise missing and
+# conflicting worker/animation metadata without depending on installed Glycin.
+source_precision_test_source = configure_file(
+  input: '../../src/core/decoding/source-precision.vala',
+  output: 'source-precision-impl.vala',
+  copy: true,
+)
+render_error_source = configure_file(
+  input: '../../src/core/image-error.vala',
+  output: 'image-error-impl.vala',
+  copy: true,
+)
+source_precision_test = executable(
+  'test-source-precision',
+  ['test-source-precision.vala', source_precision_test_source, render_error_source],
+  dependencies: gio,
+)
+test('Glycin source precision reconciliation', source_precision_test, suite: 'unit')
+
 exr_tests = executable('test-exr', 'test-exr.cpp', dependencies: native_api)
 color_tests = executable(
   'test-imaging',
@@ -101,11 +120,6 @@ endif
 render_options_source = configure_file(
   input: '../../src/core/render-options.vala',
   output: 'render-options-impl.vala',
-  copy: true,
-)
-render_error_source = configure_file(
-  input: '../../src/core/image-error.vala',
-  output: 'image-error-impl.vala',
   copy: true,
 )
 render_options_test = executable(

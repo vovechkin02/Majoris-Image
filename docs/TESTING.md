@@ -27,6 +27,21 @@ comments on handwritten Vala, C/C++ and Python source. The unit suite registers
 python3 tests/release/check_source_docs.py
 ```
 
+The unit suite also registers `Glycin source precision reconciliation`.
+It compiles the exact internal source-depth policy with a minimal set of
+supporting files and exercises absent, contradictory and invalid worker and
+animation depth declarations. A known 16-bit animation must not be published
+as an accepted 8-bit fallback. This deterministic policy test is not a
+replacement for end-to-end Glycin decoding on Debian.
+
+The Python `Performance baseline acceptance policy` test additionally rejects
+blocked or incomplete measurement reports, missing schema-3 metadata and
+missing host/toolchain information. The collector emits
+`status=measured_not_compared` after successful collection; that value permits
+a baseline comparison, but it is **not** a release qualification by itself.
+A successful qualification still requires matched baseline/candidate evidence
+and every mandatory workload within the established budgets.
+
 The checker reports Vala declaration comments, Python AST docstrings, native
 header declarations and recognized C/C++ definitions. It checks presence and
 placement of comments, **not** correctness or quality of technical prose.
@@ -328,12 +343,23 @@ security contract, measured results, and release checks.
 
 The separate `tests/release/compare_performance.py` gate rejects timing
 regressions, incompatible environments, changed fixture/output hashes,
-missing workloads, and high measurement variance. Its acceptance behavior is
+missing workloads, and high measurement variance. For preview and large tiled
+viewer memory it validates raw samples and requires median, p95 and sample
+maximum to remain within the applicable limits. Separate mandatory preview
+and large-image `peak-rss` workloads use the Linux process `VmHWM` counter,
+which captures transient peaks between ordinary live RSS samples. Live and peak
+RSS use the same relative/absolute budgets; retained RSS uses its separate
+absolute allowance. Timing workloads also require raw independent samples:
+the gate recalculates median, MAD, minimum, maximum and p95 and rejects
+inconsistent timing summaries. Excessive memory or timing variability and
+malformed evidence are inconclusive. The GTK benchmark requires weak-reference confirmation that
+all eight viewers are released after each cycle; host RSS alone is insufficient.
+Its acceptance behavior is
 exercised in the `Performance baseline acceptance policy` unit test. Run
 `python3 tests/release/test_compare_performance.py` without compiling if needed.
 
 A baseline **must** use the same benchmark implementations as the candidate;
-`prepare_baseline.py` produces an isolated previous-source tree with the six
+`prepare_baseline.py` produces an isolated previous-source tree with the nine
 benchmark/fixture-harness files synchronized, while verifying that every other
 file is byte-for-byte unchanged. Do not compare historical sequential-viewer
 measurements against the new simultaneous-viewer benchmark.

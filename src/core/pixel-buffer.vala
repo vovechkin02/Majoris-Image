@@ -1,9 +1,9 @@
 namespace ImageKit {
     /** Immutable, straight-alpha, native-endian float32 RGBA in linear sRGB. */
     public sealed class PixelBuffer : Object {
-        /** Image width in source pixels, or requested output pixels when set on export options. */
+        /** Width of this pixel buffer in pixels, independently of the encoded source size. */
         public int width { get; private set; }
-        /** Image height in source pixels, or requested output pixels when set on export options. */
+        /** Height of this pixel buffer in pixels, independently of the encoded source size. */
         public int height { get; private set; }
         /** Distance between consecutive image rows in bytes. */
         public int stride {

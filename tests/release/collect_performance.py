@@ -23,8 +23,12 @@ SCHEDULER_PHASE = re.compile(r"ImageKit-profile scheduler-(queue|cancel|drain) (
 VIEWER_FINAL = re.compile(
     r"Viewer-memory final_rss_kib=(\d+) retained_delta_kib=(-?\d+)"
 )
-VIEWER_LIVE = re.compile(r"Viewer-memory cycle=\d+ live_rss_kib=(\d+)")
+VIEWER_CYCLE = re.compile(
+    r"Viewer-memory cycle=(\d+) live_rss_kib=(\d+) "
+    r"settled_rss_kib=(\d+) peak_rss_kib=(\d+)"
+)
 VIEWER_TILES = re.compile(r"Viewer-tiles cycle=\d+ ready_viewers=(\d+)")
+VIEWER_RELEASED = re.compile(r"Viewer-lifetime cycle=\d+ released_viewers=(\d+)")
 
 
 def benchmark_harness_hash(root: Path) -> str:
@@ -206,8 +210,48 @@ def record_scheduler(root: Path, build: Path, workdir: Path, samples: int) -> di
     return results
 
 
+def parse_viewer_report(
+    stdout: str, label: str, tiled: bool
+) -> tuple[float, float, float]:
+    """Validate six viewer cycles and return retained, live, and VmHWM KiB.
+
+    VmHWM is a process-lifetime high-water mark, not the largest sampled
+    live RSS. Requiring monotonic, internally consistent observations also
+    catches truncated benchmark output and malformed peak-memory evidence.
+    """
+    final = VIEWER_FINAL.search(stdout)
+    if final is None:
+        raise RuntimeError(f"Missing post-release GTK memory report for {label}")
+    cycles = [tuple(int(value) for value in entry)
+              for entry in VIEWER_CYCLE.findall(stdout)]
+    if len(cycles) != 6 or [item[0] for item in cycles] != list(range(1, 7)):
+        raise RuntimeError(f"Expected six ordered viewer-memory cycles for {label}")
+    for index, (_, live_rss, settled_rss, high_water) in enumerate(cycles):
+        if (min(live_rss, settled_rss, high_water) <= 0 or
+                high_water < max(live_rss, settled_rss) or
+                (index > 0 and high_water < cycles[index - 1][3])):
+            raise RuntimeError(f"Inconsistent Linux VmHWM/VmRSS for {label}")
+    released_counts = [int(value) for value in VIEWER_RELEASED.findall(stdout)]
+    if released_counts != [8] * 6:
+        raise RuntimeError(
+            "Not all ImageView objects were finalized after normal release"
+        )
+    tiled_counts = [int(value) for value in VIEWER_TILES.findall(stdout)]
+    if tiled and tiled_counts != [8] * 6:
+        raise RuntimeError("Large-image workload did not render tiles in all viewers")
+    retained = float(max(0, int(final.group(2))))
+    live = float(max(cycle[1] for cycle in cycles))
+    peak = float(cycles[-1][3])
+    return retained, live, peak
+
+
 def record_viewers(root: Path, build: Path, workdir: Path, samples: int) -> dict:
-    """Compare small-preview and tiled large-image RSS under matched conditions."""
+    """Compare preview/tiled live, retained and process-high-water RSS.
+
+    Each independent benchmark subprocess reports six lifecycle cycles. Linux
+    VmHWM retains transient decoding peaks that may vanish before VmRSS is
+    sampled. The subprocess's final high-water value forms one sample.
+    """
     xvfb = shutil.which("xvfb-run")
     if not xvfb:
         raise RuntimeError("xvfb-run required for matched GTK lifecycle measurements")
@@ -226,44 +270,32 @@ def record_viewers(root: Path, build: Path, workdir: Path, samples: int) -> dict
     for label, fixture, tiled in fixtures:
         if not fixture.is_file():
             raise RuntimeError(f"Missing benchmark fixture: {fixture}")
-        retained, live = [], []
+        retained, live, peak = [], [], []
         for sample in range(samples):
             stdout = execute([
                 xvfb, "-a", "-s", "-screen 0 1600x900x24", str(executable),
                 str(fixture), "6", "8", "tiled" if tiled else "preview",
             ], root, workdir / f"{label}-{sample:02d}.log", env=env,
                 timeout=900 if tiled else 600)
-            final = VIEWER_FINAL.search(stdout)
-            if final is None:
-                raise RuntimeError(
-                    f"Missing post-release GTK memory report for {label}"
-                )
-            views = [int(value) for value in VIEWER_LIVE.findall(stdout)]
-            if len(views) != 6:
-                raise RuntimeError(
-                    f"Expected six simultaneous-viewer samples for {label}"
-                )
-            tiled_counts = [int(value) for value in VIEWER_TILES.findall(stdout)]
-            if tiled and tiled_counts != [8] * 6:
-                raise RuntimeError(
-                    "Large-image workload did not render tiles in all viewers"
-                )
-            retained.append(float(max(0, int(final.group(2)))))
-            live.append(float(max(views)))
+            held, visible, high_water = parse_viewer_report(stdout, label, tiled)
+            retained.append(held)
+            live.append(visible)
+            peak.append(high_water)
         source_sha = hashlib.sha256(fixture.read_bytes()).hexdigest()
         mode = "tiled" if tiled else "preview"
         config = f"simultaneous-8-viewers:6-cycles:{mode}:{source_sha}"
-        for suffix, measures in (("retained-rss", retained), ("live-rss", live)):
+        for suffix, measures in (
+            ("retained-rss", retained), ("live-rss", live), ("peak-rss", peak),
+        ):
             result[f"{label}-{suffix}"] = summarize(measures, config)
             result[f"{label}-{suffix}"]["unit"] = "KiB"
     return result
-
 
 def collect(root: Path, build: Path, workdir: Path, samples: int) -> dict:
     """Combine matching hardware and build metadata with all required measurements."""
     apng, source = record_apng(root, build, workdir, samples)
     result = {
-        "schema": 2, "version": source["version"],
+        "schema": 3, "version": source["version"],
         "harness_sha256": benchmark_harness_hash(root),
         "environment": {
             "system": source["environment"]["system"],

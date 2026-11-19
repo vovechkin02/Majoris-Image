@@ -70,6 +70,8 @@ namespace ImageKit {
         private DecodeOptions options;
         private WorkerClient worker;
         private string identity;
+        // Never exported: one incremental Glycin decoder, owned by this document.
+        internal GlycinFrameCursor? glycin_cursor;
 
         /** Creates a document from a verified probe and preview with retained source identity. */
         internal ImageDocument (ImageSource source, ImageProbe probe, PixelBuffer preview,
@@ -157,8 +159,15 @@ namespace ImageKit {
             if (animated && mime_type == "image/apng" &&
                 (index != frame || (animation_frame && route != DecoderRoute.FALLBACK))) {
                 try {
-                    return yield GlycinFallback.open (source, requested, stop,
-                        new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"), 120, probe);
+                    var opened = yield GlycinFallback.open (source, requested, stop,
+                        new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"),
+                        120, probe, null, false, glycin_cursor);
+                    // The first fallback frame may originate from a native APNG
+                    // preview. Share the verified cursor across its frame requests.
+                    if (opened.glycin_cursor != null) {
+                        glycin_cursor = opened.glycin_cursor;
+                    }
+                    return opened;
                 } catch (ImageError.CODEC_MISSING error) {
                     if (index == frame) {
                         return this;

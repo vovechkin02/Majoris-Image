@@ -1028,6 +1028,8 @@ namespace ImageKit {
                 animation.detach ();
                 current_document = null;
                 texture = null;
+                metadata = null;
+                presented = {};
             }
             base.dispose ();
         }

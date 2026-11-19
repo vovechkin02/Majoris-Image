@@ -429,6 +429,32 @@ async void verify_decoder_selection_and_frames (string[] args) throws Error {
     assert (sample_float_channel (second.preview, 0, 0) > 0.1f &&
         sample_float_channel (second.preview, 0, 1) > 0.1f);
     assert (sample_float_channel (second.preview, 1, 0) > 0.99f);
+    // A forward frame on the same document must reuse the verified cursor.
+    var advanced = yield animation.open_frame (2);
+    assert (advanced.frame == 2 && advanced.frame_duration_ms == 250);
+    assert (sample_float_channel (advanced.preview, 0, 0) > 0.99f &&
+        sample_float_channel (advanced.preview, 1, 3) < 0.01f);
+    // Backward seek restarts the decoder instead of reusing an advanced cursor.
+    var rewound = yield animation.open_frame (0);
+    assert (rewound.frame == 0 && rewound.frame_duration_ms == 40);
+    assert (sample_float_channel (rewound.preview, 0, 0) > 0.99f);
+    var replayed = yield animation.open_frame (1);
+    assert (replayed.frame == second.frame && replayed.preview.bytes.compare (second.preview.bytes) == 0);
+    // Child documents can continue forward from the same decoded session.
+    var child_next = yield replayed.open_frame (2);
+    assert (child_next.frame == advanced.frame &&
+        child_next.preview.bytes.compare (advanced.preview.bytes) == 0);
+    var canceled_frame = new Cancellable ();
+    canceled_frame.cancel ();
+    try {
+        yield animation.open_frame (2, canceled_frame);
+        assert_not_reached ();
+    } catch (IOError.CANCELLED error) {
+        // A canceled request must not corrupt the active decoder cursor.
+    }
+    var after_cancel = yield animation.open_frame (2);
+    assert (after_cancel.preview.bytes.compare (advanced.preview.bytes) == 0);
+
     var frame_options = new DecodeOptions ();
     frame_options.page = 2;
     var third = yield registry.open (apng, frame_options);

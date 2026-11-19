@@ -97,6 +97,7 @@ if get_option('glycin').enabled()
   workloads += [
     'fallback=' + (fixture_build_dir / 'fallback.qoi'),
     'fallback16=' + (fixture_build_dir / 'glycin-rgb16.png'),
+    'animation-apng=' + partial_apng_fixture,
   ]
 endif
 if get_option('raw_fixtures') != ''

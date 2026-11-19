@@ -15,6 +15,54 @@ namespace ImageKit {
         QOI_LINEAR
     }
 
+    /** Holds one document-scoped Glycin decoder between forward animation requests. */
+    internal class GlycinFrameCursor : Object {
+#if HAVE_GLYCIN
+        /** Glycin image handle that owns its sandboxed decoding session. */
+        internal Gly.Image? image { get; private set; }
+        /** Source version against which the retained decoder was opened. */
+        private string identity;
+        /** Most recently consumed zero-based frame index. */
+        internal int index { get; private set; }
+        private Mutex mutex;
+        private bool busy;
+        private bool valid = true;
+
+        /** Retains the loader after the first verified animation frame. */
+        internal GlycinFrameCursor (Gly.Image image, string identity, int index) {
+            this.image = image;
+            this.identity = identity;
+            this.index = index;
+        }
+
+        /** Reserves this decoder for a strictly forward request on the same source version. */
+        internal bool try_claim (string stamp, int target) {
+            mutex.lock ();
+            bool can_reuse = valid && !busy && image != null && stamp != "" &&
+                stamp == identity && target > index;
+            if (can_reuse) {
+                busy = true;
+            }
+            mutex.unlock ();
+            return can_reuse;
+        }
+
+        /** Publishes decoder progress or invalidates a failed/canceled session. */
+        internal void finish (int reached, bool success) {
+            mutex.lock ();
+            if (success) {
+                index = reached;
+            } else {
+                valid = false;
+                // Do not keep the sandboxed loader alive after an uncertain frame.
+                image = null;
+            }
+            busy = false;
+            mutex.unlock ();
+        }
+#endif
+    }
+
     /** Adapts Glycin inspection/rendering to ImageKit document and pixel contracts. */
     internal class GlycinFallback : Object {
         // Glycin 1 does not expose ICC, transfer functions, page counts or source depth.
@@ -127,7 +175,8 @@ namespace ImageKit {
                                                    Error original, uint seconds = 120,
                                                        ImageProbe? animation = null,
                                                        RenderOptions? crop = null,
-                                                       bool preload = false) throws Error {
+                                                       bool preload = false,
+                                                       GlycinFrameCursor? cursor = null) throws Error {
 #if HAVE_GLYCIN
             var supported = FEATURES | ImageCapabilities.HIGH_DEPTH | ImageCapabilities.COLOR_MANAGED;
             if (animation != null) {
@@ -162,6 +211,8 @@ namespace ImageKit {
             timeout.attach (MainContext.get_thread_default ());
             var scheduler = JobScheduler.shared ();
             var admitted = false;
+            var retained = false;
+            var completed = false;
             try {
                 var color = yield color_metadata (source, job, preload);
                 var tagged = color.get_boolean_member_with_default ("icc", false);
@@ -199,9 +250,17 @@ namespace ImageKit {
                 yield scheduler.acquire (preload ? JobScheduler.PRELOAD_PRIORITY :
                     JobScheduler.FOREGROUND_PRIORITY, job);
                 admitted = true;
-                var loader = new Gly.Loader (source.file);
-                loader.set_sandbox_selector (Gly.SandboxSelector.BWRAP);
-                var image = yield loader.load_async (job);
+                Gly.Image image;
+                // Reuse only a document-owned forward cursor. Concurrent requests and
+                // backward seeks open independent decoders to preserve seeking behavior.
+                if (animation != null && cursor != null && cursor.try_claim (identity, request.page)) {
+                    retained = true;
+                    image = (Gly.Image) cursor.image;
+                } else {
+                    var loader = new Gly.Loader (source.file);
+                    loader.set_sandbox_selector (Gly.SandboxSelector.BWRAP);
+                    image = yield loader.load_async (job);
+                }
                 if (!same_mime (mime, image.get_mime_type ()) &&
                     !(animation != null && mime == "image/apng" && image.get_mime_type () == "image/png")) {
                     throw new ImageError.INVALID_RESPONSE ("Glycin loader MIME does not match the source signature");
@@ -210,6 +269,13 @@ namespace ImageKit {
                     throw new ImageError.MEMORY ("Glycin image exceeds the fallback pixel budget");
                 }
                 var frame = yield image.next_frame_async (job);
+                if (retained) {
+                    // The first next_frame call advances from the retained cursor.
+                    // Continue only for forward seeks that skip additional frames.
+                    for (int index = cursor.index + 1; index < request.page; index++) {
+                        frame = yield image.next_frame_async (job);
+                    }
+                }
                 if (animation == null && frame.get_delay () > 0) {
                     // A still preview can use frame zero, but Glycin 1 does
                     // not expose counts or loop metadata for unknown sequences.
@@ -221,8 +287,10 @@ namespace ImageKit {
                     if (frame.get_delay () <= 0) {
                         throw new ImageError.UNSUPPORTED ("Glycin has no animation loader for this image");
                     }
-                    for (int index = 0; index < request.page; index++) {
-                        frame = yield image.next_frame_async (job);
+                    if (!retained) {
+                        for (int index = 0; index < request.page; index++) {
+                            frame = yield image.next_frame_async (job);
+                        }
                     }
                 }
                 int width, height, depth;
@@ -285,8 +353,20 @@ namespace ImageKit {
                 var generator = new Json.Generator ();
                 generator.set_root (node);
                 probe.metadata = generator.to_data (null);
-                return new ImageDocument (source, probe, new PixelBuffer (width, height, bytes),
+                var document = new ImageDocument (source, probe, new PixelBuffer (width, height, bytes),
                     request, new WorkerClient (), identity);
+                if (animation != null && identity != "") {
+                    // Retain at most one decoder per document; only validated frames
+                    // update the cursor, never an unverified or canceled decode.
+                    if (retained) {
+                        document.glycin_cursor = cursor;
+                    } else {
+                        var owned_cursor = new GlycinFrameCursor (image, identity, request.page);
+                        document.glycin_cursor = owned_cursor;
+                    }
+                }
+                completed = true;
+                return document;
             } catch (Gly.LoaderError.UNKNOWN_IMAGE_FORMAT error) {
                 throw new ImageError.CODEC_MISSING ("No Glycin loader accepted %s", mime);
             } catch (Gly.LoaderError.FAILED error) {
@@ -307,6 +387,11 @@ namespace ImageKit {
                 }
                 throw error;
             } finally {
+                if (retained) {
+                    // A canceled next_frame_async may have moved the cursor. Discard
+                    // that decoder rather than serving a potentially wrong frame.
+                    cursor.finish (request.page, completed);
+                }
                 if (admitted) {
                     scheduler.release ();
                 }

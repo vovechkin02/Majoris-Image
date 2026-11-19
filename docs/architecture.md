@@ -117,3 +117,34 @@ headless builds and the relevant test profiles on the release toolchain.
 Historical benchmark figures remain evidence for their recorded revisions,
 **not** measurements for this source layout. See [test procedures](TESTING.md)
 and [the project README](../README.md).
+
+## Bounded performance refinements (2.0.1)
+
+**APNG/Glycin frame access.** A private `GlycinFrameCursor` holds one Glycin
+image handle for a document's forward animation requests, preserving the loader's
+next-frame position and a source-version stamp. `ImageDocument.open_frame()`
+shares this cursor across subsequent frame documents. The cursor is claimed for
+only one asynchronous request at a time; concurrent requests, unavailable source
+stamps and backward seeks use the existing independent-loader path. A canceled,
+failed or source-changed request invalidates its claimed cursor. No decoded-frame
+history or process-wide decoder cache is introduced. The cursor's strong reference
+is released with the owning document. This optimization does not apply to native
+frame rendering or non-animated Glycin fallback, and the existing sandbox,
+scheduler admission, color validation, timeout and source checks still apply.
+
+**Worker admission.** `JobScheduler` now uses a `Gee.PriorityQueue` with a
+monotonic per-ticket sequence for FIFO ordering within a priority. The shared
+four-operation cap, reserved interactive slot, cancellation wakeups and the
+existing four priority values are unchanged. Enqueueing no longer sorts the
+entire waiting list, and removing the next admitted ticket no longer shifts the
+front of an array. Cancellation can still search for its individual ticket.
+
+**GTK viewer lifecycle.** Disposing an `ImageView` already cancels outstanding
+tile and animation work, disconnects external output observers and releases the
+current texture and document. It now also drops retained metadata and presentation
+state immediately. There is deliberately no global texture budget or global tile
+cache: shared-cache ownership and its GPU implications require hardware memory
+measurements before such a change is warranted.
+
+See [the performance closure evidence](verification/verification-performance-closure-v1.8.md)
+for the added tests, benchmark registration and unverified platform checks.

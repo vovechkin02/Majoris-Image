@@ -265,6 +265,17 @@ private async void measure (string mode, ImageSource source, File? remote) throw
                     yield document.open_frame (frame);
                 }
                 break;
+            case "animation-apng":
+                assert (document.animated && document.mime_type == "image/apng");
+                // Keep the same root document to exercise the forward cursor.
+                // Rewinds and repeated passes must still yield matching pixels.
+                for (int pass = 0; pass < 3; pass++) {
+                    for (int frame = 1; frame < document.frame_count; frame++) {
+                        yield document.open_frame (frame);
+                    }
+                    yield document.open_frame (0);
+                }
+                break;
             case "pages":
                 assert (document.page_count > 1);
                 for (int index = 1; index < document.page_count; index++) {

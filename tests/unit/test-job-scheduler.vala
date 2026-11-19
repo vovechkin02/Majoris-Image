@@ -104,6 +104,54 @@ private async void verify_seeded_queue () {
     }
 }
 
+/** Verifies a large mixed-priority burst without serial per-insertion sorting. */
+private async void verify_large_burst () throws Error {
+    const int total = 1200;
+    var scheduler = JobScheduler.shared ();
+    var gate = new Cancellable ();
+    for (int index = 0; index < 4; index++) {
+        yield scheduler.acquire (JobScheduler.FOREGROUND_PRIORITY, gate);
+    }
+
+    int completed = 0;
+    int canceled = 0;
+    int expected_canceled = 0;
+    int64 started = get_monotonic_time ();
+    for (int index = 0; index < total; index++) {
+        int priority = index % (JobScheduler.PRELOAD_PRIORITY + 1);
+        var token = new Cancellable ();
+        bool cancel_now = index % 7 == 0;
+        scheduler.acquire.begin (priority, token, (source, result) => {
+            try {
+                scheduler.acquire.end (result);
+                assert (!cancel_now);
+                scheduler.release ();
+            } catch (IOError.CANCELLED error) {
+                assert (cancel_now);
+                canceled++;
+            } catch (Error error) {
+                assert_not_reached ();
+            }
+            completed++;
+        });
+        if (cancel_now) {
+            expected_canceled++;
+            token.cancel ();
+        }
+    }
+    int64 queued_us = get_monotonic_time () - started;
+    stderr.printf ("Scheduler queued %d requests in %" + int64.FORMAT + " us\n",
+        total, queued_us);
+    for (int index = 0; index < 4; index++) {
+        scheduler.release ();
+    }
+    int64 deadline = get_monotonic_time () + 15 * TimeSpan.SECOND;
+    while (completed < total && get_monotonic_time () < deadline) {
+        yield wait_tick ();
+    }
+    assert (completed == total && canceled == expected_canceled);
+}
+
 int main () {
     var loop = new MainLoop ();
     verify_job_priorities_and_cancellation.begin ((source, result) => {
@@ -114,7 +162,14 @@ int main () {
         }
         verify_seeded_queue.begin ((object, finished) => {
             verify_seeded_queue.end (finished);
-            loop.quit ();
+            verify_large_burst.begin ((source, completed) => {
+                try {
+                    verify_large_burst.end (completed);
+                } catch (Error error) {
+                    assert_not_reached ();
+                }
+                loop.quit ();
+            });
         });
     });
     loop.run ();

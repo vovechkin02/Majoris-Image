@@ -290,6 +290,16 @@ original matching worker/package set or a coordinated upgrade. Worker
 requests retain protocol version 1 and existing wire keys, including legacy
 British-spelled identifiers where already standardized in the protocol.
 
+## Performance and animation
+
+Frame-based APNG playback uses an optional document-owned Glycin forward cursor
+when available; rewinds, concurrent requests and source changes use a safe
+independent decode. Worker admissions use a stable priority queue while retaining
+the four-job cap and interactive reservation. See
+[`docs/architecture.md`](docs/architecture.md) and the
+[performance closure report](docs/verification/verification-performance-closure-v1.8.md)
+for design constraints and validation requirements.
+
 ## Architecture and source layout
 
 | Directory | Purpose |
@@ -353,7 +363,7 @@ contact and any applicable target-platform qualification.
 - [Architecture and GoF design record](docs/architecture.md)
 - [Tests, fixtures, benchmarks and release procedures](docs/TESTING.md)
 - [Historical verification reports](docs/verification/README.md)
-- [Majoris engineering standards v1.7](docs/engineering-standards-v1.7.md)
+- [Majoris engineering standards v1.8](docs/engineering-standards-v1.8.md)
 - [Contributing guidelines](CONTRIBUTING.md)
 
 Contribute according to the shared standards. Follow the Vala `var` inference

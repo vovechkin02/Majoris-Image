@@ -2,6 +2,8 @@ namespace ImageKit {
     /** An admission permit whose lifetime reserves one worker scheduler slot. */
     private class JobTicket : Object {
         public int priority;
+        /** Monotonically increasing submission number for equal-priority FIFO order. */
+        public uint64 sequence;
         public bool granted;
         public bool queued = true;
         public SourceFunc resume;
@@ -23,7 +25,15 @@ namespace ImageKit {
         internal const int PRELOAD_PRIORITY = 3;
         private static JobScheduler? instance;
         private Mutex mutex;
-        private Gee.ArrayList<JobTicket> queue = new Gee.ArrayList<JobTicket> ();
+        // A heap avoids re-sorting every queued thumbnail or prefetch request.
+        // An explicit ordinal preserves FIFO for tickets with identical priority.
+        private Gee.PriorityQueue<JobTicket> queue = new Gee.PriorityQueue<JobTicket> ((a, b) => {
+            if (a.priority != b.priority) {
+                return a.priority < b.priority ? -1 : 1;
+            }
+            return a.sequence < b.sequence ? -1 : a.sequence > b.sequence ? 1 : 0;
+        });
+        private uint64 next_sequence;
         private int active;
 
         /** Returns the shared scheduler controlling worker admission and priority. */
@@ -46,8 +56,8 @@ namespace ImageKit {
                 return Source.REMOVE;
             };
             mutex.lock ();
-            queue.add (ticket);
-            queue.sort ((a, b) => a.priority - b.priority);
+            ticket.sequence = next_sequence++;
+            queue.offer (ticket);
             mutex.unlock ();
             ulong handler = cancel.connect (() => {
                 mutex.lock ();
@@ -74,11 +84,18 @@ namespace ImageKit {
 
         /** Admits the next eligible pending worker ticket without violating concurrency limits. */
         private void dispatch () {
-            while (queue.size > 0 && active < 4) {
-                if (queue[0].priority >= THUMBNAIL_PRIORITY && active >= 3) {
+            while (!queue.is_empty && active < 4) {
+                var next = queue.peek ();
+                if (next == null) {
                     return;
                 }
-                var ticket = queue.remove_at (0);
+                if (next.priority >= THUMBNAIL_PRIORITY && active >= 3) {
+                    return;
+                }
+                var ticket = queue.poll ();
+                if (ticket == null) {
+                    return;
+                }
                 active++;
                 ticket.granted = true;
                 ticket.queued = false;

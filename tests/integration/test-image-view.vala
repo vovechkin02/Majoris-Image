@@ -283,6 +283,19 @@ async void verify_view_lifecycle_and_navigation (ImageView view, ImageView other
     }
     view.clear ();
     assert (view.state == ViewState.EMPTY && view.document == null && other.document != null);
+
+    // Loading and disposing multiple independent viewers must release their
+    // documents, metadata and textures without retaining parented widgets.
+    var parent = (Gtk.Box) view.get_parent ();
+    for (int iteration = 0; iteration < 8; iteration++) {
+        var temporary = new ImageView ();
+        parent.append (temporary);
+        yield temporary.load_file (png);
+        assert (temporary.document != null && temporary.metadata != null);
+        parent.remove (temporary);
+        force_dispose (temporary);
+        assert (temporary.document == null && temporary.metadata == null);
+    }
 }
 
 private delegate bool Condition ();

@@ -1,4 +1,13 @@
 namespace ImageKit {
+    public enum RawState {
+        NOT_RAW,
+        RAW_PREVIEW_AVAILABLE,
+        RAW_DEVELOPING,
+        RAW_DEVELOPED,
+        RAW_UNSUPPORTED,
+        RAW_DEVELOPMENT_FAILED,
+    }
+
     public sealed class ImageProbe : Object {
         private const string WIRE_MANAGED = "colour-managed";
         private const string WIRE_DIAGNOSTIC = "colour-diagnostic";

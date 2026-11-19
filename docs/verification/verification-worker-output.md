@@ -62,7 +62,7 @@ advisory and does not control filesystem or host caches. Warm samples
 read the fixture before launching the benchmark process. Peak RSS is the
 Linux process `VmHWM` measured before hashing.
 
-The [raw benchmark samples](benchmarks/worker-output-reader.json) include
+The [raw benchmark samples](../benchmarks/worker-output-reader.json) include
 every measured CPU, allocation, byte-count, read-count, metadata, cancellation,
 and error-outcome field.
 

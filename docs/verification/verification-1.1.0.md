@@ -21,7 +21,7 @@ Build and bridge changes are in `meson.build`, `meson.options`,
 `native/{bridge.h,meson.build}`, `vapi/{image-native,image-vips}.vapi`,
 `src/{core,gtk}/meson.build`, and `debian/{control,rules,changelog}`.
 Test and fixture changes are in `tests/integration/decoders.vala`, `tests/support/make-fixtures.c`, `tests/support/make_formats.py`, `tests/support/make-heif-sequence.c`, `tests/meson.build`, `tests/security/worker-fault.c` and
-`tests/fixtures/`. The [ABI 1 guide](api-2.md) describes format availability,
+`tests/fixtures/`. The [ABI 1 guide](../api-2.md) describes format availability,
 processing limits, integration examples and the physical HDR procedure.
 [Verification for 1.0.1](verification-1.0.1.md) records the prior release.
 

@@ -9,7 +9,7 @@
 
 The additive API is `PreloadManager.with_registry(DecoderRegistry)`. The
 default constructor, existing APIs and SONAMEs remain available. See the
-[ABI 1 guide](api-2.md) for the tile and preload budgets, and
+[ABI 1 guide](../api-2.md) for the tile and preload budgets, and
 [1.1.3 verification](verification-1.1.3.md) for the previous release.
 
 The coverage test enumerates 1080p, 4K, 5K, 8K, shifted 8K and ultrawide

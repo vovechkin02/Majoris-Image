@@ -51,8 +51,8 @@ The generated headers, VAPIs, GIRs, typelibs, and installed pkg-config
 descriptors are byte-identical to the pre-refactor build. The complete dynamic
 export sets and symbol types match, with **285 Core** and **77 GTK** symbols.
 ELF SONAMEs and needed dependencies match. The repository ABI checker passed
-against both [Core](../tests/release/abi2-core.symbols) and
-[GTK](../tests/release/abi2-gtk.symbols) manifests.
+against both [Core](../../tests/release/abi2-core.symbols) and
+[GTK](../../tests/release/abi2-gtk.symbols) manifests.
 
 Core exposes `ImageSource`, `PixelBuffer`, `ImageMetadata`,
 `ImageDocument`, `ImageProbe`, `DecodeOptions`, `RenderOptions`,
@@ -62,7 +62,7 @@ Core exposes `ImageSource`, `PixelBuffer`, `ImageMetadata`,
 `ViewState`, `FitMode`, `ScrollZoomMode`, `PresentationPolicy`, and
 `PresentationStatus` enums. `ImageKit-2.0`, `ImageKitGtk-2.0`,
 `ImageKitView`, and the existing `transformed` signal and property
-notifications remain the public interfaces. The [API guide](api-2.md)
+notifications remain the public interfaces. The [API guide](../api-2.md)
 describes the consumer contract. The compared generated files enumerate its
 methods, properties, signal signatures, and GType identities.
 
@@ -114,7 +114,7 @@ registers the RAW case with a 30-second skip placeholder when the fixture
 directory is unspecified. The extended tests require `extended_tests=true`.
 X11 input tests require Xvfb and XTest. The optional Wayland lifecycle test
 requires `wayland_tests=true` and an active compositor.
-Fixture provenance is recorded in the [fixture guide](../tests/fixtures/README.md).
+Fixture provenance is recorded in the [fixture guide](../../tests/fixtures/README.md).
 
 | Suite | Registered tests with timeouts in seconds |
 | --- | --- |
@@ -140,7 +140,7 @@ This section records the current GoF review; the earlier sections are historical
 refactor evidence. The v1.6 adoption is finite and does not authorize the
 speculative optimization described in the historical deferred-work section.
 See [verification and exceptions](verification-gof-vala.md) and the authoritative
-standard identity in [Contributing](../CONTRIBUTING.md).
+standard identity in [Contributing](../../CONTRIBUTING.md).
 
 | Intent / classification | Actual participants and source | Selection, ownership, and lifetime |
 | --- | --- | --- |

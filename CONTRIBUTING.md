@@ -1,12 +1,14 @@
 # Contributing
 
-Apply Majoris Cross-Project Engineering Standards v1.6 using the
-[versioned repository copy](docs/engineering-standards-v1.6.md) (SHA-256
-`197d6efe4898541d81d21be166ff7b855e7966444eed9e4e305783290df1a3b6`).
+Apply Majoris Cross-Project Engineering Standards v1.7 using the
+[versioned repository copy](docs/engineering-standards-v1.7.md) (SHA-256
+`4caf0e4ddeb61344b7cd7898475d92f581cbea3f1628c0bb880f8a8eb844333f`).
 This pinned copy permits offline development and source-archive review; the
 organization's approved master remains authoritative for future revisions.
-The [project architecture decisions](docs/verification-structural-refactor.md#standards-v16-architecture-contracts)
-and [adoption evidence](docs/verification-gof-vala.md) record its application.
+The [current project architecture decisions](docs/architecture.md)
+and [historical adoption evidence](docs/verification/verification-gof-vala.md) record its application.
+README files also follow the standards v1.7 §15.5 organization-wide template;
+keep format and public API claims sourced from the current implementation.
 
 Prefer `var` for clearly inferred Vala locals and typed collection iteration.
 Keep explicit API signatures, fields, numeric widths/precision, nullable state,

@@ -12,7 +12,7 @@ comparison found a corresponding ABI 2 symbol for all 285 core exports
 and all 77 GTK4 exports from the stock ABI 1 packages. The generated C
 headers and Vala bindings use the new names. The GIR files and typelibs
 are `ImageKit-2.0` and `ImageKitGtk-2.0`. See the
-[API 2 guide](api-2.md) for migration details.
+[API 2 guide](../api-2.md) for migration details.
 
 | Configuration | Result |
 | --- | --- |

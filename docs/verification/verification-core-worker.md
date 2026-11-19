@@ -104,8 +104,8 @@ The benchmark runner records fixture SHA-256, worker executable SHA-256,
 compiler versions, build settings, per-stage counts and times, launch
 counts, byte counts, and observed peak memory. The report artifacts retain
 median stage totals, end-to-end medians, median absolute deviations (MAD),
-and ranges. [Baseline data](benchmarks/core-worker-before.json)
-[Optimized data](benchmarks/core-worker-after.json)
+and ranges. [Baseline data](../benchmarks/core-worker-before.json)
+[Optimized data](../benchmarks/core-worker-after.json)
 
 To reconstruct the instrumented baseline, apply the baseline instrumentation
 patch to a temporary source tree at the baseline revision. Copy the current
@@ -115,8 +115,8 @@ both trees with the same options and RAW directory, build the generated
 fixtures, and run the driver with `--samples 9`. Use `--fault-worker` with the
 built `tests/security/worker-fault` for `cancel` and `fallback`. Pass the build
 worker and benchmark binaries from the same build. The JSON workloads record
-the run modes and fixture identities. [Baseline instrumentation patch](benchmarks/core-worker-baseline.patch)
-[Benchmark commands](TESTING.md#benchmarks)
+the run modes and fixture identities. [Baseline instrumentation patch](../benchmarks/core-worker-baseline.patch)
+[Benchmark commands](../TESTING.md#benchmarks)
 
 | Workload | Before, median ± MAD (ms) | After, median ± MAD (ms) | Sandboxes per sample | Source queries before → after |
 | --- | ---: | ---: | ---: | ---: |

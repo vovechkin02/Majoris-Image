@@ -2,8 +2,8 @@
 
 The baseline is `9b299d2d0678c1e131cefba02971a2bc8e835740`. The native benchmark
 harness was built against the original native sources before either source
-changed. [Baseline JSON](benchmarks/native-memory-before.json) and
-[optimized JSON](benchmarks/native-memory-after.json) contain the fixture
+changed. [Baseline JSON](../benchmarks/native-memory-before.json) and
+[optimized JSON](../benchmarks/native-memory-after.json) contain the fixture
 identity, phase, sample counts, CPU time, RSS, libvips memory counters, output
 sizes, and hashes for the full matrix. The baseline benchmark executable had
 SHA-256 `5ee0cf42f0ec9923067e53dc3316908bfd45d5453806a825a96b410faa970a15`.

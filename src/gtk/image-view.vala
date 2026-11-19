@@ -1,25 +1,5 @@
 [CCode (gir_namespace = "ImageKitGtk", gir_version = "2.0")]
 namespace ImageKit {
-    public enum ViewState {
-        EMPTY, LOADING, PREVIEW_READY, READY, UNSUPPORTED, DECODER_UNAVAILABLE, CORRUPT, CANCELED, ERROR
-    }
-
-    public enum FitMode {
-        CONTAIN, WIDTH, HEIGHT, ACTUAL, COVER, CUSTOM
-    }
-
-    public enum ScrollZoomMode {
-        ALWAYS, CONTROL, DISABLED
-    }
-
-    public enum PresentationPolicy {
-        AUTOMATIC, SDR, HDR_PREFERRED
-    }
-
-    public enum PresentationStatus {
-        NONE, SDR, SDR_TONE_MAPPED, NATIVE_HDR, HDR_UNAVAILABLE, EXTERNAL_UNVERIFIED
-    }
-
     [CCode (cname = "image_texture_new", cheader_filename = "image-texture.h")]
     private extern static Gdk.Texture create_texture (Bytes bytes, int width, int height, size_t stride);
 

@@ -1,11 +1,11 @@
 scheduler_source = configure_file(
-  input: '../../src/core/job-scheduler.vala',
+  input: '../../src/core/execution/job-scheduler.vala',
   output: 'job-scheduler-impl.vala',
   copy: true,
 )
 
 decoder_policy_test_source = configure_file(
-  input: '../../src/core/decoder-policy.vala',
+  input: '../../src/core/decoding/decoder-policy.vala',
   output: 'decoder-policy-test-impl.vala',
   copy: true,
 )
@@ -47,7 +47,7 @@ test('Job scheduling and priorities', scheduler_test, suite: 'unit', timeout: 10
 
 worker_output_reader_test = executable(
   'test-worker-output-reader',
-  ['test-worker-output-reader.c', '../../src/core/worker-output-reader.c'],
+  ['test-worker-output-reader.c', '../../src/core/execution/worker-output-reader.c'],
   dependencies: core_api,
   link_args: [
     '-Wl,--wrap=open,--wrap=open64,--wrap=fstat,--wrap=fstat64',
@@ -83,7 +83,7 @@ endif
 if glycin.found()
   glycin_pixels_test = executable(
     'test-glycin-pixels',
-    ['test-glycin-pixels.c', '../../src/core/glycin-pixels.c'],
+    ['test-glycin-pixels.c', '../../src/core/decoding/glycin-pixels.c'],
     dependencies: [glycin, gio, math],
     link_args: [
       '-Wl,--wrap=gly_frame_get_width',
@@ -117,7 +117,7 @@ render_options_test = executable(
 test('Render recipe copying and compatibility', render_options_test, suite: 'unit')
 
 sniff_stream_source = configure_file(
-  input: '../../src/core/source-sniff-stream.vala',
+  input: '../../src/core/decoding/source-sniff-stream.vala',
   output: 'source-sniff-stream-impl.vala',
   copy: true,
 )
@@ -129,7 +129,7 @@ sniff_stream_test = executable(
 test('Source sniffing stream closure and error precedence', sniff_stream_test, suite: 'unit')
 export_transfer_test = executable(
   'test-export-transfer',
-  ['test-export-transfer.c', '../../src/core/export-transfer.c'],
+  ['test-export-transfer.c', '../../src/core/export/export-transfer.c'],
   dependencies: core_api,
   link_args: [
     '-Wl,--wrap=read,--wrap=write,--wrap=fsync,--wrap=g_close,--wrap=renameat,--wrap=renameat2',

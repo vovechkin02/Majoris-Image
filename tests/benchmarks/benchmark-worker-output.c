@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "../../src/core/worker-output-reader.h"
+#include "../../src/core/execution/worker-output-reader.h"
 #include "majoris-image.h"
 
 typedef ssize_t (*ReadFunction)(int fd, void *buffer, size_t size);

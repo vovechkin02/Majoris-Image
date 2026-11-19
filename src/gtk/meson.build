@@ -2,13 +2,15 @@ gtk = dependency('gtk4', version: '>=4.16')
 gtk_deps = [core_api, gtk, gee, math]
 gtk_flags = ['--shared-library=libmajoris-image-gtk4.so.2', '--hide-internal']
 gtk_decoder_policy_source = configure_file(
-  input: '../core/decoder-policy.vala',
+  input: '../core/decoding/decoder-policy.vala',
   output: 'decoder-policy-impl.vala',
   copy: true,
 )
 
 gtk_library = shared_library(
   'majoris-image-gtk4',
+  'image-view-types.vala',
+  'presentation-types.vala',
   'image-view.vala',
   gtk_decoder_policy_source,
   'animation-controller.vala',

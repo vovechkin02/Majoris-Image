@@ -1,9 +1,9 @@
 # Testing Majoris-Image
 
-The [baseline inventory](test-inventory-2.0.0.md) records the original tests,
+The [baseline inventory](verification/test-inventory-2.0.0.md) records the original tests,
 dependencies, fixtures, and assertion gaps. See the
-[qualification report](verification-test-quality.md) for observed results.
-The [v1.6 adoption evidence](verification-gof-vala.md) records current routing,
+[qualification report](verification/verification-test-quality.md) for observed results.
+The [v1.6 adoption evidence](verification/verification-gof-vala.md) records current routing,
 ownership, ABI, compiler, and matched performance checks. The unit registration
 `Private decoder routing compatibility` protects exact legacy loader identities
 and preserves worker routing for unknown/custom labels. Existing decoder,
@@ -97,7 +97,7 @@ processes cannot reserve their shadow address space there. Keep sandbox
 qualification in the regular build. The sanitizer build exercises the same
 native parsers directly. Strict-warning builds still report existing generated
 Vala C warnings.
-The [final closure report](verification-release-2.0.md) distinguishes clean
+The [final closure report](verification/verification-release-2.0.md) distinguishes clean
 first-party Vala compilation from remaining generated C and XTest deprecation
 failures under repository-wide warnings as errors.
 
@@ -134,7 +134,7 @@ BigTIFF at HD, 4K, 5K, shifted 8K, and ultrawide sizes. It times repeated cache
 calls separately from tile decoding and reports the host process peak RSS. The
 second benchmark requires Xvfb and exercises snapshot construction and progressive
 presentation with one and two mapped viewers at scale 1. For the baseline,
-methodology, and verification results, see [GTK viewport optimization](gtk-viewport-optimization.md).
+methodology, and verification results, see [GTK viewport optimization](verification/gtk-viewport-optimization.md).
 
 Run `meson test -C build --benchmark --verbose` for the registered
 `performance` workloads. Public API workloads use five samples, report median, P95, range,
@@ -168,8 +168,8 @@ meson test -C build --benchmark --verbose 'Sandboxed Glycin loading and conversi
 meson test -C build --benchmark --verbose 'Render recipe copy' 'Render recipe default-comparison'
 ```
 
-See the [render options and Glycin verification report](verification-render-glycin.md)
-and the [16-bit Glycin conversion study](verification-glycin-16bit.md)
+See the [render options and Glycin verification report](verification/verification-render-glycin.md)
+and the [16-bit Glycin conversion study](verification/verification-glycin-16bit.md)
 for the before-and-after measurements.
 
 For a standalone baseline, pass the built benchmark and worker to
@@ -252,7 +252,7 @@ bytes, and temporary objects. Run with the same fixture and `--samples` on
 both revisions for a performance comparison. The JSON includes individual
 native, WebDAV creation, and WebDAV replacement samples. Use a small PNG and
 the generated large TIFF in separate runs.
-See the [non-native export verification](verification-non-native-export.md)
+See the [non-native export verification](verification/verification-non-native-export.md)
 for results and backend limitations.
 
 To measure the first presented RAW preview, use the same runner with
@@ -260,7 +260,7 @@ To measure the first presented RAW preview, use the same runner with
 `xvfb-run -a` with `GDK_BACKEND=x11 GDK_SCALE=1 GSK_RENDERER=cairo`.
 Pass `raw-first=/path/to/350D.CR2`. The `gtk-preview` phase measures the
 first `PREVIEW_READY` notification and the workload ends after the developed
-document is presented. See the [Core and worker verification report](verification-core-worker.md).
+document is presented. See the [Core and worker verification report](verification/verification-core-worker.md).
 
 The native benchmark calls the production MIF1 writer and JPEG XL encoder.
 It uses five samples each for the first and second operation in separate
@@ -303,7 +303,7 @@ python3 tests/benchmarks/benchmark_worker_output.py \
   build/tests/benchmarks/benchmark-worker-output --samples 5 --output worker-output.json
 ```
 
-See [worker output verification](verification-worker-output.md) for the
+See [worker output verification](verification/verification-worker-output.md) for the
 security contract, measured results, and release checks.
 
 ## Installed tests and release qualification

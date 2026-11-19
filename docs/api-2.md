@@ -17,9 +17,11 @@ recipes and worker manifests use `nearest-neighbour` and `colour-managed`.
 
 ## Components
 
-The [private architecture contracts](verification-structural-refactor.md#standards-v16-architecture-contracts)
-describe backend routing, component ownership, and cleanup. These implementation
-details add no public API or worker protocol extension.
+The [current architecture and design decisions](architecture.md) describe
+backend routing, component ownership and cleanup. These implementation details
+add no public API or worker protocol extension. The earlier
+[structural refactoring record](verification/verification-structural-refactor.md)
+is retained as historical verification evidence.
 
 - `majoris-image-1` links the headless GObject API. Native format parsing,
   metadata extraction, orientation, ICC conversion, RAW processing and export
@@ -135,7 +137,7 @@ The backend controls visibility, atomicity, and durability. A transport error
 or cancellation during finalization can occur after the server published the
 file, so the destination state may be uncertain. A write failure can also leave
 partial data on backends that publish buffered bytes during cleanup. Core makes
-one replacement attempt. See the [non-native export verification](verification-non-native-export.md)
+one replacement attempt. See the [non-native export verification](verification/verification-non-native-export.md)
 for WebDAV results and backend limits.
 
 Use `DecoderRegistry.inspect()` for the actual source format and

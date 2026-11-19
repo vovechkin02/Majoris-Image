@@ -11,7 +11,7 @@ native_benchmark = executable(
 )
 worker_output_benchmark = executable(
   'benchmark-worker-output',
-  ['benchmark-worker-output.c', '../../src/core/worker-output-reader.c'],
+  ['benchmark-worker-output.c', '../../src/core/execution/worker-output-reader.c'],
   dependencies: [core_api, c_compiler.find_library('dl')],
   link_args: [
     '-Wl,--wrap=open,--wrap=open64,--wrap=fstat,--wrap=fstat64',
@@ -73,9 +73,10 @@ transfer_benchmark = executable(
   [
     'benchmark-export-transfer.vala',
     'benchmark-export-bytes.c',
-    '../../src/core/export-transfer.c',
+    '../../src/core/export/export-transfer.c',
   ] + remote_publication_sources,
   dependencies: core_api,
+  include_directories: include_directories('../../src/core/export'),
   vala_args: ['--pkg', 'posix', '--define=PROFILE_TIMINGS_ONLY'],
   link_args: [
     '-Wl,--wrap=g_bytes_new_take',

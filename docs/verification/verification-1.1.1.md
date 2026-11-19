@@ -19,7 +19,7 @@ color and provenance. Both libraries retain ABI 1. `nm -D --defined-only`
 on the stock 1.1.0 and 1.1.1 libraries confirmed that all existing exports
 are present. Release metadata and deployment guidance changed in
 `meson.build`, `debian/changelog`, `README.md` and `docs/api-2.md`.
-[ABI and format guide](api-2.md)
+[ABI and format guide](../api-2.md)
 
 ### Security and platform boundaries
 

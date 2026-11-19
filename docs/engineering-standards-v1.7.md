@@ -1,10 +1,11 @@
 # Majoris Cross-Project Engineering Standards
 
-**Document version:** 1.6  
+**Document version:** 1.7  
 **Status:** Organization-wide engineering standard  
 **Applies to:** Majoris applications, reusable libraries, system components, command-line tools, build tooling, tests, and Debian packaging  
 **Primary languages:** C, C++, Vala, Python, Meson, XML, and shell  
 **Language for all original source and documentation:** American English (`en-US`)  
+**Revision 1.7:** Defines a consistent, source-verifiable README structure for all Majoris projects, including real build instructions, supported features and formats, public API and usage references, compatibility, packaging, security, testing, documentation and status. Library, application, service and CLI differences are explicitly accommodated. Preserves all v1.6 GoF and Vala `var` policies.
 **Revision 1.6:** Makes intent-driven Gang of Four (GoF) design-pattern governance enforceable across Majoris repositories, including participant naming, interface and composition boundaries, a complete applicability catalog, architecture review evidence, safe migration, and anti-pattern detection. Establishes Vala `var` as the default for clearly inferred local variables with mandatory explicit-type exceptions for contracts, ownership, nullability, and numeric intent. Preserves the v1.5 testing and GUI geometry rules, the v1.4 formatting policy, and all earlier standards.
 **Revision 1.5:** Adds cross-project rules for test filenames and case names, Meson test names and stable qualification identifiers, meaningful test granularity, and deterministic GUI test-window geometry. Retains the v1.4 multiline formatting rules, v1.3 test structure policy, and all prior standards.
 
@@ -1200,6 +1201,159 @@ Workarounds MUST say which upstream version/bug/constraint caused them and what 
 ### 15.4 Markdown and architecture docs
 
 Use informative headings, short paragraphs, fenced code blocks with language tags, consistent terms, and examples that actually compile against the supported public API. Separate confirmed behavior from platform limitations and optional dependencies.
+
+---
+
+### 15.5 Repository README standard (mandatory)
+
+Every Majoris repository **MUST** provide a root `README.md` written in
+American English. The README is the **current, public entry point** for
+installers, developers, integrators, and reviewers. It MUST explain what the
+project actually provides, how to obtain and build it, and where the
+versioned, authoritative contracts live. It is not a historical audit log, a
+marketing promise, or a dump of every implementation detail.
+
+#### 15.5.1 Canonical order and heading names
+
+Use the following preferred top-level order; retain the headings that apply
+and omit or explicitly mark non-applicable sections rather than creating
+empty placeholders. Repositories MAY adjust wording where their domain
+requires it, but MUST retain the same information in a discoverable location:
+
+1. **Project name** (`# Product Name`) — one accurate, clear description.
+2. **Project metadata** — version, intended platform, maturity/status, license
+   and public API/ABI when applicable; do not substitute the application version
+   for SONAME or protocol version.
+3. **Contents** — a linkable table of contents for nontrivial README files.
+4. **Features** — user/consumer-facing capabilities and important limitations.
+5. **Supported formats / integrations / platforms** — domain-specific support
+   matrix when applicable; for libraries processing files or media, this section
+   is mandatory. For other projects, substitute relevant backends or protocols.
+6. **Requirements and dependencies** — minimum supported platform, toolchain,
+   runtimes, optional components and authoritative package manifest.
+7. **Building and installing** — copyable commands, build options, headless or
+   optional configurations, installation and packaging where provided.
+8. **Quick start / usage** — working minimal examples for principal workflows.
+9. **Public API reference** — mandatory for public libraries and developer
+   SDKs; summarize the public surfaces and link to the detailed versioned API.
+   For apps/services/CLIs, document CLI commands, D-Bus interfaces, service
+   endpoints, user interactions or supported plugin contracts as applicable.
+10. **Architecture and source layout** — concise subsystem and dependency map,
+    with a link to a detailed architecture record if the project needs one.
+11. **Security, resources and compatibility** — trust boundaries, data
+    handling, permissions, runtime requirements, versioned interfaces,
+    migration considerations and material limitations.
+12. **Testing and release qualification** — actual test commands, additional
+    profiles, fixture and hardware requirements, plus qualification caveats.
+13. **Documentation and contribution** — links to existing guides, standards,
+    examples, design decisions and contribution instructions.
+14. **License** — SPDX expression or license identification, local license
+    files, and material third-party or asset provenance.
+
+For a small single-purpose tool, a concise README that visibly covers each
+applicable concern is preferable to 14 empty sections. For a large reusable
+library, the API, supported-format and build sections are not optional.
+
+#### 15.5.2 Features, support claims, and accuracy
+
+- A README **MUST describe implemented behavior**, not future design goals,
+  unresolved tasks, or features known only from a marketing description.
+- State whether format, codec, protocol, hardware, database, integration or
+  platform support is **built in**, **optional**, **runtime-discovered**, or
+  **experimental/unverified**. Do not collapse all into a blanket “supported.”
+- For media or file-processing projects, format tables SHOULD distinguish
+  decode/read, encode/write, animation/multipage, precision/color handling,
+  important restrictions and conditional dependencies. A detailed matrix MAY
+  live in an owned `docs/` file if the README gives a truthful summary and
+  links directly to it.
+- Document the actual supported baseline and minimum version; avoid assuming
+  every available dependency plugin or driver is installed.
+- Distinguish file/metadata capability from hardware display/output
+  qualification. Do not describe a simulated test as physical hardware proof.
+- Separate **current release status** from historical benchmarks and reports.
+  A source archive's included test report MUST NOT imply the modified archive
+  was subsequently tested unless it actually was.
+
+#### 15.5.3 Public API and examples
+
+For a public library or SDK, the README **MUST** document:
+
+- Versioned namespaces/package names, shared-library/SONAME or module names,
+  installed public headers/VAPI/GIR, and the appropriate import syntax.
+- Public entry-point types and methods **by responsibility**, including the
+  principal parameters, asynchronous or error contract, and output type when
+  important to safe use. A readable method index plus a link to a more
+  exhaustive versioned API is acceptable; do not present a private helper as
+  public or claim undocumented signatures.
+- Consumer object lifetimes, transfer semantics, thread/main-context
+  affinity, cancellation and resource limits where they materially affect use.
+- One minimal copyable example per primary consumer workflow, consistent with
+  the current installed API and the supported minimum language version.
+- Public signals/properties, schema keys, CLI flags and extension points as
+  relevant. Do not rename existing public interfaces while changing README
+  terminology; cross-check with headers, VAPI, GIR, CLI help or API tests.
+- A pointer to API migration and ABI compatibility notes if different major
+  versions coexist or old consumers require coordinated upgrades.
+
+For applications, services and CLIs, replace the library API index with the
+appropriate stable user-facing and machine-facing interface documentation.
+Do not invent a public API section when none exists.
+
+#### 15.5.4 Build, installation, and reproduction
+
+- Commands **MUST reflect current** `meson.build`, `meson.options`, Debian
+  metadata, and actual executable/target names. Do not paste commands from
+  another repository or include nonexistent options.
+- Show a basic local build and installation workflow, plus headless, optional
+  feature, development and packaging variants where they exist.
+- Mark the actual minimum and preferred dependency versions, including where
+  optional components can be absent, and link to the authoritative dependency
+  manifest rather than duplicating a long list liable to drift.
+- State if an in-tree executable requires a special worker/service path or
+  environment variable. Do not require an undocumented internet download,
+  privileged command or developer-specific absolute path to perform a build.
+- Distinguish source builds from published binary installations, packaging
+  qualification and project-specific prerequisites. Avoid presenting a
+  release publication command as a successful verification of that release.
+
+#### 15.5.5 Links, maintenance, and source of truth
+
+- `README.md` MUST use working, repository-relative Markdown links for local
+  files. Do not depend on one developer's Downloads directory or a temporary
+  workstation path. External links SHOULD be stable and relevant.
+- Link to **one current architecture document**, **one current API contract**
+  per version where applicable, and the current standards. Store historical
+  verification and milestone records separately from current documentation.
+- Before release, cross-check README version, package names, feature switches,
+  documented public calls and support tables against the source/build tree.
+- When a change modifies a public method, supported format, runtime
+  requirement, build option, CLI, settings contract, or installation path,
+  update the README or its linked authoritative guide **in the same change**.
+- Avoid duplicating exhaustive API specifications in multiple places; the
+  README provides a navigable, accurate public index and links to the detailed
+  reference. Do not invent benchmark values, CI outcomes or compatibility
+  claims without recorded evidence.
+- Markdown headings should be stable, descriptive and linkable; use fenced
+  blocks with correct language tags, copyable commands, and readable tables.
+  Images and badges are optional, never substitutes for factual text.
+
+#### 15.5.6 README review checklist
+
+A release or large structural change **MUST** review the README against:
+
+- [ ] Project metadata is current and distinguishes product/API/ABI versions.
+- [ ] Features and supported integrations are actually implemented.
+- [ ] Optional support is clearly labeled and discoverable at runtime.
+- [ ] Toolchain, dependencies, build options and packaging commands exist.
+- [ ] Public interfaces, signatures, examples and links match installed APIs.
+- [ ] Resource, ownership, cancellation and security constraints are stated.
+- [ ] Local Markdown links resolve after file moves.
+- [ ] Tests and qualification are described without claiming unrun checks.
+- [ ] Architecture/contribution/standards references are current.
+- [ ] License and material third-party provenance are accurately identified.
+
+These checks apply across all Majoris projects; format- and codec-specific
+facts belong in each owning repository, **not** in this cross-project policy.
 
 ---
 

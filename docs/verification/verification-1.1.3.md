@@ -18,7 +18,7 @@ appended after the existing ones. GtkBuilder uses the enum nicknames
 `always`, `control` and `disabled`. Existing SONAMEs remain ABI 1.
 The GTK library now delegates Glycin frame handling to Core and no longer
 links the Glycin GTK bridge. XTest is used solely by the test executable.
-See the [ABI 1 guide](api-2.md) for XML and Vala usage,
+See the [ABI 1 guide](../api-2.md) for XML and Vala usage,
 shortcuts, texture contracts and a physical HDR procedure.
 
 The two Xvfb tests send synthetic X11 events through GTK at monitor scale

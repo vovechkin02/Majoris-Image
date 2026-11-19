@@ -11,7 +11,7 @@
 
 #include <glib/gstdio.h>
 
-#include "export-transfer.h"
+#include "../../src/core/export/export-transfer.h"
 #include "majoris-image.h"
 
 #define CHUNK_BYTES (256 * 1024)

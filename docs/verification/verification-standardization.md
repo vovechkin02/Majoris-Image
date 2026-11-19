@@ -148,7 +148,7 @@ an installed JPEG gain-map round trip. CI contains the clean APT install,
 removal, and reinstall checks. An APT upgrade from a previously published
 ABI 1 or old-name ABI 2 package set was not exercised locally.
 
-The pinned style commands in [CONTRIBUTING.md](../CONTRIBUTING.md), Python
+The pinned style commands in [CONTRIBUTING.md](../../CONTRIBUTING.md), Python
 syntax compilation with `python3 -m compileall -q tests`, `sh -n` for test
 and Debian shell scripts, and ElementTree parsing of the GTK UI and resource
 XML passed. Meson 1.4.2 configured and compiled successfully.

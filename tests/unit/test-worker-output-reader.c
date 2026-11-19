@@ -10,7 +10,7 @@
 
 #include <glib/gstdio.h>
 
-#include "../../src/core/worker-output-reader.h"
+#include "../../src/core/execution/worker-output-reader.h"
 #include "majoris-image.h"
 
 #define CHUNK_BYTES (256 * 1024)

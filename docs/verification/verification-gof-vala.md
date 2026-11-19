@@ -8,7 +8,7 @@ The user requested implementation of the supplied adoption task and engineering
 standard. Their contents are adopted task requirements, not independent user
 messages. Compatibility and the task's stop/revert rules take precedence over
 cosmetic changes. The authoritative standard is identified in
-[Contributing](../CONTRIBUTING.md); it is not copied into the repository.
+[Contributing](../../CONTRIBUTING.md); it is not copied into the repository.
 The [architecture review](verification-structural-refactor.md#standards-v16-architecture-contracts)
 records actual participants, ownership, selection, non-applicable patterns,
 dependency direction, and retained token boundaries.
@@ -132,7 +132,7 @@ RSS. Timing units are shown per row; RSS is KiB. Viewer RSS covers its whole
 one/two-view benchmark process, not a single snapshot. Detailed ranges, raw
 samples, cold/warm worker reads, all native transfer sizes, viewport plans,
 worker launches, hashes, and commands are in
-[the evidence](benchmarks/gof-vala-adoption.json).
+[the evidence](../benchmarks/gof-vala-adoption.json).
 
 | Workload | Baseline / final median | Baseline / final MAD | Baseline / final peak RSS |
 | --- | --- | --- | --- |

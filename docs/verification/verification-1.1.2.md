@@ -11,7 +11,7 @@ See [1.1.3 widget verification](verification-1.1.3.md) for the current release.
 | Integration and security | The existing public consumers retain their independent viewer and worker lifetimes. The installed stress test alternates sources while a separate process requests thumbnails and checks the private temporary directory after both finish. Timeline arithmetic and allocations have fixed budgets and remain in Bubblewrap. | `examples/files-preview.vala`, `tests/release/installed_consumers.py`, `native/sequences.c` |
 | Distribution | Git records executable Debian rules. Source tarballs retain the mode through extraction. Both package profiles keep the same ABI and package names. | `debian/{rules,changelog,control}`, `meson.build`, `README.md` |
 
-The [ABI 1 guide](api-2.md) includes the format matrix and a physical HDR
+The [ABI 1 guide](../api-2.md) includes the format matrix and a physical HDR
 procedure. The [1.1.1 verification](verification-1.1.1.md) gives background
 on ICC, animation, and presentation policies. This release makes no public
 API or SONAME changes.

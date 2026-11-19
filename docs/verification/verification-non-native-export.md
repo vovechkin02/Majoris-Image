@@ -22,7 +22,7 @@ to preserve compatibility and report the backend's final result.
 The optional loopback probe exercises the public encoder with native and
 WebDAV sources. It captures descriptor identity and timestamps, worker exit
 status, client error details, and the server's request history and stored
-output. See [Testing](TESTING.md) for commands.
+output. See [Testing](../TESTING.md) for commands.
 
 ### Source protection results
 
@@ -493,7 +493,7 @@ the whole qualification in that view failed the supplementary-group test
 because the isolation changed the group mapping. The same test passed
 when rerun on the host.
 
-The [WebDAV runner commands](TESTING.md) reproduce the transfer, fault, and
+The [WebDAV runner commands](../TESTING.md) reproduce the transfer, fault, and
 public API checks. The six measured sizes used `--samples 3 --skip-faults`
 with one size per session. The fault and public API run used
 `--samples 1 --sizes 1024 1048576 --formats png tiff jxl uhdr`, with

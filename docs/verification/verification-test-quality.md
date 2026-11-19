@@ -1,7 +1,7 @@
 # Majoris-Image test-quality verification
 
 The [baseline inventory](test-inventory-2.0.0.md) records the original suite
-and its gaps. The [test guide](TESTING.md) provides reproduction commands.
+and its gaps. The [test guide](../TESTING.md) provides reproduction commands.
 
 ## Coverage and regression fixes
 

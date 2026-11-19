@@ -163,7 +163,7 @@ and worker with baseline/final Core selected by `LD_LIBRARY_PATH`. Three batches
 of three samples per phase alternate order. Each render launches one worker.
 The initial 20-sample runs, including reported P95, CPU, host/worker RSS, phase
 timing, range and variability, are retained in the
-[machine-readable evidence](benchmarks/release-closure.json). Their large-image
+[machine-readable evidence](../benchmarks/release-closure.json). Their large-image
 wall times were affected by concurrent qualification; they are not attributed
 to source-stamp cost.
 

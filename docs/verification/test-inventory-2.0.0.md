@@ -1,7 +1,7 @@
 # Baseline test inventory
 
 This historical inventory retains the names and paths recorded at the time.
-See [current test commands](TESTING.md) for the sentence-case registrations.
+See [current test commands](../TESTING.md) for the sentence-case registrations.
 
 The original tests ran by default with testing enabled unless a row says otherwise.
 Meson bounded every command (30 seconds by default). The source tree supplied

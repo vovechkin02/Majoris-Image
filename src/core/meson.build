@@ -1,30 +1,31 @@
-remote_publication_sources = files('non-native-publication.vala', 'operation-profile.vala')
+remote_publication_sources = files('export/non-native-publication.vala', 'operation-profile.vala')
 core_sources = files(
   'image-error.vala',
   'image-source.vala',
-  'source-sniff-stream.vala',
+  'decoding/source-sniff-stream.vala',
   'pixel-buffer.vala',
   'image-metadata.vala',
   'image-document.vala',
-  'decoder-backend.vala',
-  'decoder-policy.vala',
-  'image-probe.vala',
-  'decoder-registry.vala',
-  'glycin-fallback.vala',
-  'encoder-registry.vala',
-  'export-transfer.c',
+  'decoding/decoder-types.vala',
+  'decoding/decoder-backend.vala',
+  'decoding/decoder-policy.vala',
+  'decoding/image-probe.vala',
+  'decoding/decoder-registry.vala',
+  'decoding/glycin-fallback.vala',
+  'export/encoder-registry.vala',
+  'export/export-transfer.c',
   'render-options.vala',
-  'export-options.vala',
-  'thumbnail-service.vala',
+  'export/export-options.vala',
+  'thumbnail/thumbnail-service.vala',
   'preload-manager.vala',
-  'job-scheduler.vala',
-  'decode-options.vala',
-  'worker-request.vala',
-  'worker-client.vala',
-  'worker-output-reader.c',
-  'worker-failure.vala',
-  'worker-path.c',
-  'thumbnail-png.c',
+  'execution/job-scheduler.vala',
+  'decoding/decode-options.vala',
+  'execution/worker-request.vala',
+  'execution/worker-client.vala',
+  'execution/worker-output-reader.c',
+  'execution/worker-failure.vala',
+  'execution/worker-path.c',
+  'thumbnail/thumbnail-png.c',
   'capability-contract.c',
 ) + remote_publication_sources
 core_dependencies = [gio, gee, json, math, dependency('zlib')]
@@ -38,14 +39,14 @@ core_vala_args = [
 ] + render_options_vala_args
 if glycin.found()
   core_dependencies += [glycin]
-  core_sources += files('glycin-pixels.c', '../../native/glycin-discovery.c')
+  core_sources += files('decoding/glycin-pixels.c', '../../native/glycin-discovery.c')
   core_vala_args += ['--define=HAVE_GLYCIN']
 endif
 core_library = shared_library(
   'majoris-image',
   core_sources,
   dependencies: core_dependencies,
-  include_directories: include_directories('../..', '../../native'),
+  include_directories: include_directories('../..', '../../native', 'execution', 'export'),
   version: meson.project_version(),
   soversion: '2',
   install: true,
@@ -79,13 +80,14 @@ core_api = declare_dependency(
 )
 worker_contract = files(
   'image-error.vala',
-  'decoder-backend.vala',
-  'image-probe.vala',
+  'decoding/decoder-types.vala',
+  'decoding/decoder-backend.vala',
+  'decoding/image-probe.vala',
   'render-options.vala',
-  'export-options.vala',
-  'decode-options.vala',
-  'worker-request.vala',
-  'worker-failure.vala',
+  'export/export-options.vala',
+  'decoding/decode-options.vala',
+  'execution/worker-request.vala',
+  'execution/worker-failure.vala',
 )
 pkg.generate(
   core_library,

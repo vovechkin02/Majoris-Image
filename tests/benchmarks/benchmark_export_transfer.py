@@ -13,6 +13,7 @@ from run_benchmarks import codec_versions, measure
 
 
 def make_fixture(path: Path, size: int) -> str:
+    """Creates a deterministic large export input with reproducible byte content."""
     digest = hashlib.sha256()
     pattern = random.Random(12345)
     with path.open("wb") as output:
@@ -24,6 +25,7 @@ def make_fixture(path: Path, size: int) -> str:
 
 
 def summarize(samples: list[dict], size: int) -> dict:
+    """Summarizes measured transfer duration and process memory for comparison."""
     phase_names = set.intersection(*(set(sample["phases"]) for sample in samples))
     median_us = {
         name: statistics.median(sample["phases"][name]["us"] for sample in samples)
@@ -54,6 +56,7 @@ def compare(
     count: int,
     suffix: str = "",
 ) -> dict:
+    """Compares baseline and candidate export transfers under identical fixtures."""
     fixture = root / "encoded"
     digest = make_fixture(fixture, size)
     workloads = {
@@ -77,6 +80,7 @@ def compare(
 
 def measure_cancellation(executable: Path, root: Path, count: int) -> dict:
     # The last workload leaves the 256 MiB fixture in place.
+    """Measures how quickly the export path stops after cancellation."""
     expected = hashlib.sha256(b"existing").hexdigest()
     fixture = str(root / "encoded")
     result = {}
@@ -96,6 +100,7 @@ def measure_cancellation(executable: Path, root: Path, count: int) -> dict:
 
 
 def measure_rejection(executable: Path, root: Path, count: int) -> dict:
+    """Confirms rejected output is not published or retained after validation fails."""
     fixture = root / "changed-source"
     expected = hashlib.sha256(b"existing").hexdigest()
     mode = "transfer-stream-changed"
@@ -119,6 +124,7 @@ def measure_rejection(executable: Path, root: Path, count: int) -> dict:
 
 
 def main() -> int:
+    """Parses benchmark options, runs the selected transfer cases, and writes results."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("--previous-executable", type=Path)

@@ -8,18 +8,21 @@
 // libheif exposes the repeat classification, but its C API does not
 // expose composition offsets or edit playback rates. Check only those
 // declarations on the chosen track; libheif still owns timeline decoding.
+/** Parsed ISO BMFF box boundaries used to validate nested timing metadata. */
 typedef struct {
     uint64_t payload;
     uint64_t end;
     uint32_t type;
 } SequenceBox;
 
+/** Reads exactly the requested bounded byte range from a source file. */
 static gboolean read_at(FILE *file, uint64_t offset, void *data, size_t length)
 {
     return offset <= G_MAXINT64 && fseeko(file, (off_t)offset, SEEK_SET) == 0 &&
            fread(data, 1, length, file) == length;
 }
 
+/** Parses the next bounded ISO BMFF box without crossing the parent box boundary. */
 static int next_box(FILE *file, uint64_t end, uint64_t *offset, SequenceBox *box, unsigned *budget)
 {
     if (*offset == end) {
@@ -54,6 +57,7 @@ static int next_box(FILE *file, uint64_t end, uint64_t *offset, SequenceBox *box
     return 1;
 }
 
+/** Searches a bounded ISO BMFF box hierarchy for the requested child type. */
 static int find_box(FILE *file, SequenceBox parent, uint32_t type, SequenceBox *found,
                     unsigned *budget)
 {
@@ -65,6 +69,7 @@ static int find_box(FILE *file, SequenceBox parent, uint32_t type, SequenceBox *
     }
 }
 
+/** Converts edit-list entries to a validated sequence of presentation intervals. */
 static gboolean build_edit_frames(FILE *file, SequenceBox list, SequenceBox table,
                                   uint32_t movie_scale, uint32_t track_scale,
                                   uint64_t movie_duration, GArray *frames, gboolean *uses_libheif,
@@ -229,6 +234,7 @@ static gboolean build_edit_frames(FILE *file, SequenceBox list, SequenceBox tabl
     return frames->len > 0;
 }
 
+/** Validates the chosen track timing and edit-list interpretation. */
 static gboolean verify_timing_boxes(FILE *file, SequenceBox track, unsigned *budget,
                                     uint32_t movie_scale, uint32_t track_scale,
                                     uint64_t movie_duration, GArray *frames, gboolean *uses_libheif)
@@ -270,6 +276,7 @@ static gboolean verify_timing_boxes(FILE *file, SequenceBox track, unsigned *bud
                              uses_libheif, budget);
 }
 
+/** Validates AVIF/HEIF presentation timing against container declarations. */
 gboolean sequence_verify_track_timing(const char *path, uint32_t track_id, uint32_t movie_scale,
                                       uint32_t track_scale, uint64_t movie_duration, GArray *frames,
                                       gboolean *uses_libheif)

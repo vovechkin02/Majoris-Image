@@ -35,6 +35,7 @@ G_IO_ERROR_CANCELLED = 19
 
 
 def digest(path: Path) -> str:
+    """Returns the SHA-256 digest of a fixture or published destination file."""
     with path.open("rb") as contents:
         return hashlib.file_digest(contents, "sha256").hexdigest()
 
@@ -61,7 +62,11 @@ def make_png(reference: Path, output: Path, size: int) -> str:
 
 
 class DavServer(ThreadingHTTPServer):
+    """Serves a controllable WebDAV destination for remote publication experiments."""
     def __init__(self, store: Path, previous: bytes):
+        """Initializes the loopback server state, request log, and publication
+        synchronization.
+        """
         super().__init__(("127.0.0.1", 0), DavHandler)
         self.store = store
         self.previous = previous
@@ -76,17 +81,22 @@ class DavServer(ThreadingHTTPServer):
 
     @property
     def uri(self) -> str:
+        """Returns the GVfs-compatible DAV URI for this loopback server."""
         return f"dav://127.0.0.1:{self.server_port}"
 
 
 class DavHandler(BaseHTTPRequestHandler):
+    """Implements a minimal WebDAV request handler with deterministic fault injection."""
     def log_request(self, code="-", size="-"):
+        """Records incoming WebDAV methods, paths, and response codes for analysis."""
         self.server.requests.append((self.command, self.path, str(code)))
 
     def target(self, uri: str) -> Path:
+        """Maps a DAV URI to the isolated test storage location."""
         return self.server.store / Path(urlsplit(uri).path).name
 
     def respond(self, status: int, content: bytes = b"", **headers: str) -> None:
+        """Writes a WebDAV HTTP response including optional headers and payload."""
         self.send_response(status)
         self.send_header("Content-Length", str(len(content)))
         for name, value in headers.items():
@@ -96,11 +106,13 @@ class DavHandler(BaseHTTPRequestHandler):
             self.wfile.write(content)
 
     def do_OPTIONS(self):
+        """Advertises the WebDAV methods supported by the controlled fixture."""
         self.respond(
             200, DAV="1", Allow="OPTIONS, PROPFIND, HEAD, GET, PUT, MOVE, DELETE"
         )
 
     def do_PROPFIND(self):
+        """Returns collection or resource metadata for GVfs discovery."""
         self.rfile.read(int(self.headers.get("Content-Length", "0")))
         file = self.target(self.path)
         directory = urlsplit(self.path).path == "/"
@@ -117,6 +129,7 @@ class DavHandler(BaseHTTPRequestHandler):
         self.respond(207, xml.encode(), Content_Type="application/xml")
 
     def do_GET(self):
+        """Serves stored source bytes to the remote-file client."""
         file = self.target(self.path)
         if not file.is_file():
             self.respond(404)
@@ -131,12 +144,14 @@ class DavHandler(BaseHTTPRequestHandler):
     do_HEAD = do_GET
 
     def do_PUT(self):
+        """Receives a WebDAV upload and records partial/faulted publication state."""
         try:
             self.publish()
         finally:
             self.server.put_finished.set()
 
     def publish(self):
+        """Coordinates the final upload step with server-side fault injection."""
         target = self.target(self.path)
         fault = self.server.fault
         if fault != "cancel-after-server-commit":
@@ -191,12 +206,16 @@ class DavHandler(BaseHTTPRequestHandler):
         self.respond(status)
 
     def do_MOVE(self):
+        """Handles WebDAV rename/replace requests during atomic-style publication."""
         try:
             self.promote()
         finally:
             self.server.move_finished.set()
 
     def promote(self):
+        """Moves staged bytes to their final destination as a controlled WebDAV
+        operation.
+        """
         self.server.move_started.set()
         if self.server.fault in ("move-denied", "cleanup-denied"):
             self.respond(403)
@@ -209,6 +228,7 @@ class DavHandler(BaseHTTPRequestHandler):
         self.respond(204)
 
     def do_DELETE(self):
+        """Removes a stored WebDAV resource on request."""
         if self.server.fault == "cleanup-denied":
             self.respond(403)
             return
@@ -217,6 +237,7 @@ class DavHandler(BaseHTTPRequestHandler):
 
 
 def backend_pids() -> set[int]:
+    """Finds backend child processes contributing to the active remote operation."""
     result = subprocess.run(
         ["ps", "-C", "gvfsd-dav", "-o", "pid="], capture_output=True, text=True
     )
@@ -224,6 +245,7 @@ def backend_pids() -> set[int]:
 
 
 def backend_rss(pid: int) -> int:
+    """Measures resident memory associated with GVfs backend processes."""
     try:
         for line in Path(f"/proc/{pid}/status").read_text().splitlines():
             if line.startswith("VmRSS:"):
@@ -234,6 +256,7 @@ def backend_rss(pid: int) -> int:
 
 
 def mount(dav: DavServer) -> None:
+    """Mounts a loopback DAV share for the duration of the measurement context."""
     previous_pids = backend_pids()
     subprocess.run(["gio", "mount", dav.uri], check=True, timeout=20)
     (dav.backend_pid,) = backend_pids() - previous_pids
@@ -242,6 +265,7 @@ def mount(dav: DavServer) -> None:
 def collect(
     command: list, environment: dict, dav: DavServer, worker: Path | None = None
 ) -> dict:
+    """Runs repeated remote-export samples while collecting resource usage."""
     backend_idle = backend_peak = backend_rss(dav.backend_pid)
     worker_peak = disk_peak = server_peak = 0
     cancel_at = None
@@ -319,6 +343,7 @@ def collect(
 
 
 def readback(uri: str, path: Path) -> str:
+    """Reads published destination bytes to verify the committed file."""
     url = "http:" + uri.removeprefix("dav:")
     with urlopen(url, timeout=20) as response, path.open("wb") as output:
         shutil.copyfileobj(response, output, CHUNK_BYTES)
@@ -335,6 +360,7 @@ def sample(
     launcher: Path | None = None,
     remote_source: Path | None = None,
 ) -> dict:
+    """Runs one remote publication trial and records timing, memory, and outcomes."""
     for path in dav.store.iterdir():
         path.unlink()
     dav.requests.clear()
@@ -398,6 +424,7 @@ def sample(
 def successful_samples(
     args: argparse.Namespace, dav: DavServer, root: Path, size: int
 ) -> dict:
+    """Measures successful WebDAV publication using an isolated destination."""
     results = {}
     fixture = root / "encoded.png"
     expected = make_png(args.png, fixture, size)
@@ -438,6 +465,7 @@ def successful_samples(
 
 
 def summarize(samples: list[dict], size: int) -> dict:
+    """Summarizes remote-publication timings, RSS, and relevant error statistics."""
     durations = [run["phases"]["workload"]["us"] for run in samples]
     return {
         "median_workload_us": statistics.median(durations),
@@ -452,6 +480,7 @@ def summarize(samples: list[dict], size: int) -> dict:
 
 
 def failure_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
+    """Probes write and close-time error propagation under controlled failures."""
     fixture = root / "encoded.png"
     complete = make_png(args.png, fixture, 16 * MIB)
     previous = hashlib.sha256(dav.previous).hexdigest()
@@ -522,6 +551,7 @@ def failure_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dic
 
 
 def stream_faults(args: argparse.Namespace, root: Path) -> dict:
+    """Injects stream interruption and publication faults into the DAV server."""
     fixture = root / "encoded.png"
     make_png(args.png, fixture, MIB)
     cases = {
@@ -555,6 +585,7 @@ def stream_faults(args: argparse.Namespace, root: Path) -> dict:
 
 
 def decode(path: Path, root: Path) -> dict:
+    """Decodes or analyzes a measured response into its diagnostic fields."""
     fields = ("vips-loader", "width", "height", "bands", "format")
     decoded = {
         field: subprocess.check_output(
@@ -578,6 +609,7 @@ def decode(path: Path, root: Path) -> dict:
 
 
 def public_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
+    """Exercises the public ImageKit export interface against the DAV backend."""
     results = {}
     for format_name in args.formats:
         operation = f"export-{format_name}"
@@ -636,6 +668,7 @@ def public_samples(args: argparse.Namespace, dav: DavServer, root: Path) -> dict
 
 
 def public_faults(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
+    """Checks public API behavior when WebDAV publication fails."""
     cases = [
         ("export-png", "", 0, True),
         ("export-png", "forbidden", 1, False),
@@ -694,6 +727,7 @@ def public_faults(args: argparse.Namespace, dav: DavServer, root: Path) -> dict:
 
 
 def source_metadata(info: os.stat_result) -> dict:
+    """Captures the source identity used by mutation and freshness cases."""
     return {
         "device": info.st_dev,
         "inode": info.st_ino,
@@ -704,6 +738,7 @@ def source_metadata(info: os.stat_result) -> dict:
 
 
 def mutate_source(source: Path) -> None:
+    """Mutates a source under controlled timing to challenge freshness checks."""
     with source.open("ab") as output:
         output.write(b"x")
 
@@ -711,6 +746,7 @@ def mutate_source(source: Path) -> None:
 def launch_source_probe(
     bwrap: str, scenario: str, name: str, report: str, arguments: list[str]
 ) -> int:
+    """Starts a source probe and coordinates an in-flight modification."""
     source = Path(name)
     expected = source_metadata(source.stat())
     binding = arguments.index("--ro-bind-fd")
@@ -777,6 +813,7 @@ def launch_source_probe(
 def protected_source_cases(
     args: argparse.Namespace, dav: DavServer, root: Path
 ) -> dict:
+    """Checks that source replacement or aliasing does not bypass export protection."""
     bwrap = shutil.which("bwrap")
     if bwrap is None:
         raise RuntimeError("Bubblewrap is required for the protected source cases")
@@ -886,6 +923,7 @@ def protected_source_cases(
 
 @contextmanager
 def loopback_mount(root: Path, previous: bytes) -> Iterator[DavServer]:
+    """Provides an isolated DAV server and mounted source for the measurement."""
     with (
         tempfile.TemporaryDirectory(dir=root) as store,
         DavServer(Path(store), previous) as dav,
@@ -907,6 +945,7 @@ def loopback_mount(root: Path, previous: bytes) -> Iterator[DavServer]:
 
 
 def run(args: argparse.Namespace) -> dict:
+    """Runs the complete remote-export measurement and fault-injection matrix."""
     workloads = {}
     previous = args.png.read_bytes()
     with tempfile.TemporaryDirectory(prefix="imagekit-webdav-") as directory:
@@ -951,6 +990,7 @@ def run(args: argparse.Namespace) -> dict:
 
 
 def main() -> int:
+    """Parses remote-export benchmark arguments and reports measurements."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=lambda path: Path(path).resolve())
     parser.add_argument("png", type=Path, help="Reference PNG smaller than 1 KiB")

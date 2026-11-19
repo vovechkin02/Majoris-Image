@@ -6,6 +6,10 @@
 
 /* Compose EXIF's signed permutation with the requested clockwise quarter turns.
  * This never creates a pixel buffer, crops an edge, or quantizes coefficients. */
+/**
+ * Applies a perfect JPEG coefficient transform without recompression.
+ * Rejects partial MCU transforms.
+ */
 gboolean
 image_jpeg_transform(const char *source, const char *target, int orientation, int turns,
                      int *width, int *height, GError **error)

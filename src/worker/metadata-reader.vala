@@ -1,5 +1,7 @@
 namespace ImageKit {
+    /** Extracts and normalizes metadata from decoded source images. */
     public class MetadataReader : Object {
+        /** Reports detected color-space information and conversion diagnostics. */
         internal static string color_probe (string path) throws Error {
             var output = new Json.Object ();
             var input = File.new_for_path (path).read ();
@@ -101,6 +103,10 @@ namespace ImageKit {
         }
 
         // Only called in the isolated worker. Missing optional tags are omitted.
+        /**
+         * Extracts metadata from decoded image content under the worker trust boundary. Errors
+         * propagate to the caller.
+         */
         public static Json.Object read (string path, int page = 0, int hdr_hint = -1,
             ImageProbe? inspected = null, Vips.Image? prepared = null) throws Error {
             var probe = inspected ?? ImageInspector.inspect (path, hdr_hint, page);
@@ -210,6 +216,7 @@ namespace ImageKit {
             return output;
         }
 
+        /** Adds normalized metadata fields to the decoder probe. */
         internal static void update_probe_metadata (string source, DecodeOptions options,
                                                     int hdr_hint, ImageProbe probe,
                                                     Vips.Image? prepared) throws Error {

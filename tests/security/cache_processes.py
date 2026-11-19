@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 def pixel_payload(png: bytes) -> bytes:
+    """Creates deterministic pixel-buffer bytes for cache process fixtures."""
     payload = []
     offset = 8
     while offset + 12 <= len(png):
@@ -39,12 +40,14 @@ def corrupt_idat(png: bytes) -> bytearray:
 
 
 def stop_process(process: subprocess.Popen) -> None:
+    """Terminates a fixture process group and waits for cleanup."""
     if process.poll() is None:
         process.kill()
     process.communicate(timeout=10)
 
 
 def main() -> int:
+    """Runs cache concurrency and publication tests using isolated worker processes."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("thumbnailer", type=Path)
     parser.add_argument("fixture", type=Path)
@@ -79,9 +82,11 @@ def main() -> int:
         shutil.copyfile(fixture, source)
 
         def count():
+            """Counts observable cache and worker process events during the test."""
             return len(log.read_text().splitlines()) if log.exists() else 0
 
         def launch(name, edge=64, delay=0, **overrides):
+            """Starts a cache fixture process in the required isolated environment."""
             process = subprocess.Popen(
                 [thumbnailer, source.as_uri(), str(root / (name + ".png")), str(edge)],
                 env=dict(env, CACHE_TEST_DELAY=str(delay), **overrides),
@@ -91,12 +96,14 @@ def main() -> int:
             return process
 
         def wait_for_starts(target):
+            """Waits for the expected number of concurrent fixture starts."""
             end = time.monotonic() + 5
             while count() < target and time.monotonic() < end:
                 time.sleep(0.02)
             assert count() == target
 
         def finish(proc, succeeds=True):
+            """Completes or cancels concurrent fixtures and verifies publication state."""
             _, err = proc.communicate(timeout=10)
             assert (proc.returncode == 0) == succeeds, err.decode(errors="replace")
 

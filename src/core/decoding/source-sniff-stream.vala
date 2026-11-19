@@ -1,5 +1,6 @@
 namespace ImageKit {
     // Owns the close after a sniffing read, including failed and canceled reads.
+    /** Reads a bounded prefix of the source stream for format signature recognition. */
     internal async Bytes? read_sniff_stream (InputStream stream, size_t count, int priority,
         Cancellable stop, bool from_end = false) throws Error {
         Bytes? bytes = null;

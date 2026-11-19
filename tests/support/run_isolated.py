@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 def run(arguments: list[str]) -> int:
+    """Executes the requested command in an isolated child process group."""
     root = Path(tempfile.mkdtemp(prefix="imagekit-test-"))
     env = dict(os.environ, IMAGEKIT_TEST_ROOT=str(root))
     for name in (
@@ -36,6 +37,7 @@ def run(arguments: list[str]) -> int:
     process = None
 
     def interrupted(signum, _frame):
+        """Forwards termination to children so isolation cleanup completes."""
         raise SystemExit(128 + signum)
 
     signal.signal(signal.SIGTERM, interrupted)
@@ -64,6 +66,7 @@ def run(arguments: list[str]) -> int:
 
 
 def main() -> int:
+    """Parses isolated-runner arguments and reports child exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("command", nargs=argparse.REMAINDER)

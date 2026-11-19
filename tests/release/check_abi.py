@@ -15,6 +15,7 @@ GLYCIN_ONLY = {
 
 
 def command(*args: str | Path) -> str:
+    """Executes a symbol inspection command and returns its captured output."""
     return subprocess.check_output(args, text=True, timeout=15)
 
 
@@ -24,6 +25,9 @@ def check(
     baseline: Path,
     optional: set[str] | frozenset[str] = frozenset(),
 ) -> set[str]:
+    """Compares an installed library symbol inventory against its versioned ABI
+    baseline.
+    """
     dynamic = command("readelf", "-d", library)
     if re.findall(r"\(SONAME\).*\[(.*?)\]", dynamic) != [soname]:
         raise SystemExit(f"{library}: expected SONAME {soname}")
@@ -44,6 +48,7 @@ def check(
 
 
 def main() -> int:
+    """Parses library arguments and reports ABI compatibility failures."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("core", type=Path)
     parser.add_argument("gtk", type=Path, nargs="?")

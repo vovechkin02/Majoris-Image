@@ -8,11 +8,13 @@
 #include <avif/avif.h>
 #endif
 
+/** Collection context for deterministic codec catalog construction. */
 typedef struct {
     JsonBuilder *builder;
     gboolean encoder;
 } CodecCatalogContext;
 
+/** Stable table mapping native libvips loaders to advertised capabilities. */
 static const struct NativeLoader {
     const char *operation;
     const char *mimes;
@@ -95,6 +97,7 @@ static const struct NativeLoader {
     },
 };
 
+/** Adds supported MIME types and flags for a concrete codec family. */
 static void add_format_capabilities(JsonBuilder *builder, const char *mimes, unsigned capabilities)
 {
     json_builder_set_member_name(builder, "mime-types");
@@ -115,6 +118,7 @@ static void add_format_capabilities(JsonBuilder *builder, const char *mimes, uns
     json_builder_add_boolean_value(builder, TRUE);
 }
 
+/** Appends the codec backend description to the capability catalog. */
 static void add_decoder_backend(JsonBuilder *builder, const char *operation, const char *mimes,
                                 unsigned capabilities)
 {
@@ -127,6 +131,7 @@ static void add_decoder_backend(JsonBuilder *builder, const char *operation, con
     json_builder_end_object(builder);
 }
 
+/** Collects a libvips operation and its codec registration metadata. */
 static void *collect_codec_operation(GType type, void *data)
 {
     if (G_TYPE_IS_ABSTRACT(type)) {
@@ -165,6 +170,7 @@ static void *collect_codec_operation(GType type, void *data)
 }
 
 // The package descriptor must be reproducible on hosts with different plugins.
+/** Returns the baseline MIME types supported by the desktop image pipeline. */
 char **image_codec_desktop_baseline(void)
 {
     GPtrArray *types = g_ptr_array_new();
@@ -178,6 +184,7 @@ char **image_codec_desktop_baseline(void)
     return (char **)g_ptr_array_free(types, FALSE);
 }
 
+/** Generates the installed codec capability catalog in JSON. */
 char *image_codec_catalog_json(void)
 {
     g_autoptr(JsonBuilder) builder = json_builder_new();

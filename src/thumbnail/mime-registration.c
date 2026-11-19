@@ -4,6 +4,7 @@
 #include "bridge.h"
 #include "glycin-discovery.h"
 
+/** Adds a normalized unique MIME type to the thumbnailer registration list. */
 static void add_mime(GString *mimes, GHashTable *seen, const char *mime)
 {
     if (g_hash_table_contains(seen, mime)) {
@@ -13,6 +14,7 @@ static void add_mime(GString *mimes, GHashTable *seen, const char *mime)
     g_string_append_printf(mimes, "%s;", mime);
 }
 
+/** Generates the MIME registration information used by the desktop thumbnailer. */
 int main(int argc, char **argv)
 {
     if (argc != 5 || VIPS_INIT(argv[0])) {

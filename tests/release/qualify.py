@@ -42,12 +42,14 @@ RELEASE_TESTS = {
 
 
 def load_json(path: Path) -> list[dict[str, Any]]:
+    """Reads a JSON result file and rejects invalid or missing expected content."""
     if not path.is_file():
         raise SystemExit(f"Missing Meson qualification input: {path}")
     return json.loads(path.read_text())
 
 
 def run(*args: str, timeout: int = 1800) -> None:
+    """Executes a release-qualification subprocess and reports failures."""
     if status := subprocess.run(args, check=False, timeout=timeout).returncode:
         raise SystemExit(status)
 
@@ -55,6 +57,7 @@ def run(*args: str, timeout: int = 1800) -> None:
 def verify_profile(
     info: Path, variant: str, installed: bool, parser: argparse.ArgumentParser
 ) -> dict[str, Any]:
+    """Checks the requested build feature profile against its qualification rules."""
     options = {
         option["name"]: option["value"]
         for option in load_json(info / "intro-buildoptions.json")
@@ -108,6 +111,7 @@ def verify_profile(
 def verify_test_results(
     build: Path, gtk: bool, release: bool, jobs: int, parser: argparse.ArgumentParser
 ) -> int:
+    """Rejects unexpected test failures or omissions from the Meson test record."""
     tests = {
         test["name"]: test for test in load_json(build / "meson-info/intro-tests.json")
     }
@@ -155,6 +159,7 @@ def verify_test_results(
 
 
 def verify_abi(build: Path, gtk: bool, without_glycin: bool) -> None:
+    """Checks versioned exported-symbol baselines for the selected release mode."""
     scripts = Path(__file__).resolve().parent
     libraries = [build / "src/core/libmajoris-image.so.2"]
     if gtk:
@@ -169,6 +174,9 @@ def verify_abi(build: Path, gtk: bool, without_glycin: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Evaluates the release candidate against build, test, and ABI qualification
+    gates.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("build", type=Path)
     parser.add_argument(

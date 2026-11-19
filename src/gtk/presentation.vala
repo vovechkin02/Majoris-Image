@@ -1,4 +1,5 @@
 namespace ImageKit {
+    /** A snapshot of available output color/HDR capabilities. */
     internal enum OutputCapability {
         UNREALIZED, SDR, VERIFIED_HDR, UNKNOWN
     }
@@ -10,8 +11,10 @@ namespace ImageKit {
         public unowned string diagnostic;
     }
 
+    /** Chooses an output color state and constructs presentation-ready textures. */
     internal class Presentation : Object {
 #if !PRESENTATION_POLICY_ONLY
+        /** Inspects output and compositor support for color-aware HDR presentation. */
         private static OutputCapability output_capability (Gtk.Widget view) {
             var native = view.get_native ();
             var surface = native?.get_surface ();
@@ -32,11 +35,13 @@ namespace ImageKit {
             return OutputCapability.UNKNOWN;
         }
 
+        /** Reads output capability information without changing the current presentation. */
         internal static PresentationDecision inspect (Gtk.Widget view, PresentationPolicy policy, bool hdr) {
             return choose (policy, hdr, output_capability (view));
         }
 #endif
 
+        /** Selects the requested output color policy subject to detected capability. */
         internal static PresentationDecision choose (PresentationPolicy policy, bool hdr,
             OutputCapability output) {
             PresentationDecision result = {};
@@ -64,10 +69,12 @@ namespace ImageKit {
         }
 
 #if !PRESENTATION_POLICY_ONLY
+        /** Produces a diagnostic description for an externally owned texture. */
         [CCode (cname = "image_texture_external_description", cheader_filename = "image-texture.h")]
         private extern static unowned string external_description (Gdk.Texture texture,
             out bool sdr, out bool hdr);
 
+        /** Describes an already constructed texture without taking ownership of its pixels. */
         internal static PresentationDecision external (Gdk.Texture texture, out bool hdr) {
             PresentationDecision decision = {};
             bool sdr;
@@ -76,6 +83,7 @@ namespace ImageKit {
             return decision;
         }
 
+        /** Converts a decoded buffer into a texture for the selected output color state. */
         internal static async PixelBuffer render_pixels (ImageDocument document, PresentationDecision decision,
                                                    Cancellable stop) throws Error {
             return yield document.render_preview (decision.tone_map, stop);

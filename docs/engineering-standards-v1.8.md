@@ -1,10 +1,11 @@
 # Majoris Cross-Project Engineering Standards
 
-**Document version:** 1.7  
+**Document version:** 1.8  
 **Status:** Organization-wide engineering standard  
 **Applies to:** Majoris applications, reusable libraries, system components, command-line tools, build tooling, tests, and Debian packaging  
 **Primary languages:** C, C++, Vala, Python, Meson, XML, and shell  
 **Language for all original source and documentation:** American English (`en-US`)  
+**Revision 1.8:** Establishes mandatory, tool-recognizable declaration-level documentation for all handwritten classes/types, methods/functions, constructors, properties, signals, and externally accessible members, regardless of visibility. Defines language-specific Valadoc, gtk-doc/gi-docgen, Doxygen, and PEP 257 conventions, migration requirements, meaningful-content checks, documentation coverage reporting, and compatibility safeguards. Preserves the v1.7 README template, v1.6 GoF and Vala `var` policies, and all earlier standards.
 **Revision 1.7:** Defines a consistent, source-verifiable README structure for all Majoris projects, including real build instructions, supported features and formats, public API and usage references, compatibility, packaging, security, testing, documentation and status. Library, application, service and CLI differences are explicitly accommodated. Preserves all v1.6 GoF and Vala `var` policies.
 **Revision 1.6:** Makes intent-driven Gang of Four (GoF) design-pattern governance enforceable across Majoris repositories, including participant naming, interface and composition boundaries, a complete applicability catalog, architecture review evidence, safe migration, and anti-pattern detection. Establishes Vala `var` as the default for clearly inferred local variables with mandatory explicit-type exceptions for contracts, ownership, nullability, and numeric intent. Preserves the v1.5 testing and GUI geometry rules, the v1.4 formatting policy, and all earlier standards.
 **Revision 1.5:** Adds cross-project rules for test filenames and case names, Meson test names and stable qualification identifiers, meaningful test granularity, and deterministic GUI test-window geometry. Retains the v1.4 multiline formatting rules, v1.3 test structure policy, and all prior standards.
@@ -931,7 +932,7 @@ Real project files MUST remove unused imports and dependencies.
 
 ### 8.3 Docstrings
 
-Public/reusable functions SHOULD have short docstrings explaining purpose, parameters and errors when not obvious. Internal one-line helpers may omit a redundant docstring. Use American English.
+All handwritten Python modules, classes and functions MUST have meaningful PEP 257 docstrings, including private helpers and test utilities; see §15.2.4. Explain arguments, results, errors and side effects when relevant. Use American English.
 
 ### 8.4 Python test runners and helper modules
 
@@ -1180,19 +1181,75 @@ Unhelpful:
 count++;
 ```
 
-### 15.2 Public documentation
+### 15.2 Declaration-level documentation (mandatory)
 
-Public APIs SHOULD document:
+**Requirement:** Every project-owned **handwritten** class, interface, struct, enum, error domain, delegate, constructor, method/function, property and public signal MUST have a meaningful declaration-adjacent, tool-recognized description, regardless of public, internal, protected or private visibility. This is the cross-project equivalent of a C# `/// <summary>` contract; use the **native language documentation syntax**, not C# XML tags. Meaningful exported fields and non-obvious private ownership/invariant fields MUST be described. Enum values SHOULD be described individually where their meaning is not self-evident or they encode protocol, state or policy.
 
-- Purpose and semantics.
-- Parameter ranges and units.
-- Ownership and nullable values.
-- Thread/main-context expectations.
-- Return/error conditions.
-- Cancellation and side effects.
-- Compatibility/version requirements.
+A valid declaration comment MUST explain **what the symbol represents, produces, controls, or guarantees**, not simply expand its spelling. Describe units, default values, ranges, nullability, ownership, threading/main-context, error conditions, cancellation, security or external side effects where those details affect callers or maintenance. A one-sentence description suffices for an obvious private helper; elaborate contracts need several sentences. Do not manufacture filler to hit a numerical coverage target or annotate every obvious statement inside a method.
 
-Use gtk-doc for public GObject/C APIs, Vala-compatible documentation comments for Vala APIs, and standard Python docstrings for reusable functions. Do not invent parameter annotations unsupported by the actual tooling.
+**Existing-source migration:** Perform a repository-wide source documentation pass once, in a documentation-only commit or isolated patch series, prioritizing public API and security-sensitive contracts. New and touched declarations MUST be compliant immediately. Exclude generated, vendored and upstream files, non-code fixtures, compiler-generated declarations and third-party compatibility headers. Document intentional omissions narrowly. Do not create new classes or split files solely to make a coverage metric easier.
+
+#### 15.2.1 Vala / GObject (Valadoc)
+
+- Put a `/** ... */` Valadoc comment immediately before every type, class member, constructor, method, public property and signal. Place comments **before** `[CCode]`/other annotations when the attribute forms part of the declaration, and keep annotations attached to their original declarations.
+- Class/interface documentation states responsibility and supported invariants; method documentation states effect, returned value and notable errors/cancellation; property documentation states domain meaning, units, defaults, writable/read-only behavior or ownership when non-obvious. Explain special page/frame, source/sample precision, crop, exposure, zoom and time units in owning repositories where applicable.
+- Existing method signatures, GObject type names, enums, properties, signals, GIR/VAPI symbols, ownership qualifiers and async semantics MUST NOT change to satisfy documentation. Do not introduce unsupported tags or annotations; prefer valid Valadoc prose and confirmed parameter-reference conventions.
+- Private helper documentation may be brief but MUST identify its particular contract or invariant. Do not repeat `Gets foo` for a property whose essential semantics are not self-evident.
+
+Illustrative example:
+
+```vala
+/** Contains the results of loading a single record. */
+public sealed class RecordResult : Object {
+    /** Time since the Unix epoch in microseconds; zero means unknown. */
+    public int64 timestamp_us { get; private set; }
+
+    /**
+     * Loads a record without blocking the calling main context.
+     *
+     * Cancellation leaves the existing result unchanged. The caller owns
+     * the returned object. Errors are propagated to the caller.
+     */
+    public async Record load (string key, Cancellable? cancel = null) throws Error {
+        // Implementation.
+    }
+}
+```
+
+#### 15.2.2 C / GLib / GObject (gtk-doc / gi-docgen)
+
+- Document each handwritten public declaration in its owning header using gtk-doc-compatible `/** symbol_name: ... */`, accurate `@argument` descriptions, `Returns:` where applicable, and introspection annotations **only when supported and correct**. Internal/private functions and structs MUST also have structured descriptions at their declarations/definitions; a standard Doxygen block is acceptable for internal functions not exposed to GIR.
+- Pointer returns and pointer arguments should document transfer ownership, nullability and lifetime when applicable. Async/finish pairs MUST explain callback lifetime and ownership transfer, error rules and whether NULL is successful. C ABI documentation must not alter function signatures or introspection annotations without separate compatibility review.
+
+```c
+/**
+ * record_store_open:
+ * @path: Filesystem location of the store.
+ * @error: (out) (optional): Error information on failure.
+ *
+ * Opens an existing store without creating missing files.
+ *
+ * Returns: (transfer full) (nullable): An owned store or NULL on failure.
+ */
+RecordStore *record_store_open(const char *path, GError **error);
+```
+
+#### 15.2.3 C++ (Doxygen)
+
+- Use a consistent `/** ... */` or `///` Doxygen-compatible comment on every handwritten class, constructor, method and relevant field, including private helpers. Explain resource lifetime, exception translation at C ABI boundaries, side effects, threading, and unsafe/pointer invariants where relevant.
+- Do not claim a C++ function is noexcept, thread-safe or ownership-transferring unless its implementation actually guarantees that behavior.
+
+#### 15.2.4 Python (PEP 257)
+
+- Every handwritten Python module, class, function, method and property getter MUST have a docstring as its first statement; prefer triple-double quotes. Document what the callable does and the important inputs, result, exceptions, file/process/network effects, fixture invariants or CLI exit status. Keep parameter descriptions proportional to the complexity of the operation.
+- Use documented decorators/descriptor conventions instead of duplicating identical docstrings on simple setters. Preserve public function signatures and return values; the `__doc__` metadata change from adding docstrings is intentional.
+
+#### 15.2.5 Coverage verification and quality gates
+
+- Repositories MUST maintain a reproducible **source documentation coverage** checker or equivalent CI rule that recognizes the project's declared languages and skips generated/vendor outputs. The checker SHOULD show totals and uncovered declarations by file/type/visibility and fail new contributions missing required summaries.
+- For Vala, use a language-aware declaration scan and validate with the supported `valac`/Valadoc toolchain when available. For Python, use the `ast` module to locate docstrings reliably. For C/C++, prefer a parser/compilation database or match source declarations conservatively and review exceptions. An automatically generated summary that repeats the identifier without conveying meaning is **not compliant** even if a parser counts it.
+- The documentation migration MUST pass compilation and appropriate existing tests and ABI/GIR/VAPI/installed-consumer checks before release. No changes to logic, public naming, serialized values, exported symbols, library dependencies, worker protocol or resource limits may be bundled into a documentation-only patch.
+- Do not claim toolchain-dependent validation passed if it was not run. Compare existing source code after ignoring only inserted documentation comments and Python docstrings to detect inadvertent code changes. Separate optional formatting-only changes from the documentation migration.
 
 ### 15.3 Workarounds and TODOs
 
@@ -1866,6 +1923,15 @@ These are examples: source globs may omit nested files, warning policy may requi
 - [ ] The change is proved behavior/API/ABI/serialization/security/cancellation equivalent and does not introduce a demonstrated performance or memory regression (§16.5).
 - [ ] Architecture evidence and exceptions are recorded; the change has a finite stopping point rather than generating speculative follow-up refactoring tasks.
 
+
+### 19.5 Mandatory declaration documentation verification
+
+- [ ] Every handwritten Vala/C/C++ class, interface, enum, constructor, method, function and property has a tool-recognized meaningful description (§15.2).
+- [ ] Public Vala signals and important enum members, C/GObject pointer ownership, nullable results and asynchronous finish/cancel semantics are documented accurately.
+- [ ] All handwritten Python modules/classes/functions have PEP 257 docstrings, including test tools and entry points.
+- [ ] Documentation-coverage tooling identifies missing declarations and exemptions without mistaking filler comments for valid documentation.
+- [ ] Changes to documentation have not altered executable behavior, ABI, GIR/VAPI, protocol fields, dependencies, concurrency, packaging or benchmark-sensitive operations.
+- [ ] Compiler/documentation toolchain checks and existing tests are reported as **passed**, **failed** or **not run**, never inferred from source inspection.
 
 ---
 

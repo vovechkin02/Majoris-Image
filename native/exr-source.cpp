@@ -23,11 +23,13 @@ namespace Exr = OPENEXR_IMF_NAMESPACE;
 namespace ExrMath = IMATH_NAMESPACE;
 namespace
 {
+/** Identifies one OpenEXR part/channel view without decoding its samples. */
 struct View {
     int part;
     std::string name;
     std::array<std::string, 4> channels;
 };
+/** Enumerates usable OpenEXR parts and channel views, rejecting excessive view counts. */
 std::vector<View> list_views(Exr::MultiPartInputFile &file)
 {
     std::vector<View> views;
@@ -75,6 +77,7 @@ std::vector<View> list_views(Exr::MultiPartInputFile &file)
     }
     return views;
 }
+/** Owns lazy OpenEXR part access and bounded scratch planes for Vips rendering. */
 struct Source {
     Exr::MultiPartInputFile file;
     std::vector<View> views;
@@ -86,6 +89,7 @@ struct Source {
     std::array<int, 4> plane_index;
     std::mutex mutex;
     int buffer_width = 0, buffer_height = 1;
+    /** Opens the indexed OpenEXR view and validates dimensions and channel sampling. */
     explicit Source(const char *path, int index) : file(path, 2), views(list_views(file))
     {
         if (index < 0 || static_cast<size_t>(index) >= views.size()) {
@@ -134,6 +138,7 @@ struct Source {
             }
         }
     }
+/** Builds a channel-mapped OpenEXR frame buffer over the currently allocated sample planes. */
     Exr::FrameBuffer frame(int y, bool tile)
     {
         Exr::FrameBuffer frame;
@@ -148,6 +153,7 @@ struct Source {
         }
         return frame;
     }
+/** Copies one decoded OpenEXR sample to an interleaved RGBA destination. */
     void pixel(float *target, size_t index)
     {
         for (int c = 0; c < 3; c++) {
@@ -156,6 +162,7 @@ struct Source {
         target[3] = view.channels[3].empty() ? 1 : buffers[plane_index[3]][index];
     }
 };
+/** Renders the requested OpenEXR region under a lock while preserving image bounds. */
 int generate(VipsRegion *output, void *, void *, void *context, gboolean *)
 {
     auto *source = static_cast<Source *>(context);
@@ -216,16 +223,19 @@ int generate(VipsRegion *output, void *, void *, void *context, gboolean *)
     }
 }
 
+/** Releases the OpenEXR source retained as a libvips generation context. */
 void destroy(void *context)
 {
     delete static_cast<Source *>(context);
 }
+/** Serializes OpenEXR window coordinates for image metadata. */
 std::string window_string(const ExrMath::Box2i &window)
 {
     return std::to_string(window.min.x) + ", " + std::to_string(window.min.y) + " — " +
            std::to_string(window.max.x) + ", " + std::to_string(window.max.y);
 }
 
+/** Builds an ICC profile from OpenEXR color attributes for downstream color management. */
 void profile(VipsImage *image, const Exr::Header &header)
 {
     if (Exr::hasChromaticities(header)) {
@@ -260,6 +270,7 @@ void profile(VipsImage *image, const Exr::Header &header)
     }
 }
 } // namespace
+/** Creates a lazily decoded OpenEXR view while enforcing source dimensions and bounds. */
 VipsImage *image_codec_exr_image(const char *path, int page, GError **error)
 {
     VipsImage *image = nullptr;

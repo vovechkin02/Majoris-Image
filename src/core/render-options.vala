@@ -1,4 +1,5 @@
 namespace ImageKit {
+    /** Renames one JSON object member without changing its value or wire representation. */
     internal static void rename_json_member (Json.Object object, string from, string to) {
         if (!object.has_member (from)) {
             return;
@@ -7,35 +8,68 @@ namespace ImageKit {
         object.remove_member (from);
     }
 
+    /** Versioned non-destructive recipe for rotation, crop and photographic edits. */
     public class RenderOptions : Object {
+        /** Version of this request or edit recipe used for compatibility validation. */
         public int version { get; set; default = 2; }
+        /** Number of clockwise quarter turns applied before arbitrary-angle rotation. */
         public int turns { get; set; }
+        /** Whether pixel sampling avoids interpolation in rendering or display. */
         public bool nearest_neighbor { get; set; }
+        /** Whether the image is mirrored across its horizontal coordinate axis. */
         public bool flip_x { get; set; }
+        /** Whether the image is mirrored across its vertical coordinate axis. */
         public bool flip_y { get; set; }
+        /** Additional arbitrary rotation angle in degrees; validation limits it to -45..45. */
         public double angle { get; set; }
+        /** Exposure compensation in stops, restricted to -10..10. */
         public double exposure { get; set; }
+        /** Multiplicative contrast adjustment; 1 is unchanged, permitted range 0..4. */
         public double contrast { get; set; default = 1; }
+        /** Brightness adjustment applied during image rendering. */
         public double brightness { get; set; }
+        /** Highlight-region tonal adjustment from -1 to 1. */
         public double highlights { get; set; }
+        /** Shadow-region tonal adjustment from -1 to 1. */
         public double shadows { get; set; }
+        /** White-point tonal adjustment from -1 to 1. */
         public double whites { get; set; }
+        /** Black-point tonal adjustment from -1 to 1. */
         public double blacks { get; set; }
+        /** Color saturation multiplier; 1 is unchanged, permitted range 0..3. */
         public double saturation { get; set; default = 1; }
+        /** Selective saturation adjustment from -1 to 1. */
         public double vibrance { get; set; }
+        /** Color temperature adjustment from -1 to 1. */
         public double temperature { get; set; }
+        /** Green/magenta color tint adjustment from -1 to 1. */
         public double tint { get; set; }
+        /** Local-contrast adjustment from -1 to 1. */
         public double clarity { get; set; }
+        /** Sharpening strength from 0 to 2. */
         public double sharpness { get; set; }
+        /** Edge-darkening adjustment from -1 to 1. */
         public double vignette { get; set; }
+        /** Named photographic filter; original selects no creative filter. */
         public string filter { get; set; default = "original"; }
+        /** Blend strength for the selected filter, from 0 to 1. */
         public double filter_intensity { get; set; default = 1; }
+        /** Left edge of the normalized crop rectangle in source-relative coordinates. */
         public double crop_x { get; set; }
+        /** Top edge of the normalized crop rectangle in source-relative coordinates. */
         public double crop_y { get; set; }
+        /** Crop rectangle width as a fraction of source width; default 1. */
         public double crop_width { get; set; default = 1; }
+        /** Crop rectangle height as a fraction of source height; default 1. */
         public double crop_height { get; set; default = 1; }
+        /** Whether rendering removes chroma to produce grayscale output. */
         public bool monochrome { get; set; }
+        /** Whether the boolean sharpening option is enabled. */
         public bool sharpen { get; set; }
+        /**
+         * Rejects invalid options, unsupported combinations or out-of-range values. Errors
+         * propagate to the caller.
+         */
         public void validate () throws Error {
             double[] adjustments = { highlights, shadows, whites, blacks, vibrance, temperature,
                 tint, clarity, vignette };
@@ -63,6 +97,7 @@ namespace ImageKit {
         private const string RECIPE_NEAREST = "nearest-neighbour";
         private const string PROPERTY_NEAREST = "nearest-neighbor";
 
+        /** Preserves legacy nearest-neighbor JSON field spelling across serialization. */
         internal static void translate_recipe (Json.Node? recipe, bool writing) {
             if (recipe == null || recipe.get_node_type () != Json.NodeType.OBJECT) {
                 return;
@@ -72,12 +107,17 @@ namespace ImageKit {
                 writing ? RECIPE_NEAREST : PROPERTY_NEAREST);
         }
 
+        /** Encodes the current request, probe or recipe using its versioned JSON schema. */
         public string serialize () {
             var node = Json.gobject_serialize (this);
             translate_recipe (node, true);
             return Json.to_string (node, false);
         }
 
+        /**
+         * Parses and validates a versioned JSON representation, rejecting malformed fields.
+         * Errors propagate to the caller.
+         */
         public static RenderOptions deserialize (string data) throws Error {
             var parser = new Json.Parser ();
             parser.load_from_data (data);
@@ -95,6 +135,7 @@ namespace ImageKit {
             return recipe;
         }
 
+        /** Returns a separately mutable options snapshot with identical effective values. */
         public RenderOptions copy () {
             var result = new RenderOptions ();
             result.version = version;
@@ -134,6 +175,7 @@ namespace ImageKit {
         }
 
 #if RENDER_OPTIONS_DEFAULT_CHECK
+        /** Tests whether normalized recipe parameters equal the unedited defaults. */
         internal bool is_default () {
             // The comparison runs on a validated copy after crop and sampling are normalized.
             return version == 2 && turns == 0 && !nearest_neighbor && !flip_x && !flip_y &&
@@ -146,6 +188,7 @@ namespace ImageKit {
         }
 #endif
 
+        /** Preserves JSON-GLib default-equivalence when copying a float adjustment. */
         private static double copy_double (double value, double default_value) {
             // Match GParamSpecDouble's default comparison used by JSON-GLib.
             // This restores the default for signed zero, tiny differences, and NaN.

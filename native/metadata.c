@@ -3,6 +3,7 @@
 
 #include "bridge.h"
 
+/** Extracts normalized image metadata and color details as JSON. */
 char *image_codec_image_details(VipsImage *image)
 {
     JsonObject *info = json_object_new();
@@ -69,6 +70,7 @@ char *image_codec_image_details(VipsImage *image)
     return result;
 }
 
+/** Returns the animation frame duration in milliseconds for the selected page. */
 int image_codec_frame_duration(VipsImage *image, int page)
 {
     int *delays = NULL;

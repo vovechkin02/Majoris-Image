@@ -1,5 +1,6 @@
 #include "glycin-discovery.h"
 
+/** Compares MIME types using the compatibility rules used for Glycin selection. */
 gboolean image_mime_matches(const char *first, const char *second)
 {
     if (g_strcmp0(first, second) == 0) {
@@ -13,6 +14,7 @@ gboolean image_mime_matches(const char *first, const char *second)
     return a && b && g_content_type_equals(a, b);
 }
 
+/** Collects available Glycin loader declarations from a configuration directory. */
 static void load_config_root(GHashTable *entries, const char *root)
 {
     // Glycin 1's Rust loader protocol reports compatibility version 1.
@@ -48,11 +50,13 @@ static void load_config_root(GHashTable *entries, const char *root)
     }
 }
 
+/** Orders MIME identifiers for deterministic codec discovery output. */
 static int compare_mimes(gconstpointer a, gconstpointer b)
 {
     return g_strcmp0(*(const char *const *)a, *(const char *const *)b);
 }
 
+/** Returns supported MIME types discovered from installed Glycin configurations. */
 char **image_discover_glycin_loaders(void)
 {
     g_autoptr(GHashTable) entries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);

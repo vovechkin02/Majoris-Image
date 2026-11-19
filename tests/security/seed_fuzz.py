@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 def main() -> int:
+    """Seeds native fuzzing inputs from controlled image and protocol fixtures."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
     parser.add_argument(

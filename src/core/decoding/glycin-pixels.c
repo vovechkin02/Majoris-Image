@@ -4,6 +4,7 @@
 #include <glycin.h>
 
 // Glycin stores integer components in native byte order, with no alignment guarantee.
+/** Reads a 16-bit sample from Glycin frame bytes with the correct layout. */
 static inline guint16 read_sample16(const guint8 *data)
 {
     guint16 value;
@@ -11,6 +12,7 @@ static inline guint16 read_sample16(const guint8 *data)
     return value;
 }
 
+/** Maps a normalized transfer-function sample into linear-light values. */
 static double linear_sample(const guint8 *data, int depth)
 {
     if (depth == 8) {
@@ -19,6 +21,7 @@ static double linear_sample(const guint8 *data, int depth)
     return read_sample16(data) / 65535.0;
 }
 
+/** Selects the decoded transfer function for the frame color state. */
 static inline double decode_transfer(double value, gboolean gray_gamma)
 {
     if (gray_gamma) {
@@ -30,6 +33,7 @@ static inline double decode_transfer(double value, gboolean gray_gamma)
     return pow((value + .055) / 1.055, 2.4);
 }
 
+/** Returns a lazily initialized lookup table for 8-bit transfer decoding. */
 static const double *transfer_table(gboolean gray_gamma)
 {
     static double srgb[256];
@@ -47,6 +51,7 @@ static const double *transfer_table(gboolean gray_gamma)
     return table;
 }
 
+/** Returns a lazily initialized lookup table for 16-bit transfer decoding. */
 static const double *transfer_table16(gboolean gray_gamma)
 {
     static double srgb[65536];
@@ -66,6 +71,7 @@ static const double *transfer_table16(gboolean gray_gamma)
     return table;
 }
 
+/** Converts bounded Glycin frame rows into the ImageKit RGBA float layout. */
 static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top,
                               double region_width, double region_height, gboolean nearest,
                               gboolean gray_icc, gboolean linear_rgb, int *width, int *height,
@@ -251,6 +257,7 @@ static GBytes *convert_pixels(GlyFrame *frame, int edge, double left, double top
     return g_bytes_new_take(out, count * sizeof(float));
 }
 
+/** Holds Glycin frame references and crop parameters for asynchronous conversion. */
 typedef struct {
     GlyFrame *frame;
     int edge, width, height, depth;
@@ -258,12 +265,14 @@ typedef struct {
     gboolean nearest, gray_icc, linear_rgb;
 } PixelJob;
 
+/** Releases input references and output buffers owned by a conversion job. */
 static void pixel_job_free(PixelJob *job)
 {
     g_object_unref(job->frame);
     g_free(job);
 }
 
+/** Runs Glycin pixel conversion off the caller main context. */
 static void convert_thread(GTask *task, gpointer source G_GNUC_UNUSED, gpointer data,
                            GCancellable *stop)
 {
@@ -280,6 +289,7 @@ static void convert_thread(GTask *task, gpointer source G_GNUC_UNUSED, gpointer 
     }
 }
 
+/** Begins asynchronous Glycin conversion with an explicit output profile. */
 void image_glycin_pixels_profile_async(GlyFrame *frame, int edge, double left, double top,
                                        double region_width, double region_height, gboolean nearest,
                                        gboolean gray_icc, gboolean linear_rgb, GCancellable *stop,
@@ -301,6 +311,7 @@ void image_glycin_pixels_profile_async(GlyFrame *frame, int edge, double left, d
     g_object_unref(task);
 }
 
+/** Begins asynchronous Glycin pixel conversion using the default color policy. */
 void image_glycin_pixels_async(GlyFrame *frame, int edge, double left, double top,
                                double region_width, double region_height, gboolean nearest,
                                gboolean gray_icc, GCancellable *stop, GAsyncReadyCallback callback,
@@ -310,6 +321,7 @@ void image_glycin_pixels_async(GlyFrame *frame, int edge, double left, double to
                                       gray_icc, FALSE, stop, callback, data);
 }
 
+/** Obtains the conversion result and propagates worker-thread errors. */
 GBytes *image_glycin_pixels_finish(GAsyncResult *result, int *width, int *height, int *depth,
                                    GError **error)
 {

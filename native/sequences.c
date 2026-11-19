@@ -16,6 +16,7 @@
 #define PIXEL_LIMIT 16777216
 
 #if defined(IMAGE_CODEC_AVIF_SEQUENCE) || defined(IMAGE_CODEC_HEIF_SEQUENCE)
+/** Builds a libvips image from the selected sequence frame. */
 static VipsImage *make_image(const guint8 *data, int width, int height, size_t stride, int depth,
                              int bands, GError **error)
 {
@@ -54,6 +55,7 @@ static VipsImage *make_image(const guint8 *data, int width, int height, size_t s
     return image;
 }
 
+/** Attaches decoded HEIF/AVIF color attributes to the output image. */
 static gboolean set_color(VipsImage *image, const void *profile, size_t size, int primaries,
                           int transfer, GError **error)
 {
@@ -86,6 +88,7 @@ static gboolean set_color(VipsImage *image, const void *profile, size_t size, in
     return TRUE;
 }
 
+/** Attaches sequence presentation timestamps and frame duration metadata. */
 static void set_timing(VipsImage *image, const char *loader, int count, int loops, double timestamp,
                        double duration)
 {
@@ -98,6 +101,7 @@ static void set_timing(VipsImage *image, const char *loader, int count, int loop
 #endif
 
 #ifdef IMAGE_CODEC_AVIF_SEQUENCE
+/** Loads the requested AVIF sequence frame with validated timing. */
 static VipsImage *load_avif(const char *path, int frame, GError **error)
 {
     avifDecoder *decoder = avifDecoderCreate();
@@ -175,6 +179,7 @@ done:
 #endif
 
 #ifdef IMAGE_CODEC_HEIF_SEQUENCE
+/** Selects the track supplying frames for timed HEIF presentation. */
 static heif_track *presentation_track(heif_context *context)
 {
     uint32_t ids[64];
@@ -216,6 +221,7 @@ static heif_track *presentation_track(heif_context *context)
     return chosen;
 }
 
+/** Loads the requested HEIF sequence frame and its color information. */
 static VipsImage *load_heif(const char *path, int frame, int known_count, GError **error)
 {
     g_autoptr(GArray) frames = g_array_new(FALSE, FALSE, sizeof(PresentationFrame));
@@ -485,6 +491,7 @@ done:
 }
 #endif
 
+/** Opens the specified HEIF/AVIF animation frame with sequence timing metadata. */
 VipsImage *image_codec_sequence(const char *path, int frame, gboolean avif, int known_count,
                                 GError **error)
 {

@@ -1,26 +1,43 @@
 namespace ImageKit {
+    /** Indicates where Glycin-derived color interpretation originated. */
     internal enum GlycinColorProvenance {
-        TAGGED_SRGB, ICC_CONVERSION_UNVERIFIED, ASSUMED_SRGB, UNKNOWN, TAGGED_QOI_SRGB, QOI_LINEAR
+        /** Source explicitly identifies an sRGB color state. */
+        TAGGED_SRGB,
+        /** ICC conversion could not be independently verified. */
+        ICC_CONVERSION_UNVERIFIED,
+        /** No source profile was available, so sRGB is assumed. */
+        ASSUMED_SRGB,
+        /** The source color state could not be determined. */
+        UNKNOWN,
+        /** QOI metadata explicitly indicates the sRGB transfer function. */
+        TAGGED_QOI_SRGB,
+        /** QOI metadata explicitly indicates linear transfer values. */
+        QOI_LINEAR
     }
 
+    /** Adapts Glycin inspection/rendering to ImageKit document and pixel contracts. */
     internal class GlycinFallback : Object {
         // Glycin 1 does not expose ICC, transfer functions, page counts or source depth.
         // Negotiate decoder capabilities using the installed loader and sandboxed metadata.
         private const ImageCapabilities FEATURES = ImageCapabilities.STILL |
             ImageCapabilities.THUMBNAIL | ImageCapabilities.METADATA;
 
+        /** Checks whether a native-decoder failure permits Glycin fallback. */
         internal static bool eligible (Error error) {
             return error is ImageError.CODEC_MISSING || error is ImageError.UNSUPPORTED;
         }
 #if HAVE_GLYCIN
+        /** Obtains MIME types supported by the installed Glycin loader. */
         [CCode (cname = "image_discover_glycin_loaders", cheader_filename = "glycin-discovery.h",
                 array_length = false, array_null_terminated = true)]
         private extern static string[] discover ();
 
+        /** Compares MIME types using the native Glycin/GLib compatibility rules. */
         [CCode (cname = "image_mime_matches", cheader_filename = "glycin-discovery.h")]
         private extern static bool same_mime (string a, string b);
 #endif
 
+        /** Lists the Glycin loader formats available in this build. */
         internal static string[] installed () {
 #if HAVE_GLYCIN
             return discover ();
@@ -29,12 +46,14 @@ namespace ImageKit {
 #endif
         }
 #if HAVE_GLYCIN
+        /** Converts a Glycin frame to ImageKit pixel storage with a bounded preview edge. */
         [CCode (cname = "image_glycin_pixels_profile_async", finish_name = "image_glycin_pixels_finish")]
         private extern static async Bytes convert (Gly.Frame frame, int edge, double left, double top,
                                                    double crop_width, double crop_height, bool nearest,
                                                    bool gray_icc, bool linear_rgb, Cancellable stop,
                                                    out int w, out int h, out int depth) throws Error;
 
+        /** Tests whether a Glycin loader can read a given MIME type. */
         private static bool has_loader (string mime, string[] loaders) {
             foreach (var loader in loaders) {
                 if (same_mime (mime, loader)) {
@@ -44,6 +63,7 @@ namespace ImageKit {
             return false;
         }
 
+        /** Extracts color provenance and profile diagnostics from Glycin metadata. */
         private static async Json.Object color_metadata (ImageSource source, Cancellable stop,
             bool preload) throws Error {
             string? path = null;
@@ -67,6 +87,7 @@ namespace ImageKit {
             return new Json.Object ();
         }
 
+        /** Reads a bounded leading signature for format detection. */
         private static async string sniff (File source, Cancellable stop, bool preload) throws Error {
             int priority = preload ? Priority.LOW : Priority.DEFAULT;
             var stream = yield source.read_async (priority, stop);
@@ -101,6 +122,7 @@ namespace ImageKit {
         }
 #endif
 
+        /** Builds an ImageDocument from Glycin frames after fallback has been authorized. */
         internal static async ImageDocument open (ImageSource source, DecodeOptions request, Cancellable stop,
                                                    Error original, uint seconds = 120,
                                                        ImageProbe? animation = null,
@@ -296,6 +318,7 @@ namespace ImageKit {
 #endif
         }
 
+        /** Renders source pixels with Glycin, preserving cancellation and source checks. */
         internal static async PixelBuffer render (ImageSource source, DecodeOptions options,
                                                  RenderOptions transform, Cancellable stop,
                                                  Error original, uint seconds = 120) throws Error {

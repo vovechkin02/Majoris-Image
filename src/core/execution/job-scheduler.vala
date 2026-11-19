@@ -1,10 +1,12 @@
 namespace ImageKit {
+    /** An admission permit whose lifetime reserves one worker scheduler slot. */
     private class JobTicket : Object {
         public int priority;
         public bool granted;
         public bool queued = true;
         public SourceFunc resume;
         public MainContext context = MainContext.ref_thread_default ();
+        /** Rechecks the queued scheduler ticket and resumes it when admission is available. */
         public void wake () {
             var idle = new IdleSource ();
             idle.set_callback ((owned) resume);
@@ -13,6 +15,7 @@ namespace ImageKit {
     }
 
     // Shared admission queue with a reserved slot for interactive work.
+    /** Coordinates prioritized worker admissions under the process-wide limit. */
     internal class JobScheduler : Object {
         internal const int FOREGROUND_PRIORITY = 0;
         internal const int TILE_PRIORITY = 1;
@@ -23,6 +26,7 @@ namespace ImageKit {
         private Gee.ArrayList<JobTicket> queue = new Gee.ArrayList<JobTicket> ();
         private int active;
 
+        /** Returns the shared scheduler controlling worker admission and priority. */
         internal static JobScheduler shared () {
             lock (instance) {
                 if (instance == null) {
@@ -32,6 +36,7 @@ namespace ImageKit {
             }
         }
 
+        /** Waits for a scheduler slot and returns a ticket that releases it on disposal. */
         internal async void acquire (int priority, Cancellable cancel) throws Error {
             cancel.set_error_if_cancelled ();
             var ticket = new JobTicket ();
@@ -67,6 +72,7 @@ namespace ImageKit {
             }
         }
 
+        /** Admits the next eligible pending worker ticket without violating concurrency limits. */
         private void dispatch () {
             while (queue.size > 0 && active < 4) {
                 if (queue[0].priority >= THUMBNAIL_PRIORITY && active >= 3) {
@@ -80,6 +86,7 @@ namespace ImageKit {
             }
         }
 
+        /** Returns this ticket to the shared admission pool without double release. */
         internal void release () {
             mutex.lock ();
             active--;

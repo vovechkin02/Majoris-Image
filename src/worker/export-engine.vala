@@ -1,5 +1,10 @@
 namespace ImageKit {
+    /** Encodes a rendered image into the requested destination format. */
     public class ExportEngine : Object {
+        /**
+         * Writes output using the selected codec while preserving validated export settings.
+         * Errors propagate to the caller.
+         */
         public static void write (Vips.Image input, string target, ExportOptions options,
             bool source_hdr) throws Error {
             Vips.Image image = input;

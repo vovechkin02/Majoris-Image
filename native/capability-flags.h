@@ -2,6 +2,7 @@
 #define IMAGEKIT_CAPABILITY_FLAGS_H
 
 /* Numeric contract for the capability-flags field of the codec catalog. */
+/** Stable numeric codec capability bits shared by worker catalogs and clients. */
 enum {
     IMAGE_CAPABILITY_STILL = 1,
     IMAGE_CAPABILITY_ANIMATION = 2,

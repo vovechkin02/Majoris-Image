@@ -1,5 +1,7 @@
 namespace ImageKit {
+    /** Selects compatible sandboxed decoders and opens documents or pixels. */
     public sealed class DecoderRegistry : Object {
+        /** Maximum worker execution duration in seconds. */
         public uint timeout_seconds { get; set; default = 120; }
         private Gee.ArrayList<DecoderBackend> custom_workers = new Gee.ArrayList<DecoderBackend> ();
 
@@ -25,6 +27,7 @@ namespace ImageKit {
             }
         }
 
+        /** Selects and configures the worker backend matching source signature and capabilities. */
         private async WorkerClient select (ImageSource source, ImageCapabilities required,
             Cancellable stop, bool preload = false) throws Error {
             int64 started = OperationProfile.begin ();
@@ -93,7 +96,10 @@ namespace ImageKit {
             }
         }
 
-        /** MIME types with a configured thumbnail backend. Inspect individual inputs for guarantees. */
+        /**
+         * MIME types with a configured thumbnail backend; individual inputs still require
+         * validation.
+         */
         public async string[] thumbnail_mime_types (Cancellable? cancel = null) throws Error {
             var parser = new Json.Parser ();
             parser.load_from_data (yield installed_codecs (cancel));
@@ -115,6 +121,10 @@ namespace ImageKit {
             return result;
         }
 
+        /**
+         * Inspects a source without opening or materializing the full image. Errors propagate to
+         * the caller.
+         */
         public async ImageProbe inspect (ImageSource source, Cancellable? cancel = null) throws Error {
             int64 started = OperationProfile.begin ();
             try {
@@ -124,6 +134,7 @@ namespace ImageKit {
             }
         }
 
+        /** Runs the selected native inspection operation with fallback policy. */
         private async ImageProbe inspect_internal (ImageSource source, Cancellable stop,
             bool preload) throws Error {
             var worker = yield select (source, ImageCapabilities.METADATA, stop, preload);
@@ -145,6 +156,10 @@ namespace ImageKit {
             }
         }
 
+        /**
+         * Opens a source image using the requested decoding preferences. Errors propagate to the
+         * caller.
+         */
         public async ImageDocument open (ImageSource source, DecodeOptions? options = null,
                                          Cancellable? cancel = null) throws Error {
             int64 started = OperationProfile.begin ();
@@ -156,6 +171,7 @@ namespace ImageKit {
             }
         }
 
+        /** Opens the image with native decoding and allowed Glycin recovery. */
         internal async ImageDocument open_internal (ImageSource source, DecodeOptions request,
                                                      Cancellable stop, bool preload) throws Error {
             if (request.preview_size < 1 || request.preview_size > 4096) {
@@ -189,6 +205,7 @@ namespace ImageKit {
             }
         }
 
+        /** Constructs an image document from validated worker probe and preview output. */
         internal static async ImageDocument open_with (WorkerClient worker, ImageSource source,
             DecodeOptions request, Cancellable stop, bool preload = false,
             string? verified_identity = null) throws Error {

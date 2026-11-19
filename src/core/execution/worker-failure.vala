@@ -1,7 +1,9 @@
 namespace ImageKit {
+    /** Classifies worker errors while preserving the versioned failure protocol. */
     internal class WorkerFailure : Object {
 #if !CORE_WORKER_CLIENT
 #if !WORKER_PROCESS
+        /** Converts a worker error into its stable wire failure category. */
         public static DecodeFailure classify (Error error) {
             if (error is ImageError.UNSUPPORTED || error is ImageError.RAW_UNSUPPORTED) {
                 return DecodeFailure.UNSUPPORTED;
@@ -28,6 +30,7 @@ namespace ImageKit {
         }
 #endif
 
+        /** Encodes the current request, probe or recipe using its versioned JSON schema. */
         public static string serialize (Error error) {
             var message = error.message.make_valid ();
             var lower = message.down ();
@@ -69,6 +72,7 @@ namespace ImageKit {
 
 #endif
 #if !WORKER_PROCESS
+        /** Parses and validates a versioned JSON representation, rejecting malformed fields. */
         public static Error deserialize (string diagnostic) {
             try {
                 var text = diagnostic.strip ();

@@ -17,6 +17,24 @@ is independent of the source directory. Meson display names are sentence case.
 The historical baseline and verification reports use the names from their runs. Shared fixture targets still write to
 `build/tests/`, including the `large.tiff` used by installed qualification.
 
+## Declaration documentation coverage
+
+Majoris engineering standards v1.8 requires meaningful declaration-adjacent
+comments on handwritten Vala, C/C++ and Python source. The unit suite registers
+`Source declaration documentation`; the same check can be run without compiling:
+
+```sh
+python3 tests/release/check_source_docs.py
+```
+
+The checker reports Vala declaration comments, Python AST docstrings, native
+header declarations and recognized C/C++ definitions. It checks presence and
+placement of comments, **not** correctness or quality of technical prose.
+Reviewers must verify accurate parameter, ownership, nullability, threading,
+error, cancellation, numerical-unit and lifetime descriptions. It deliberately
+excludes generated or vendored files and does not replace `valac`, Valadoc,
+GObject introspection, native compilation or runtime tests.
+
 ## Development and extended suites
 
 Build on Linux with the dependencies listed in `debian/control`. Install

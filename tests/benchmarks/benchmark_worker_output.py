@@ -33,6 +33,7 @@ FAULT_OUTCOMES = {
 
 
 def png_chunk(kind: bytes, data: bytes) -> bytes:
+    """Constructs a PNG chunk with validated size and CRC fields."""
     return (
         struct.pack(">I", len(data))
         + kind
@@ -42,6 +43,7 @@ def png_chunk(kind: bytes, data: bytes) -> bytes:
 
 
 def make_fixture(path: Path, kind: str, size: int) -> str:
+    """Creates a deterministic worker-output fixture of the requested size."""
     with path.open("wb") as stream:
         if kind == "json":
             stream.write(b'{"fixture":"' + b"a" * (size - 14) + b'"}')
@@ -66,6 +68,7 @@ def make_fixture(path: Path, kind: str, size: int) -> str:
 
 
 def prepare_cache(path: Path, cache: str) -> None:
+    """Warms filesystem access paths so repeated reads are comparable."""
     with path.open("rb") as stream:
         if cache == "cold-advised":
             os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
@@ -83,6 +86,7 @@ def measure(
     digest: str,
     samples: int,
 ) -> dict:
+    """Measures bounded worker-output read performance under the selected fixture."""
     mode = name if name in FAULT_OUTCOMES else "normal"
     expected = FAULT_OUTCOMES.get(name, "ok")
     results = {}
@@ -130,6 +134,7 @@ def measure(
 
 
 def main() -> int:
+    """Parses fixture sizes and executes the worker-output benchmark suite."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("--samples", type=int, default=3)

@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 def chunk(kind: bytes, payload: bytes = b"") -> bytes:
+    """Encodes a PNG chunk with length and CRC for deterministic format fixtures."""
     return (
         struct.pack(">I", len(payload))
         + kind
@@ -17,11 +18,13 @@ def chunk(kind: bytes, payload: bytes = b"") -> bytes:
 
 
 def rgba(pixels: list[int]) -> bytes:
+    """Builds a small RGBA image with controlled pixel values."""
     return zlib.compress(b"\0" + bytes(pixels))
 
 
 def write_partial_fixtures(qoi: Path, apng: Path) -> None:
     # Two independently encoded pixels with different transparency.
+    """Generates malformed or incomplete formats for decode validation tests."""
     qoi.write_bytes(
         b"qoif"
         + struct.pack(">IIBB", 2, 1, 4, 0)
@@ -50,6 +53,7 @@ def write_partial_fixtures(qoi: Path, apng: Path) -> None:
 
 def write_orientation_fixtures(oriented: list[Path]) -> None:
     # An asymmetric 3x2 TIFF with independently identifiable corners.
+    """Generates orientation-tagged images for transform and metadata checks."""
     pixels = bytes(
         [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0, 0, 255, 255, 255, 0, 255]
     )
@@ -83,6 +87,7 @@ def write_legacy_fixtures(
     bmp: Path, ico: Path, tga: Path, dds: Path, pgm: Path
 ) -> None:
     # Independently encoded 2x1 red and green pixels, plus a grayscale PGM.
+    """Creates legacy format variants used for codec compatibility testing."""
     bmp_pixels = bytes((0, 0, 255, 0, 255, 0, 0, 0))
     bmp_info = struct.pack(
         "<IiiHHIIiiII", 40, 2, 1, 1, 24, 0, len(bmp_pixels), 0, 0, 0, 0
@@ -115,6 +120,7 @@ def write_legacy_fixtures(
 
 
 def write_color_fixtures(bad_icc: Path, srgb: Path, cicp: Path) -> None:
+    """Creates profiled RGB fixtures for color-management checks."""
     bad_icc.write_bytes(
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 1, 8, 6, 0, 0, 0))
@@ -137,6 +143,7 @@ def write_color_fixtures(bad_icc: Path, srgb: Path, cicp: Path) -> None:
 
 
 def write_srgb16_png(path: Path, color_type: int, width: int, height: int) -> None:
+    """Writes a 16-bit sRGB PNG to exercise high-depth decoding."""
     color = (32768, 16384, 4096) if color_type in (2, 6) else (32768,)
     alpha = (32768,) if color_type in (4, 6) else ()
     first = struct.pack(">" + "H" * (len(color) + len(alpha)), *color, *alpha)
@@ -161,11 +168,13 @@ def write_heic_fixtures(
 ) -> bytes:
     # Mutations retain the original sample data and all chunk offsets. The fixture
     # uses version-zero movie, track and edit headers with one whole-track repeat.
+    """Creates HEIC fixtures with known metadata and image payloads."""
     heic = (
         Path(__file__).resolve().parents[1] / "fixtures" / "heic-sequence.heic"
     ).read_bytes()
 
     def replace_field(box, offset, value):
+        """Replaces a bounded binary container field without changing unrelated data."""
         position = heic.index(box) + offset
         return heic[:position] + struct.pack(">I", value) + heic[position + 4 :]
 
@@ -222,6 +231,7 @@ def write_heic_fixtures(
 
 
 def write_linear_qoi(qoi_linear: Path) -> None:
+    """Creates a QOI fixture with a defined linear color transfer."""
     qoi_linear.write_bytes(
         b"qoif"
         + struct.pack(">IIBB", 2, 1, 4, 1)
@@ -233,6 +243,7 @@ def write_linear_qoi(qoi_linear: Path) -> None:
 
 def write_fractional_heic(heic: bytes, partial_repeat: Path) -> None:
     # Play one complete 230 ms cycle and the first 40 ms of the next.
+    """Constructs HEIC data with fractional frame-timing metadata."""
     fractional = bytearray(heic)
     for tag in (b"tkhd", b"mvhd"):
         struct.pack_into(">I", fractional, heic.index(tag) + 20, 270)
@@ -241,6 +252,7 @@ def write_fractional_heic(heic: bytes, partial_repeat: Path) -> None:
 
 def write_profiled_animation(profiled: Path, apng: Path, wide_apng: Path) -> None:
     # The native fixture maker supplies a real Display P3 profile.
+    """Writes an animation carrying a known output color profile."""
     profile_png = profiled.read_bytes()
     offset = 8
     while offset + 12 <= len(profile_png):
@@ -256,6 +268,7 @@ def write_profiled_animation(profiled: Path, apng: Path, wide_apng: Path) -> Non
 
 
 def main() -> int:
+    """Creates the deterministic image-format fixture catalog used by tests."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profiled", type=Path)
     parser.add_argument("outputs", nargs=31, type=Path)

@@ -13,6 +13,7 @@
 
 // Scanline output bounds extra memory to one source row. Values remain linear
 // sRGB, including negative wide-gamut samples and highlights above SDR white.
+/** Writes a linear-light OpenEXR image with the requested half/float precision. */
 gboolean image_codec_exr_encode(VipsImage *image, const char *path, int depth, GError **error)
 {
     VipsImage *linear = image_codec_to_linear(image, error);

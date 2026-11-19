@@ -1,5 +1,10 @@
 namespace ImageKit {
+    /** Applies color adjustments from a validated rendering recipe. */
     public class ColorAdjustments : Object {
+        /**
+         * Applies the owning image-processing adjustment stage to current float samples. Errors
+         * propagate to the caller.
+         */
         public static Vips.Image apply (Vips.Image image, RenderOptions input_recipe) throws Error {
             if (!input_recipe.monochrome && !input_recipe.sharpen && input_recipe.saturation == 1 &&
                 input_recipe.vibrance == 0 && input_recipe.temperature == 0 &&

@@ -1,4 +1,5 @@
 namespace ImageKit {
+    /** Image-space rectangle covered by the tile planning operation. */
     internal struct TileBounds {
         public double left;
         public double top;
@@ -6,6 +7,7 @@ namespace ImageKit {
         public double bottom;
 
         // Invert the same quarter-turn and mirror transform used by the snapshot.
+        /** Converts GTK viewport geometry into the source-relative tile planning bounds. */
         public static TileBounds from_view (int width, int height, double center_x, double center_y,
                                             double offset_x, double offset_y, double scale,
                                             int turns, bool flipped_x, bool flipped_y) {
@@ -29,6 +31,7 @@ namespace ImageKit {
         }
     }
 
+    /** Viewport-to-tile calculations used for visible and prefetch coverage. */
     internal struct TileCoverage {
         public const int64 MAX_BYTES = 704 * 1024 * 1024;
         public const int MAX_SLOTS = 256;
@@ -43,6 +46,7 @@ namespace ImageKit {
         public double center_x;
         public double center_y;
 
+        /** Calculates tile coverage for the visible image and surrounding prefetch area. */
         public static TileCoverage plan (TileBounds bounds, int width, int height, double zoom, bool vector) {
             TileCoverage coverage = {};
             if (width <= 0 || height <= 0 || !zoom.is_finite () || zoom <= 0 ||
@@ -95,6 +99,7 @@ namespace ImageKit {
         }
     }
 
+    /** One decoded tile, including its region and asynchronous request status. */
     internal class ImageTile : Object {
         public string key;
         public int x;
@@ -113,6 +118,7 @@ namespace ImageKit {
         public bool failed;
     }
 
+    /** Schedules and retains image tiles within the current viewport budget. */
     internal class TileCache : Object {
         private const int64 WARM_BYTES = 256 * 1024 * 1024;
         private Gee.HashMap<string, ImageTile> tiles = new Gee.HashMap<string, ImageTile> ();
@@ -128,8 +134,10 @@ namespace ImageKit {
         private uint active;
         private uint generation;
         private int64 reserved_bytes;
+        /** Emitted when ready tiles or cache state require the GTK view to redraw. */
         public signal void changed ();
 
+        /** Cancels pending tile work and clears tiles invalidated by a new document. */
         public void reset (ImageDocument? source, bool tone_map = false) {
             if (source != null && !source.supports_regions) {
                 source = null;
@@ -151,6 +159,7 @@ namespace ImageKit {
             // Canceled jobs still occupy slots until their completion callbacks.
         }
 
+        /** Reports whether a cached tile intersects the visible image bounds. */
         public Gee.List<ImageTile> visible (TileBounds bounds, double zoom) {
             // Source geometry is fixed for the lifetime of the document.
             // reset() drops the plan when the source or tone mapping changes.
@@ -162,6 +171,7 @@ namespace ImageKit {
             return planned_visible;
         }
 
+        /** Computes visible tile coverage for the current zoom and image bounds. */
         private void plan_viewport (TileBounds bounds, double zoom) {
             var visible = new Gee.ArrayList<ImageTile> ();
             planned_visible = null;
@@ -209,12 +219,14 @@ namespace ImageKit {
             pump ();
         }
 
+        /** Computes distance-based priority for candidate tile requests. */
         private static double distance (ImageTile tile, TileCoverage coverage) {
             double dx = tile.x + tile.width / 2.0 - coverage.center_x;
             double dy = tile.y + tile.height / 2.0 - coverage.center_y;
             return dx * dx + dy * dy;
         }
 
+        /** Plans neighboring tiles to reduce visible load latency. */
         private int64 plan_prefetch (int x, int y, TileCoverage plan, Gee.HashSet<ImageTile> keep,
             int64 used) {
             if (keep.size >= TileCoverage.MAX_SLOTS) {
@@ -229,6 +241,7 @@ namespace ImageKit {
             return used + tile.charge;
         }
 
+        /** Finds a retained tile at a requested source position. */
         private ImageTile tile_at (int x, int y, TileCoverage plan) {
             var key = "%d:%d:%d:%s".printf (plan.extent, x, y, plan.level.to_string ());
             var tile = tiles[key];
@@ -254,12 +267,14 @@ namespace ImageKit {
             return tile;
         }
 
+        /** Queues an uncached tile while respecting limits and current generation. */
         private void queue_tile (ImageTile tile) {
             if (tile.texture == null && tile.request == null && !tile.failed) {
                 pending.offer (tile);
             }
         }
 
+        /** Reprioritizes unfinished tile work when the viewport changes. */
         private void rebuild_pending (bool viewport_changed) {
             pending.clear ();
             foreach (var tile in planned_visible) {
@@ -274,6 +289,7 @@ namespace ImageKit {
             }
         }
 
+        /** Discards tiles outside the retained viewport budget while keeping visible coverage. */
         private void evict (Gee.HashSet<ImageTile> keep, int64 budget) {
             var unused = new Gee.ArrayList<ImageTile> ();
             foreach (var tile in tiles.values) {
@@ -295,6 +311,7 @@ namespace ImageKit {
             }
         }
 
+        /** Schedules eligible pending tile requests up to the worker limit. */
         private void pump () {
             while (active < 2 && !pending.is_empty) {
                 var tile = pending.poll ();
@@ -307,6 +324,7 @@ namespace ImageKit {
             }
         }
 
+        /** Finishes one requested tile and publishes it only if the cache generation matches. */
         private async void load (ImageDocument source, ImageTile tile, uint request_generation,
             bool tone_map, Cancellable stop) {
             try {

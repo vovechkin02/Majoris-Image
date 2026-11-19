@@ -12,6 +12,7 @@ REQUIRED = ("debian/rules", "tests/release/installed_consumers.py")
 
 
 def main() -> int:
+    """Verifies that a source release archive supports the declared build modes."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
     options = parser.parse_args()

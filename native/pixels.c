@@ -7,6 +7,7 @@
 
 #include "bridge.h"
 
+/** Owns one output row buffer and error state for bounded MIF1 writes. */
 typedef struct {
     FILE *file;
     float *row;
@@ -15,12 +16,14 @@ typedef struct {
     int write_errno;
 } PixelOutput;
 
+/** Converts a failed filesystem pixel write into the expected GIO error. */
 static void set_pixel_file_error(GError **error, const char *operation, int saved_errno)
 {
     g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Cannot %s decoded pixels: %s",
                 operation, g_strerror(saved_errno));
 }
 
+/** Writes a bounded libvips pixel strip without retaining an entire decoded image. */
 static int write_pixel_strip(VipsRegion *region, VipsRect *area, void *data)
 {
     PixelOutput *output = data;
@@ -42,6 +45,7 @@ static int write_pixel_strip(VipsRegion *region, VipsRect *area, void *data)
     return 0;
 }
 
+/** Writes a validated little-endian pixel transport buffer for the isolated worker. */
 gboolean image_codec_write_pixels(VipsImage *image, const char *path, GError **error)
 {
     int width = vips_image_get_width(image);
@@ -97,6 +101,7 @@ done:
     return ok;
 }
 
+/** Maps and validates pixel transport bytes before constructing an image. */
 VipsImage *image_codec_read_pixels(const char *path, GError **error)
 {
     GMappedFile *mapping = g_mapped_file_new(path, FALSE, error);

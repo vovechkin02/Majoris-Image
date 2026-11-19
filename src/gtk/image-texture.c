@@ -1,5 +1,6 @@
 #include "image-texture.h"
 
+/** Builds a color-aware GDK texture from straight-alpha RGBA float pixels. */
 GdkTexture *image_texture_new_float_rgba(GBytes *bytes, int width, int height, gsize stride,
                                          GdkColorState *state)
 {
@@ -25,12 +26,14 @@ GdkTexture *image_texture_new_float_rgba(GBytes *bytes, int width, int height, g
     return texture;
 }
 
+/** Builds a GDK texture from the standard ImageKit float32 pixel layout. */
 GdkTexture *image_texture_new(GBytes *bytes, int width, int height, gsize stride)
 {
     return image_texture_new_float_rgba(bytes, width, height, stride,
                                         gdk_color_state_get_srgb_linear());
 }
 
+/** Describes an existing texture color state and HDR/SDR capability. */
 const char *image_texture_external_description(GdkTexture *texture, gboolean *sdr, gboolean *hdr)
 {
     GdkColorState *state = gdk_texture_get_color_state(texture);
@@ -57,6 +60,7 @@ const char *image_texture_external_description(GdkTexture *texture, gboolean *sd
            "unverified.";
 }
 
+/** Reports whether the GTK widget output supports HDR presentation. */
 int image_hdr_output(GtkWidget *widget)
 {
     GtkNative *native = gtk_widget_get_native(widget);

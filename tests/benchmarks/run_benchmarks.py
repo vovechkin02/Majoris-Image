@@ -45,6 +45,7 @@ NATIVE_WORKLOADS = {
 def measure_native(
     executable: Path, workload: str, root: Path, count: int, references: Path | None
 ) -> dict:
+    """Measures native decoding and export operations using the benchmark driver."""
     fixture = ("coordinate-ramp-v1", *NATIVE_WORKLOADS[workload])
     digest = hashlib.sha256(json.dumps(fixture).encode()).hexdigest()
     path = root / "native-output"
@@ -97,6 +98,7 @@ def measure_native(
 
 
 def descendants(pid: int) -> Iterator[int]:
+    """Enumerates child process IDs for memory and cancellation accounting."""
     try:
         children = (
             Path("/proc") / str(pid) / "task" / str(pid) / "children"
@@ -109,6 +111,7 @@ def descendants(pid: int) -> Iterator[int]:
 
 
 def memory_kib(pid: int) -> tuple[int, str]:
+    """Reads process resident memory in KiB for benchmark sampling."""
     try:
         status = (Path("/proc") / str(pid) / "status").read_text()
     except OSError:
@@ -118,6 +121,7 @@ def memory_kib(pid: int) -> tuple[int, str]:
 
 
 def disk_usage(root: Path) -> int:
+    """Measures storage occupied by staged or published benchmark files."""
     total = 0
     for path in root.rglob("*"):
         try:
@@ -130,20 +134,26 @@ def disk_usage(root: Path) -> int:
 
 @contextmanager
 def loopback_fixture(fixture: Path) -> Iterator[str]:
+    """Serves a local HTTP fixture to reproduce remote-source behavior."""
     png = fixture.read_bytes()
     chunk = bytes(GVFS_CHUNK_SIZE)
 
     class Handler(BaseHTTPRequestHandler):
+        """Handles HTTP fixture responses without contacting external servers."""
         def do_HEAD(self) -> None:
+            """Returns headers for a known fixture so GIO can probe its metadata."""
             self.respond(False)
 
         def do_GET(self) -> None:
+            """Streams fixture bytes to the benchmark client."""
             self.respond(True)
 
         def log_message(self, _format: str, *args: object) -> None:
+            """Suppresses or captures incidental HTTP server logging."""
             pass
 
         def respond(self, send_body: bool) -> None:
+            """Sends a controlled HTTP response for the fixture server."""
             data = png if self.path == "/gvfs" else chunk
             slow = self.path == "/gvfs-cancel"
             oversize = self.path == "/gvfs-limit"
@@ -190,6 +200,7 @@ def measure(
     worker: Path,
     fault_worker: Path | None = None,
 ) -> dict:
+    """Collects timing and memory measurements for a configured workload."""
     cache = root / "sample-cache"
     cache.mkdir()
     staging = root / "sample-tmp"
@@ -311,6 +322,7 @@ def measure(
 
 
 def codec_versions() -> dict[str, str]:
+    """Records installed codec versions to make benchmark results reproducible."""
     result = {}
     for name in (
         "glib-2.0",
@@ -337,6 +349,7 @@ def codec_versions() -> dict[str, str]:
 
 
 def main() -> int:
+    """Runs the selected benchmark workloads and writes the comparison report."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--worker", type=Path)
@@ -539,6 +552,7 @@ def main() -> int:
 
 
 def emit_result(result: dict, output: Path | None) -> int:
+    """Serializes one benchmark result with its environment metadata."""
     encoded = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if output:
         output.write_text(encoded)

@@ -6,6 +6,7 @@ import gi
 
 
 def check_builder() -> None:
+    """Creates a GtkBuilder image widget through installed GObject Introspection."""
     gi.require_version("Gtk", "4.0")
     gi.require_version("ImageKit", "2.0")
     gi.require_version("ImageKitGtk", "2.0")
@@ -32,6 +33,7 @@ def check_builder() -> None:
 
 
 def check_thumbnail() -> None:
+    """Calls the installed thumbnail API through the GI typelib."""
     gi.require_version("GdkPixbuf", "2.0")
     from gi.repository import GdkPixbuf
 
@@ -48,6 +50,7 @@ def check_thumbnail() -> None:
 
 
 def main() -> int:
+    """Runs the installed GI consumer cases and reports a failure exit status."""
     checks = {"builder": check_builder, "thumbnail": check_thumbnail}
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("check", choices=checks)

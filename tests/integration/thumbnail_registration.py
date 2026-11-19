@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 def main() -> int:
+    """Verifies desktop thumbnailer registration and its advertised MIME types."""
     parser = argparse.ArgumentParser(description=__doc__)
     for field in (
         "thumbnailer",
@@ -61,6 +62,9 @@ def main() -> int:
         clean_env = dict(os.environ, XDG_DATA_HOME=tmp, XDG_DATA_DIRS=tmp)
 
         def run_generator(name, selected, env):
+            """Invokes the installed thumbnailer registration generator and checks its
+            result.
+            """
             target = root / name
             subprocess.run(
                 [generator, template, target, desktop["TryExec"], selected],

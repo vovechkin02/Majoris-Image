@@ -1,5 +1,8 @@
 namespace ImageKit {
     namespace WorkerDispatcher {
+        /**
+         * Starts the requested sandboxed worker operation with cancellation and resource limits.
+         */
         internal void run (string operation, string source, string output, string request_path,
                            string edge_argument) throws Error {
             if (operation == "codecs") {
@@ -44,6 +47,7 @@ namespace ImageKit {
             process_source (operation, source, output, request, edge, probe, prepared);
         }
 
+        /** Produces a bounded worker pixel-buffer representation. */
         private void render_buffer (string source, string output, WorkerRequest request, int edge)
                                     throws Error {
             var image = ImageProcessor.render_image (ImageNative.read_pixels (source),
@@ -54,6 +58,7 @@ namespace ImageKit {
             ImageNative.write_pixels (image, output);
         }
 
+        /** Loads the requested source inside the validated worker environment. */
         private void process_source (string operation, string source, string output,
                                      WorkerRequest request, int edge, ImageProbe probe,
                                      Vips.Image? prepared) throws Error {
@@ -111,6 +116,7 @@ namespace ImageKit {
             }
         }
 
+        /** Produces a thumbnail in the desktop cache-compatible format. */
         private void write_thumbnail (Vips.Image input, string output, WorkerRequest request,
                                       bool hdr) throws Error {
             var image = hdr ? ToneMapper.map (input, request.options.tone_mode) : input;

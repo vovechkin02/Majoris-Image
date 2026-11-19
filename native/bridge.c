@@ -8,11 +8,13 @@
 #include <vips/vips.h>
 
 #include "config.h"
+/** Returns the trusted installed worker executable path used for native operations. */
 const char *image_codec_worker_path(void)
 {
     return WORKER_PATH;
 }
 
+/** Attaches sRGB color characteristics to the image without changing its pixels. */
 void image_codec_tag_srgb(VipsImage *image)
 {
     cmsHPROFILE profile = cmsCreate_sRGBProfile();
@@ -31,6 +33,7 @@ void image_codec_tag_srgb(VipsImage *image)
 
 /* Called only inside the isolated worker. Store CICP with the native vips
  * intermediate so encoded HDR samples retain their interpretation. */
+/** Imports HEIF bit depth and color profile metadata into the decoded image. */
 void image_codec_annotate_heif(VipsImage *image, const char *source)
 {
     struct heif_context *context = heif_context_alloc();
@@ -70,6 +73,7 @@ void image_codec_annotate_heif(VipsImage *image, const char *source)
     heif_context_free(context);
 }
 
+/** Develops a RAW source using the requested quality and camera white balance settings. */
 gboolean image_codec_develop_raw_options(const char *source, const char *target, int quality,
                                          gboolean camera_wb, GError **error)
 {
@@ -104,11 +108,13 @@ gboolean image_codec_develop_raw_options(const char *source, const char *target,
     return result == 0;
 }
 
+/** Develops a RAW source using the default RAW conversion settings. */
 gboolean image_codec_develop_raw(const char *source, const char *target, GError **error)
 {
     return image_codec_develop_raw_options(source, target, 1, TRUE, error);
 }
 
+/** Converts a normalized PQ transfer value into linear light. */
 double image_codec_pq_to_linear(double v)
 {
     const double m1 = 2610.0 / 16384, m2 = 2523.0 / 32, c1 = 3424.0 / 4096, c2 = 2413.0 / 128,
@@ -117,6 +123,7 @@ double image_codec_pq_to_linear(double v)
     return pow(MAX(p - c1, 0) / (c2 - c3 * p), 1 / m1) * 10000;
 }
 
+/** Converts an HLG transfer value into linear light. */
 double image_codec_hlg_to_linear(double v)
 {
     return v <= 0.5 ? v * v / 3 : (exp((v - 0.55991073) / 0.17883277) + 0.28466892) / 12;

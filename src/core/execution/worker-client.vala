@@ -1,19 +1,24 @@
 namespace ImageKit {
+    /** Launches sandboxed decoder operations and validates their bounded outputs. */
     internal sealed class WorkerClient : Object {
+        /** Resolves the worker executable installed for the supported ImageKit version. */
         [CCode (cname = "image_worker_path")]
         private extern static unowned string installed_worker ();
 
         private string? backend;
         private uint timeout_seconds;
+        /** Configures a client for the selected trusted worker executable. */
         internal WorkerClient (string? backend = null, uint timeout_seconds = 120) {
             this.backend = backend;
             this.timeout_seconds = timeout_seconds.clamp (1, 120);
         }
 
+        /** Resolves a trusted backend executable without accepting arbitrary paths. */
         private string resolve_executable () {
             return backend ?? Environment.get_variable ("MAJORIS_IMAGE_WORKER") ?? installed_worker ();
         }
 
+        /** Reads worker diagnostic output into a bounded error description. */
         private async string read_diagnostics (InputStream stream, Cancellable stop) throws Error {
             var log = new ByteArray ();
             while (true) {
@@ -30,9 +35,13 @@ namespace ImageKit {
             return ((string) log.data).make_valid ();
         }
 
+        /** Duplicates the verified local source descriptor for isolated export. */
         [CCode (cname = "image_export_source_dup", cheader_filename = "export-transfer.h")]
         private static extern int duplicate_export_source (void* protected_source) throws Error;
 
+        /**
+         * Starts the requested sandboxed worker operation with cancellation and resource limits.
+         */
         internal async string run (File? source, string operation, RenderOptions? transform,
                                    Cancellable cancel, int size = 0, DecodeOptions? options = null,
                                    ExportOptions? encoding = null, bool preload = false,
@@ -59,6 +68,7 @@ namespace ImageKit {
             }
         }
 
+        /** Executes the configured worker process and classifies its result. */
         private async string execute (File? source, string operation, RenderOptions? transform,
                                       Cancellable cancel, int size, DecodeOptions? options,
                                       ExportOptions? encoding, void* protected_source)
@@ -224,6 +234,7 @@ namespace ImageKit {
         }
 
         // The job unlinks its private file after both streams close.
+        /** Copies a remote source into verified local staging for isolated decoding. */
         private static async void stage_remote_source (File source, File target,
             Cancellable cancel) throws Error {
             int64 started = OperationProfile.begin ();
@@ -267,6 +278,7 @@ namespace ImageKit {
             cancel.set_error_if_cancelled ();
         }
 
+        /** Removes operation-specific staging outputs after the response is consumed. */
         internal static void cleanup (string output) {
             int64 started = OperationProfile.begin ();
             var dir = Path.get_dirname (output);
@@ -283,6 +295,7 @@ namespace ImageKit {
             OperationProfile.record ("job-cleanup", started);
         }
 
+        /** Recursively removes the owned temporary worker directory. */
         private static void remove_tree (string path) {
             if (FileUtils.remove (path) == 0 || FileUtils.test (path, FileTest.IS_SYMLINK)) {
                 return;
@@ -302,11 +315,13 @@ namespace ImageKit {
             }
         }
 
+        /** Checks output provenance, bounds and file type before consuming bytes. */
         [CCode (cname = "worker_output_read_async", finish_name = "worker_output_read_finish",
                 cheader_filename = "worker-output-reader.h")]
         private static extern async Bytes read_validated_output (string path, int64 limit,
                                                                   Cancellable stop) throws Error;
 
+        /** Reads a bounded worker output file after validation. */
         internal static async Bytes read_output (string path, int64 limit, Cancellable stop) throws Error {
             int64 started = OperationProfile.begin ();
             var bytes = yield read_validated_output (path, limit, stop);
@@ -314,6 +329,7 @@ namespace ImageKit {
             return bytes;
         }
 
+        /** Reads and validates a worker text manifest or response. */
         internal static async string read_text (string path, Cancellable stop) throws Error {
             var bytes = yield read_output (path, 1024 * 1024, stop);
             unowned uint8[] data = bytes.get_data ();
@@ -325,6 +341,7 @@ namespace ImageKit {
             return (string) text;
         }
 
+        /** Decodes validated binary worker pixel output into the buffer contract. */
         internal async PixelBuffer render_pixels (PixelBuffer pixels, RenderOptions? transform, int edge,
                                                   DecodeOptions options, Cancellable stop) throws Error {
             uint8[] header = { 'M', 'I', 'F', '1', 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -345,6 +362,7 @@ namespace ImageKit {
             }
         }
 
+        /** Reads and validates the pixel-buffer transport payload. */
         internal static async PixelBuffer read_pixels (string path, Cancellable stop) throws Error {
             var bytes = yield read_output (path, 268435468, stop);
             unowned uint8[] data = bytes.get_data ();

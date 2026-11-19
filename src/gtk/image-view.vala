@@ -1,56 +1,86 @@
 [CCode (gir_namespace = "ImageKitGtk", gir_version = "2.0")]
 namespace ImageKit {
+    /** Creates a GTK texture from validated pixel bytes with explicit dimensions. */
     [CCode (cname = "image_texture_new", cheader_filename = "image-texture.h")]
     private extern static Gdk.Texture create_texture (Bytes bytes, int width, int height, size_t stride);
 
+    /** Wraps an ImageKit pixel buffer as a GTK texture. */
     internal static Gdk.Texture texture_for_pixels (PixelBuffer buffer) {
         return create_texture (buffer.bytes, buffer.width, buffer.height, buffer.stride);
     }
 
+    /** Reusable GTK4 image widget for loading, presentation, navigation and gestures. */
     [CCode (cname = "ImageKitView")]
     public sealed class ImageView : Gtk.Widget {
+        /** Current image-loading lifecycle state exposed by the widget. */
         public ViewState state { get; private set; default = ViewState.EMPTY; }
+        /** Document currently presented by this widget; null when empty or loading. */
         public ImageDocument? document {
             get {
                 return current_document;
             }
         }
         private ImageDocument? current_document;
+        /** Width of the currently displayed image in pixels. */
         public int image_width { get; private set; }
+        /** Height of the currently displayed image in pixels. */
         public int image_height { get; private set; }
+        /** Number of document pages, distinct from its animation frame count. */
         public int page_count { get; private set; }
+        /** Zero-based page currently shown in the view. */
         public int current_page { get; private set; }
+        /** Image metadata object or serialized metadata content, according to the owning type. */
         public ImageMetadata? metadata { get; private set; }
+        /** Human-readable name of the decoder that opened the image. */
         public string decoder { get; private set; default = ""; }
+        /** Nonfatal decoder or presentation diagnostic shown to the caller. */
         public string warning { get; private set; default = ""; }
+        /** Most recent fatal loading or presentation error shown by the widget. */
         public string error_message { get; private set; default = ""; }
+        /** Whether the displayed source contains HDR information. */
         public bool hdr_source { get; private set; }
+        /** Policy used to choose HDR/SDR output presentation. */
         public PresentationPolicy presentation_policy { get; set; default = PresentationPolicy.AUTOMATIC; }
+        /** Current presentation mode selected for the output. */
         public PresentationStatus presentation_status { get; private set; }
+        /** Description of presentation capability or a fallback decision. */
         public string presentation_diagnostic {
             get {
                 return texture != null ? presented.diagnostic : "";
             }
         }
+        /** Whether the image contains animation frames. */
         public bool animated { get; private set; }
+        /** Whether frame playback is currently active. */
         public bool playing { get; private set; }
+        /** Zero-based animation frame currently presented by the widget. */
         public int current_frame { get; private set; }
+        /** Duration of the current frame in milliseconds. */
         public int frame_duration_ms { get; private set; }
+        /** Rule used to fit image dimensions into the allocated viewport. */
         public FitMode fit_mode { get; set; default = FitMode.CONTAIN; }
+        /** Policy controlling how scrolling changes the zoom level. */
         public ScrollZoomMode scroll_zoom_mode { get; set; default = ScrollZoomMode.ALWAYS; }
         /** Per-image description. Host-provided GTK accessible labels are independent. */
         public string accessible_description { get; set; default = ""; }
+        /** Whether user interaction is permitted to change the zoom level. */
         public bool allow_zoom { get; set; default = true; }
+        /** Whether user interaction is permitted to pan the image. */
         public bool allow_pan { get; set; default = true; }
+        /** Whether pixel sampling avoids interpolation in rendering or display. */
         public bool nearest_neighbor { get; set; }
+        /** Lower zoom multiplier accepted for interactive scaling; default 0.01. */
         public double minimum_zoom { get; set; default = 0.01; }
+        /** Upper zoom multiplier accepted for interactive scaling; default 64. */
         public double maximum_zoom { get; set; default = 64; }
+        /** Effective image scale multiplier after fit mode and output scaling. */
         public double zoom {
             get {
                 return effective_zoom ();
             }
         }
 
+        /** Emitted when interactive rotation, flip, zoom or pan changes the presentation. */
         public signal void transformed ();
 
         private AnimationController animation;
@@ -91,6 +121,7 @@ namespace ImageKit {
             set_accessible_role (Gtk.AccessibleRole.IMG);
         }
 
+        /** Ensures the public ImageView GType is registered for GtkBuilder consumers. */
         public static void register_type () {
             typeof (ImageView).ensure ();
         }
@@ -223,11 +254,13 @@ namespace ImageKit {
             add_controller (keys);
         }
 
+        /** Returns the modifier mask required for the widget keyboard shortcuts. */
         private static Gdk.ModifierType shortcut_modifiers () {
             return Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.META_MASK |
                    Gdk.ModifierType.HYPER_MASK;
         }
 
+        /** Refreshes the accessible description from current image and loading state. */
         private void update_accessible_description () {
             if (accessible_description != null && accessible_description != "") {
                 update_property (Gtk.AccessibleProperty.DESCRIPTION, accessible_description, -1);
@@ -238,6 +271,7 @@ namespace ImageKit {
             }
         }
 
+        /** Changes the viewport center by a keyboard-directed amount. */
         private bool keyboard_pan (double x, double y) {
             if (!allow_pan) {
                 return false;
@@ -247,6 +281,7 @@ namespace ImageKit {
             return pan_x != previous_x || pan_y != previous_y;
         }
 
+        /** Invalidates cached drawing state and schedules a new widget snapshot. */
         private uint invalidate () {
             generation++;
             cancel_presentation ();
@@ -260,12 +295,14 @@ namespace ImageKit {
             return generation;
         }
 
+        /** Resets the widget to an empty image state, invalidating pending asynchronous work. */
         public void clear () {
             if (!disposed) {
                 clear_request ();
             }
         }
 
+        /** Cancels outstanding loads and prevents superseded callbacks from publishing. */
         private uint clear_request (bool take_description = false) {
             freeze_notify ();
             uint request = invalidate ();
@@ -298,6 +335,7 @@ namespace ImageKit {
             return request;
         }
 
+        /** Updates the display texture and associated presentation data. */
         public void set_texture (Gdk.Texture value) {
             if (disposed) {
                 return;
@@ -323,6 +361,7 @@ namespace ImageKit {
             }
         }
 
+        /** Updates the document associated with the viewer while resetting stale state. */
         public void set_document (ImageDocument value) {
             if (disposed) {
                 return;
@@ -334,6 +373,7 @@ namespace ImageKit {
             }
         }
 
+        /** Copies verified document geometry and metadata into widget properties. */
         private async void apply_document (ImageDocument value, uint request, Cancellable stop) {
             state = ViewState.LOADING;
             try {
@@ -345,10 +385,12 @@ namespace ImageKit {
             }
         }
 
+        /** Rejects an obsolete async result when its generation or document is no longer active. */
         internal bool is_current (uint request) {
             return !disposed && request == generation;
         }
 
+        /** Publishes the decoded preview and triggers output presentation selection. */
         private async void present_document (ImageDocument value, uint request, Cancellable stop) throws Error {
             var animation_error = "";
             if (can_play (value) && value.mime_type == "image/apng" &&
@@ -380,6 +422,7 @@ namespace ImageKit {
             }
         }
 
+        /** Attaches or detaches output monitor/surface signals for HDR changes. */
         private void watch_output (bool attach = true) {
             if (watched_surface != null) {
                 watched_surface.disconnect (entered_monitor);
@@ -401,6 +444,7 @@ namespace ImageKit {
             }
         }
 
+        /** Recalculates display scaling after output changes. */
         private void update_output_scale () {
             update_presentation ();
             if (!disposed && fit_mode == FitMode.ACTUAL && zoom != applied_zoom) {
@@ -408,6 +452,7 @@ namespace ImageKit {
             }
         }
 
+        /** Cancels presentation conversion made obsolete by a newer request. */
         private void cancel_presentation () {
             presentation_generation++;
             presentation_work.cancel ();
@@ -415,6 +460,7 @@ namespace ImageKit {
             presentation_pending = false;
         }
 
+        /** Publishes a completed presentation texture only if its generation is current. */
         private void publish_presentation (PresentationDecision decision) {
             presented = decision;
             tiles.reset (get_mapped () && !animated ? document : null, decision.tone_map);
@@ -423,6 +469,7 @@ namespace ImageKit {
             queue_draw ();
         }
 
+        /** Selects the appropriate output profile and updates the displayed pixels. */
         private void update_presentation () {
             var source = frame_source ?? document;
             if (disposed) {
@@ -448,6 +495,7 @@ namespace ImageKit {
             refresh_presentation.begin (source, decision, presentation_generation, presentation_work);
         }
 
+        /** Rebuilds presentation decisions after output capability changes. */
         private async void refresh_presentation (ImageDocument source, PresentationDecision decision,
                                                   uint request, Cancellable stop) {
             try {
@@ -470,11 +518,13 @@ namespace ImageKit {
             }
         }
 
+        /** Checks whether document animation has frames and supported playback timing. */
         private static bool can_play (ImageDocument value) {
             return value.animated && value.frame_count > 1 &&
                 (value.capabilities & ImageCapabilities.ANIMATION) != 0;
         }
 
+        /** Displays an already opened image document in this widget. */
         private void show_document (ImageDocument value, PixelBuffer pixels, PresentationDecision decision,
                                     string animation_error) {
             uint request = generation;
@@ -505,6 +555,10 @@ namespace ImageKit {
             }
         }
 
+        /**
+         * Opens and displays a GIO file asynchronously without blocking GTK. Errors propagate to
+         * the caller.
+         */
         public async void load_file (File file, DecodeOptions? options = null,
             Cancellable? cancel = null) throws Error {
             yield load_source (new ImageSource (file), options, cancel);
@@ -568,6 +622,7 @@ namespace ImageKit {
             }
         }
 
+        /** Reports a fatal image failure and clears obsolete presentation state. */
         private void show_error (Error error) {
             freeze_notify ();
             error_message = (error is IOError.CANCELLED) ? "" : error.message;
@@ -585,6 +640,10 @@ namespace ImageKit {
             thaw_notify ();
         }
 
+        /**
+         * Navigates to the requested zero-based page asynchronously. Errors propagate to the
+         * caller.
+         */
         public async void set_page (int page, Cancellable? cancel = null) throws Error {
             if (disposed) {
                 throw new IOError.CLOSED ("Image view is disposed");
@@ -616,14 +675,20 @@ namespace ImageKit {
             }
         }
 
+        /** Begins timed frame advancement when the image can play. */
         public void play () {
             animation.play ();
         }
 
+        /** Stops timed advancement while retaining the current frame. */
         public void pause () {
             animation.pause ();
         }
 
+        /**
+         * Advances the animation by one frame in the requested direction. Errors propagate to
+         * the caller.
+         */
         public void step_frame () {
             animation.step_frame ();
         }
@@ -633,26 +698,32 @@ namespace ImageKit {
             yield animation.seek_frame (frame, cancel);
         }
 
+        /** Reports whether the view has entered teardown and must reject callbacks. */
         internal bool is_disposed () {
             return disposed;
         }
 
+        /** Returns the active load generation used to reject obsolete results. */
         internal uint get_document_generation () {
             return generation;
         }
 
+        /** Indicates whether a presentation conversion is still in progress. */
         internal bool is_presentation_pending () {
             return presentation_pending;
         }
 
+        /** Synchronizes the public playback flag with controller state. */
         internal void update_playing (bool value) {
             playing = value;
         }
 
+        /** Reports failed frame loading without letting old work overwrite the view. */
         internal void report_animation_error (Error error) {
             warning = error.message;
         }
 
+        /** Displays a decoded animation frame through the presentation pipeline. */
         internal void show_animation_frame (AnimationFrame loaded, int index) {
             freeze_notify ();
             current_frame = index;
@@ -669,17 +740,20 @@ namespace ImageKit {
             thaw_notify ();
         }
 
+        /** Returns the effective output scale factor for widget pixel calculations. */
         private double device_scale () {
             var surface = get_native ()?.get_surface ();
             return surface != null ? surface.get_scale () : get_scale_factor ();
         }
 
+        /** Computes displayed geometry after quarter turns and axis flips. */
         private void rotated_image_size (out int width, out int height) {
             var quarter_turn = turns % 2 != 0;
             width = quarter_turn ? image_height : image_width;
             height = quarter_turn ? image_width : image_height;
         }
 
+        /** Computes display zoom after the selected fitting policy is applied. */
         private double effective_zoom () {
             if (texture == null || image_width < 1 || image_height < 1) {
                 return 1;
@@ -709,6 +783,7 @@ namespace ImageKit {
             }
         }
 
+        /** Updates cached zoom, pan and orientation geometry for rendering. */
         private void update_transform () {
             transform_revision++;
             applied_fit_mode = fit_mode;
@@ -735,6 +810,7 @@ namespace ImageKit {
             }
         }
 
+        /** Computes the image scale dictated by the selected fit policy. */
         private void apply_fit_mode (FitMode mode) {
             uint revision = transform_revision;
             if (fit_mode != mode) {
@@ -747,6 +823,7 @@ namespace ImageKit {
             }
         }
 
+        /** Recomputes viewport geometry and cached presentation on GTK allocation. */
         protected override void size_allocate (int width, int height, int baseline) {
             base.size_allocate (width, height, baseline);
             if (transform_width != get_width () || transform_height != get_height ()) {
@@ -754,12 +831,14 @@ namespace ImageKit {
             }
         }
 
+        /** Clamps an interactive scale to the configured zoom limits. */
         private double bounded_zoom (double value) {
             double low = minimum_zoom.is_finite () ? minimum_zoom.clamp (0.001, 64) : 0.01;
             double high = maximum_zoom.is_finite () ? maximum_zoom.clamp (low, 64) : 64;
             return value.clamp (low, high);
         }
 
+        /** Applies a zoom gesture about its focal point while preserving pan context. */
         private bool interactive_zoom (double value, double x = -1, double y = -1) {
             if (!allow_zoom || texture == null || !value.is_finite () || bounded_zoom (value) == zoom) {
                 return false;
@@ -768,6 +847,7 @@ namespace ImageKit {
             return true;
         }
 
+        /** Sets the image scale to a requested bounded multiplier. */
         public void zoom_to (double value, double x = -1, double y = -1) {
             if (texture == null || !value.is_finite ()) {
                 return;
@@ -786,14 +866,17 @@ namespace ImageKit {
             apply_fit_mode (FitMode.CUSTOM);
         }
 
+        /** Increases the view magnification by the configured step. */
         public void zoom_in () {
             zoom_to (zoom * 1.25);
         }
 
+        /** Decreases the view magnification by the configured step. */
         public void zoom_out () {
             zoom_to (zoom / 1.25);
         }
 
+        /** Chooses a zoom level that keeps the image inside the viewport. */
         public void fit_to_view () {
             if (fit_mode == FitMode.CONTAIN && applied_fit_mode == FitMode.CONTAIN &&
                 pan_x == 0 && pan_y == 0) {
@@ -803,6 +886,7 @@ namespace ImageKit {
             apply_fit_mode (FitMode.CONTAIN);
         }
 
+        /** Displays pixels at the actual-size scale for the current output. */
         public void actual_size () {
             if (fit_mode != FitMode.ACTUAL || applied_fit_mode != FitMode.ACTUAL ||
                 zoom != applied_zoom) {
@@ -810,6 +894,7 @@ namespace ImageKit {
             }
         }
 
+        /** Moves the visible image within viewport bounds by the requested offsets. */
         public void pan_by (double x, double y) {
             if (!x.is_finite () || !y.is_finite ()) {
                 return;
@@ -819,16 +904,19 @@ namespace ImageKit {
             update_transform ();
         }
 
+        /** Rotates the displayed image 90 degrees clockwise without editing the source. */
         public void rotate_clockwise () {
             turns = (turns + 1) % 4;
             update_transform ();
         }
 
+        /** Rotates the displayed image 90 degrees counterclockwise without editing the source. */
         public void rotate_counterclockwise () {
             turns = (turns + 3) % 4;
             update_transform ();
         }
 
+        /** Mirrors the current presentation horizontally without modifying image bytes. */
         public void flip_horizontal () {
             if (turns % 2 == 0) {
                 flipped_x = !flipped_x;
@@ -838,6 +926,7 @@ namespace ImageKit {
             update_transform ();
         }
 
+        /** Mirrors the current presentation vertically without modifying image bytes. */
         public void flip_vertical () {
             if (turns % 2 == 0) {
                 flipped_y = !flipped_y;
@@ -847,6 +936,7 @@ namespace ImageKit {
             update_transform ();
         }
 
+        /** Restores the unrotated and unflipped viewport fitting state. */
         public void reset_view () {
             if (turns == 0 && !flipped_x && !flipped_y) {
                 fit_to_view ();
@@ -858,11 +948,13 @@ namespace ImageKit {
             apply_fit_mode (FitMode.CONTAIN);
         }
 
+        /** Computes the current image bounds in widget coordinates. */
         private Graphene.Rect bounds (double x, double y, double width, double height) {
             Graphene.Rect rect = {};
             return rect.init ((float) x, (float) y, (float) width, (float) height);
         }
 
+        /** Draws the visible texture and tiles using the current GTK snapshot. */
         protected override void snapshot (Gtk.Snapshot snapshot) {
             if (texture == null) {
                 return;
@@ -927,6 +1019,7 @@ namespace ImageKit {
             snapshot.restore ();
         }
 
+        /** Cancels pending work and disconnects observers before GTK destroys the widget. */
         protected override void dispose () {
             if (!disposed) {
                 disposed = true;

@@ -9,6 +9,7 @@
 // GNU11 binary16 samples match libuhdr's half-float layout before C23.
 __extension__ typedef _Float16 HalfFloat;
 
+/** Converts an Ultra HDR codec status into a human-readable GIO error. */
 static gboolean ultra_error(uhdr_error_info_t status, GError **error)
 {
     if (status.error_code == UHDR_CODEC_OK) {
@@ -19,6 +20,7 @@ static gboolean ultra_error(uhdr_error_info_t status, GError **error)
     return TRUE;
 }
 
+/** Creates an Ultra HDR decoder and initializes it from a bounded input file. */
 static uhdr_codec_private_t *open_ultra(const char *path, GMappedFile **mapping, GError **error)
 {
     *mapping = g_mapped_file_new(path, FALSE, error);
@@ -44,6 +46,7 @@ static uhdr_codec_private_t *open_ultra(const char *path, GMappedFile **mapping,
     return decoder;
 }
 
+/** Checks whether a source has a supported Ultra HDR gain-map representation. */
 gboolean image_codec_ultra_probe(const char *path)
 {
     // Do not map and copy huge native/TIFF/EXR intermediates into a JPEG/HEIF
@@ -74,6 +77,7 @@ gboolean image_codec_ultra_probe(const char *path)
     return result;
 }
 
+/** Decodes Ultra HDR content with HDR or SDR presentation as requested. */
 VipsImage *image_codec_ultra_decode(const char *path, gboolean sdr, GError **error)
 {
     GMappedFile *mapping = NULL;
@@ -174,6 +178,7 @@ done:
     return linear;
 }
 
+/** Encodes an image into the requested Ultra HDR output representation. */
 gboolean image_codec_ultra_encode(VipsImage *image, const char *path, int format, int quality,
                                   GError **error)
 {

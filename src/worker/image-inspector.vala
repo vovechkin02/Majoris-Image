@@ -1,11 +1,14 @@
 namespace ImageKit {
     // Invoked in the worker: no untrusted native parser runs in the GTK process.
+    /** Examines source formats and constructs validated image probe information. */
     public class ImageInspector : Object {
+        /** Reads a 32-bit big-endian value from checked format-header bytes. */
         private static uint32 read_be32 (uint8[] bytes, int offset) {
             return (uint32) bytes[offset] << 24 | (uint32) bytes[offset + 1] << 16 |
                    (uint32) bytes[offset + 2] << 8 | bytes[offset + 3];
         }
 
+        /** Detects whether the input container exposes timed sequence semantics. */
         private static bool is_timed_sequence (uint8[] bytes) {
             if (bytes.length < 16 || read_be32 (bytes, 4) != 0x66747970) {
                 return false;
@@ -25,6 +28,7 @@ namespace ImageKit {
             return false;
         }
 
+        /** Parses APNG frame-control timing from bounded source bytes. */
         private static void read_apng_control (uint8[] bytes, ImageProbe probe) {
             for (int offset = 8; offset <= bytes.length - 12;) {
                 uint32 length = read_be32 (bytes, offset);
@@ -58,11 +62,16 @@ namespace ImageKit {
             }
         }
 
+        /**
+         * Inspects a source without opening or materializing the full image. Errors propagate to
+         * the caller.
+         */
         public static ImageProbe inspect (string path, int hdr_hint = -1, int page = 0) throws Error {
             Vips.Image? prepared;
             return inspect_and_prepare_pixels (path, hdr_hint, page, out prepared);
         }
 
+        /** Inspects an image and prepares the pixels requested by the worker. */
         internal static ImageProbe inspect_and_prepare_pixels (string path, int hdr_hint, int page,
                                                         out Vips.Image? prepared,
                                                             int sequence_frames = 0) throws Error {
@@ -284,6 +293,7 @@ namespace ImageKit {
             return probe;
         }
 
+        /** Opens decoded pixels from the selected native codec path. */
         internal static Vips.Image open_pixels (string source, ImageProbe probe, DecodeOptions options) throws Error {
             if (probe.raw) {
                 if (options.raw_preview_only) {

@@ -1,7 +1,9 @@
 namespace ImageKit {
+    /** Converts high-dynamic-range samples into the configured output range. */
     public class ToneMapper : Object {
         // Luminance-preserving Reinhard compression, with three documented
         // exposure placements. No operation touches the source file or alpha.
+        /** Applies configured HDR-to-display tone mapping. Errors propagate to the caller. */
         public static Vips.Image map (Vips.Image input, string mode = "automatic") throws Error {
             var image = ImageNative.to_linear (input);
             var rgb = FloatOps.extract_bands (image, 0, 3);
@@ -40,6 +42,7 @@ namespace ImageKit {
             return output;
         }
 
+        /** Runs reference tone-mapping arithmetic for validation or comparison. */
         public static double reference (double luminance, string mode = "automatic") {
             double placement = mode == "highlights" ? 0.9 : mode == "bright" ? 2.4 : 1.6;
             return double.max (0, luminance) * placement / (1 + double.max (0, luminance) * placement);

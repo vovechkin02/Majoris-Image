@@ -10,6 +10,7 @@
 
 #include <zlib.h>
 
+/** Reads a big-endian 32-bit field from checked PNG/container data. */
 static guint32 read_be32(const guint8 *data)
 {
     guint32 result;
@@ -17,6 +18,7 @@ static guint32 read_be32(const guint8 *data)
     return GUINT32_FROM_BE(result);
 }
 
+/** Computes checked PNG color-channel precision from the image header. */
 static unsigned png_pixel_bits(const guint8 *header)
 {
     unsigned depth = header[8], color = header[9];
@@ -39,6 +41,7 @@ static unsigned png_pixel_bits(const guint8 *header)
     }
 }
 
+/** Validates a PNG text chunk without trusting unbounded metadata. */
 static gboolean png_text_valid(const guint8 *text, guint32 size)
 {
     const guint8 *value = memchr(text, 0, size);
@@ -66,6 +69,7 @@ static gboolean png_text_valid(const guint8 *text, guint32 size)
     return TRUE;
 }
 
+/** Checks PNG dimensions, channels and decompressed payload limits. */
 static gboolean png_pixels_valid(const GByteArray *compressed, guint32 width, guint32 height,
                                  unsigned bits, gboolean interlaced)
 {
@@ -107,6 +111,7 @@ static gboolean png_pixels_valid(const GByteArray *compressed, guint32 width, gu
     return TRUE;
 }
 
+/** Validates a cached PNG thumbnail and its expected metadata. */
 gboolean image_thumbnail_valid(GBytes *bytes, int edge)
 {
     static const guint8 signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
@@ -171,6 +176,7 @@ gboolean image_thumbnail_valid(GBytes *bytes, int edge)
 }
 
 /* Lock paths are never replaced or removed, so all callers lock the same inode. */
+/** Acquires a nonblocking thumbnail publication lock. */
 int image_cache_try_lock(const char *path)
 {
     int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
@@ -185,11 +191,13 @@ int image_cache_try_lock(const char *path)
     return result;
 }
 
+/** Releases the thumbnail cache file lock. */
 void image_cache_unlock(int fd)
 {
     close(fd);
 }
 
+/** Publishes a thumbnail from a worker thread using safe staging. */
 static void publish_thread(GTask *task, gpointer source, gpointer data, GCancellable *stop)
 {
     (void)source;
@@ -262,6 +270,7 @@ done:
     }
 }
 
+/** Begins asynchronous thumbnail publication with cancellation. */
 void image_cache_publish_async(const char *path, GBytes *bytes, GCancellable *stop,
                                GAsyncReadyCallback callback, gpointer data)
 {
@@ -272,11 +281,13 @@ void image_cache_publish_async(const char *path, GBytes *bytes, GCancellable *st
     g_object_unref(task);
 }
 
+/** Propagates thumbnail publication success or failure. */
 void image_cache_publish_finish(GAsyncResult *result, GError **error)
 {
     g_task_propagate_boolean(G_TASK(result), error);
 }
 
+/** Appends a PNG chunk with its length, type and CRC. */
 static void png_chunk(GByteArray *png, const char *type, const void *data, guint32 size)
 {
     guint32 length = GUINT32_TO_BE(size);
@@ -290,6 +301,7 @@ static void png_chunk(GByteArray *png, const char *type, const void *data, guint
     g_byte_array_append(png, (guint8 *)&crc, 4);
 }
 
+/** Appends thumbnail metadata as a PNG text chunk. */
 static void png_text(GByteArray *png, const char *key, const char *value)
 {
     gsize length = strlen(key) + strlen(value) + 1;
@@ -302,6 +314,7 @@ static void png_text(GByteArray *png, const char *key, const char *value)
     png_chunk(png, "tEXt", text, length);
 }
 
+/** Encodes image sample bytes as a bounded desktop-compatible PNG thumbnail. */
 GBytes *image_glycin_png(GBytes *pixels, int w, int h, const char *uri, const char *mtime,
                          GCancellable *stop, GError **error)
 {

@@ -1,5 +1,17 @@
 if get_option('tests')
   python = find_program('python3')
+
+  # Enforce the repository's declaration-documentation contract in all test builds.
+  test(
+    'Source declaration documentation',
+    python,
+    args: [
+      meson.current_source_dir() / 'release/check_source_docs.py',
+      '--source-root',
+      meson.project_source_root(),
+    ],
+    suite: 'unit',
+  )
   fs = import('fs')
   isolated = files('support/run_isolated.py')
   fixture_dir = meson.current_source_dir() / 'fixtures'

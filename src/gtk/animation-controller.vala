@@ -1,16 +1,19 @@
 namespace ImageKit {
+    /** An asynchronously loaded frame and its associated timing metadata. */
     internal class AnimationFrame : Object {
         public Gdk.Texture texture;
         public int64 duration_us;
         public ImageDocument? source;
         public PresentationDecision decision;
 
+        /** Associates decoded frame pixels with the presentation timestamp. */
         public AnimationFrame (Gdk.Texture texture, int64 duration_us) {
             this.texture = texture;
             this.duration_us = duration_us;
         }
     }
 
+    /** Owns playback timing, frame prefetch and cancellation for ImageView. */
     internal class AnimationController : Object {
         // Timers and in-flight frame loads may outlive the widget.
         private weak ImageView? view;
@@ -25,10 +28,12 @@ namespace ImageKit {
         private bool advance_due;
         private bool manual_advance;
 
+        /** Attaches playback state and callbacks to its owning image view. */
         internal AnimationController (ImageView view) {
             this.view = view;
         }
 
+        /** Resets playback state when a different image is loaded. */
         internal void reset () {
             pause ();
             cancel_frame_work ();
@@ -37,26 +42,31 @@ namespace ImageKit {
             frames_presented = 0;
         }
 
+        /** Stops callbacks and releases frame state before the owning view is destroyed. */
         internal void detach () {
             view = null;
         }
 
+        /** Publishes the first frame before scheduling subsequent playback. */
         internal void set_initial_frame (ImageDocument source) {
             frame_delay_us = source.frame_duration_us;
             frames_presented = source.frame + 1;
         }
 
+        /** Resumes playback only if the user still requested it. */
         internal void resume_if_requested () {
             if (playback_requested) {
                 play ();
             }
         }
 
+        /** Suspends animation while the active display presentation is being changed. */
         internal void hold_for_presentation () {
             prefetched = null;
             stop_timer ();
         }
 
+        /** Restarts playback after output presentation is stable. */
         internal void resume_after_presentation () {
             if (advance_due) {
                 advance_when_ready ();
@@ -65,6 +75,7 @@ namespace ImageKit {
             }
         }
 
+        /** Stops a scheduled playback timer to avoid stale callbacks. */
         private void stop_timer () {
             if (animation_timer != 0) {
                 Source.remove (animation_timer);
@@ -72,22 +83,26 @@ namespace ImageKit {
             }
         }
 
+        /** Cancels frame decoding and prefetch work for an obsolete generation. */
         private void cancel_frame_work () {
             playback_generation++;
             playback.cancel ();
             playback = new Cancellable ();
         }
 
+        /** Checks that a pending asynchronous result still belongs to the active request. */
         private bool is_current (uint request) {
             return view != null && view.is_current (request);
         }
 
+        /** Makes a decoded frame current only when generation and lifecycle still match. */
         private void publish_frame (AnimationFrame frame, int index, int64 count) {
             frames_presented = count;
             frame_delay_us = frame.duration_us;
             view?.show_animation_frame (frame, index);
         }
 
+        /** Begins timed frame advancement when the image can play. */
         internal void play () {
             if (view == null || view.is_disposed () || !view.animated) {
                 return;
@@ -113,17 +128,20 @@ namespace ImageKit {
             }
         }
 
+        /** Temporarily stops playback without clearing the user request. */
         internal void suspend () {
             stop_timer ();
             advance_due = manual_advance = false;
             view?.update_playing (false);
         }
 
+        /** Stops timed advancement while retaining the current frame. */
         internal void pause () {
             playback_requested = false;
             suspend ();
         }
 
+        /** Advances the animation by one frame in the requested direction. */
         internal void step_frame () {
             pause ();
             if (view == null || !view.animated) {
@@ -133,6 +151,7 @@ namespace ImageKit {
             advance_when_ready ();
         }
 
+        /** Moves to a specific zero-based animation frame. */
         internal async void seek_frame (int frame, Cancellable? cancel = null) throws Error {
             var source = view?.document;
             if (view == null || view.is_disposed () || source == null || !view.animated ||
@@ -165,12 +184,14 @@ namespace ImageKit {
             }
         }
 
+        /** Handles end-of-sequence repeat or stop behavior. */
         private bool playback_finished () {
             var source = view?.document;
             return source != null && source.frame_count > 1 && source.loop_count > 0 &&
                 frames_presented >= (int64) source.frame_count * source.loop_count;
         }
 
+        /** Schedules the next frame according to its declared presentation duration. */
         private void schedule_frame () {
             if (view == null || view.is_disposed () || !view.playing || !view.get_mapped () ||
                 view.is_presentation_pending () || animation_timer != 0 || advance_due) {
@@ -192,6 +213,7 @@ namespace ImageKit {
             }
         }
 
+        /** Computes the next frame index, accounting for sequence bounds. */
         private int next_frame_index () {
             var source = view?.document;
             return source != null && source.frame_count > 1
@@ -199,6 +221,7 @@ namespace ImageKit {
                 : (int) ((frames_presented + 1) % int.MAX);
         }
 
+        /** Advances only after the next frame has been decoded successfully. */
         private void advance_when_ready () {
             if (view == null || view.is_presentation_pending () || !advance_due ||
                 (!manual_advance && (!view.playing || !view.get_mapped ()))) {
@@ -220,6 +243,7 @@ namespace ImageKit {
             schedule_frame ();
         }
 
+        /** Loads the requested frame asynchronously and rejects stale completions. */
         private async AnimationFrame load_frame (ImageDocument source, int index,
             Cancellable stop) throws Error {
             var frame = yield source.open_frame (index, stop);
@@ -240,6 +264,7 @@ namespace ImageKit {
             }
         }
 
+        /** Queues nearby frames to reduce playback stalls. */
         private async void prefetch () {
             var source = view?.document;
             if (source == null || prefetched != null || frame_pending) {

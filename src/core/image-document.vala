@@ -1,46 +1,77 @@
 namespace ImageKit {
     /** An oriented image page. Its source remains available for lazy region reads. */
     public sealed class ImageDocument : Object {
+        /** Original source object retained by this document. */
         public ImageSource source { get; private set; }
+        /** Image width in source pixels, or requested output pixels when set on export options. */
         public int width { get; private set; }
+        /** Image height in source pixels, or requested output pixels when set on export options. */
         public int height { get; private set; }
+        /** Zero-based page index requested or represented by this image. */
         public int page { get; private set; }
+        /** Number of document pages, distinct from its animation frame count. */
         public int page_count { get; private set; }
+        /** Bit depth of the represented buffer or target export, according to its owning type. */
         public int bit_depth { get; private set; }
         /** Source sample precision, or zero when the decoder cannot establish it. */
         public int source_bit_depth { get; private set; }
+        /** Precision in bits per channel of the materialized preview buffer. */
         public int pixel_buffer_bit_depth {
             get {
                 return 32;
             }
         }
+        /** Whether the decoded image exposes an alpha channel. */
         public bool has_alpha { get; private set; }
+        /** Whether an identified color profile or equivalent color handling applies. */
         public bool color_managed { get; private set; }
+        /** Human-readable diagnostic describing color-profile interpretation or fallback. */
         public string color_diagnostic { get; private set; }
+        /** Whether the source or requested output uses HDR image data, per its owning type. */
         public bool hdr { get; private set; }
+        /** Whether source HDR values have been converted for SDR presentation. */
         public bool tone_mapped { get; private set; }
+        /** Whether the source is vector-based rather than solely raster pixels. */
         public bool vector { get; private set; }
+        /** Whether this opened document supports efficient source-region rendering. */
         public bool supports_regions { get; private set; }
+        /** Whether the image contains animation frames. */
         public bool animated { get; private set; }
+        /** Whether frame timing is represented as an explicit sequence timeline. */
         public bool timed_sequence { get; private set; }
+        /** Zero-based frame index represented by this document. */
         public int frame { get; private set; }
+        /** Number of animation frames, independent of document pages. */
         public int frame_count { get; private set; }
+        /** Animation repeat count supplied by the source; interpret with decoder semantics. */
         public int loop_count { get; private set; }
+        /** Duration of the current frame in milliseconds. */
         public int frame_duration_ms { get; private set; }
+        /** Presentation timestamp of the frame in microseconds. */
         public int64 frame_timestamp_us { get; private set; }
+        /** Duration of the timed-sequence frame in microseconds. */
         public int64 frame_duration_us { get; private set; }
+        /** RAW preview/development state observed when this document was opened. */
         public RawState raw_state { get; private set; }
+        /** Capabilities supported by the selected backend or reported image. */
         public ImageCapabilities capabilities { get; private set; }
+        /** Human-readable name of the decoder that opened the image. */
         public string decoder { get; private set; }
+        /** MIME type associated with the opened document. */
         public string mime_type { get; private set; }
+        /** Nonfatal decoder or presentation diagnostic shown to the caller. */
         public string warning { get; private set; }
+        /** Image metadata object or serialized metadata content, according to the owning type. */
         public ImageMetadata metadata { get; private set; }
+        /** Decoded preview pixels retained for immediate display; held by the document. */
         public PixelBuffer preview { get; private set; }
+        /** Decoder probe metadata used to construct this document. */
         internal ImageProbe probe { get; private set; }
         private DecodeOptions options;
         private WorkerClient worker;
         private string identity;
 
+        /** Creates a document from a verified probe and preview with retained source identity. */
         internal ImageDocument (ImageSource source, ImageProbe probe, PixelBuffer preview,
                                 DecodeOptions options, WorkerClient worker, string identity) {
             this.source = source;
@@ -87,6 +118,10 @@ namespace ImageKit {
             metadata = new ImageMetadata (probe.metadata);
         }
 
+        /**
+         * Opens a zero-based page without mutating the existing document. Errors propagate to
+         * the caller.
+         */
         public async ImageDocument open_page (int index, Cancellable? cancel = null) throws Error {
             if (index < 0 || index >= page_count) {
                 throw new IOError.INVALID_ARGUMENT ("Page is outside the document");
@@ -94,6 +129,10 @@ namespace ImageKit {
             return yield open_index (index, cancel);
         }
 
+        /**
+         * Opens a zero-based animation frame with its corresponding time metadata. Errors
+         * propagate to the caller.
+         */
         public async ImageDocument open_frame (int index, Cancellable? cancel = null) throws Error {
             if (!animated || index < 0 || index >= frame_count) {
                 throw new IOError.INVALID_ARGUMENT ("Frame is outside the animation");
@@ -101,6 +140,7 @@ namespace ImageKit {
             return yield open_index (index, cancel, true);
         }
 
+        /** Opens a particular page/frame index according to decoder capabilities. */
         private async ImageDocument open_index (int index, Cancellable? cancel,
             bool animation_frame = false) throws Error {
             var stop = cancel ?? new Cancellable ();
@@ -190,6 +230,7 @@ namespace ImageKit {
             }
         }
 
+        /** Rechecks the source stamp and rejects a source replaced after opening. */
         private async void verify_source (Cancellable stop) throws Error {
             if (identity != "" && identity != (yield source.stamp (stop))) {
                 OperationProfile.event ("source-validation-failure");

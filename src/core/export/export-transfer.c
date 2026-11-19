@@ -19,12 +19,14 @@
 #define MAX_DESTINATION_SYMLINKS 40
 #define ACCESS_ACL "system.posix_acl_access"
 
+/** Owns a pinned source descriptor and its original filesystem identity. */
 struct _ExportSource {
     char *path;
     int fd;
     struct stat identity;
 };
 
+/** Carries a worker output transfer and its retained native destination. */
 typedef struct {
     char *path;
     GFile *destination;
@@ -32,11 +34,13 @@ typedef struct {
     gint64 limit;
 } ExportTransfer;
 
+/** Captures one symlink component and its filesystem identity. */
 typedef struct {
     struct stat directory;
     struct stat entry;
 } DestinationLink;
 
+/** Pins the destination directory and final entry against substitution. */
 typedef struct {
     int directory;
     int file;
@@ -46,11 +50,13 @@ typedef struct {
     GArray *links;
 } Destination;
 
+/** Holds source and destination paths during pin preparation. */
 typedef struct {
     char *source;
     char *destination;
 } ExportPreparation;
 
+/** Emits optional export-timing diagnostics without affecting publication. */
 static void record_phase(const char *phase, gint64 started, guint64 count)
 {
     if (g_strcmp0(g_getenv("MAJORIS_IMAGE_PROFILE"), "1") == 0) {
@@ -59,6 +65,7 @@ static void record_phase(const char *phase, gint64 started, guint64 count)
     }
 }
 
+/** Frees temporary path, descriptor and cancellable resources for an export. */
 static void release_transfer(gpointer data)
 {
     ExportTransfer *transfer = data;
@@ -67,23 +74,27 @@ static void release_transfer(gpointer data)
     g_free(transfer);
 }
 
+/** Converts an errno failure into its stable GIO error code and diagnostic. */
 static void set_io_error(GError **error, const char *operation, int saved_errno)
 {
     g_set_error(error, G_IO_ERROR, g_io_error_from_errno(saved_errno), "%s: %s",
                 operation, g_strerror(saved_errno));
 }
 
+/** Reports untrusted or malformed worker output without accepting partial bytes. */
 static void invalid_output(GError **error, const char *message)
 {
     g_set_error_literal(error, IMAGE_KIT_IMAGE_ERROR, IMAGE_KIT_IMAGE_ERROR_INVALID_RESPONSE,
                         message);
 }
 
+/** Tests whether two filesystem identities refer to the same inode. */
 static gboolean same_inode(const struct stat *first, const struct stat *second)
 {
     return first->st_dev == second->st_dev && first->st_ino == second->st_ino;
 }
 
+/** Compares the pinned source against recorded device, inode and timestamps. */
 static gboolean source_metadata_matches(const struct stat *initial, const struct stat *current)
 {
     return S_ISREG(current->st_mode) && same_inode(initial, current) &&
@@ -94,6 +105,7 @@ static gboolean source_metadata_matches(const struct stat *initial, const struct
         initial->st_ctim.tv_nsec == current->st_ctim.tv_nsec;
 }
 
+/** Rejects a source whose identity or metadata changed during export. */
 static gboolean validate_source(const ExportSource *source, GError **error)
 {
     if (source == NULL) {
@@ -131,6 +143,7 @@ static gboolean validate_source(const ExportSource *source, GError **error)
     return TRUE;
 }
 
+/** Compares destination path entries without following a substitute symlink. */
 static gboolean same_entry(const struct stat *first, const struct stat *second)
 {
     return same_inode(first, second) &&
@@ -143,12 +156,14 @@ static gboolean same_entry(const struct stat *first, const struct stat *second)
         first->st_ctim.tv_nsec == second->st_ctim.tv_nsec;
 }
 
+/** Reports that a destination entry was modified during export publication. */
 static void destination_changed(GError **error)
 {
     g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_BUSY,
                         "Export destination changed during transfer");
 }
 
+/** Rejects a destination that aliases the pinned source file. */
 static gboolean check_source_alias(const ExportSource *source, const struct stat *entry,
                                    GError **error)
 {
@@ -160,6 +175,7 @@ static gboolean check_source_alias(const ExportSource *source, const struct stat
     return TRUE;
 }
 
+/** Opens a worker output using bounded, non-following regular-file validation. */
 static int open_output(const char *path, gint64 limit, struct stat *initial, GError **error)
 {
     g_autofree char *directory = g_path_get_dirname(path);
@@ -199,6 +215,7 @@ static int open_output(const char *path, gint64 limit, struct stat *initial, GEr
     return input;
 }
 
+/** Writes an exact bounded chunk, handling interruption and cancellation. */
 static gboolean write_chunk(int output, const guint8 *buffer, gsize length,
                             GCancellable *cancel, GError **error)
 {
@@ -220,6 +237,7 @@ static gboolean write_chunk(int output, const guint8 *buffer, gsize length,
     return TRUE;
 }
 
+/** Copies validated worker output while retaining source and destination protections. */
 static gboolean transfer_output(int input, const struct stat *initial, int output,
                                 guint8 *payload, GCancellable *cancel, GError **error)
 {
@@ -271,6 +289,7 @@ static gboolean transfer_output(int input, const struct stat *initial, int outpu
     return TRUE;
 }
 
+/** Closes a file descriptor and reports any close-time failure. */
 static gboolean close_file(int *fd, const char *operation, GError **error)
 {
     int closing = *fd;
@@ -282,6 +301,7 @@ static gboolean close_file(int *fd, const char *operation, GError **error)
     return TRUE;
 }
 
+/** Closes destination resources and removes temporary path data. */
 static void clear_destination(Destination *destination)
 {
     if (destination->file >= 0) {
@@ -298,6 +318,7 @@ G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC(Destination, clear_destination)
 
 /* Follow final links, including a dangling link, as GIO does with FileCreateFlags.NONE.
  * Read each link via its descriptor so its identity and contents describe the same inode. */
+/** Pins and validates destination link components without following substituted entries. */
 static gboolean resolve_destination(const char *path, Destination *destination, GError **error)
 {
     g_autofree char *target = g_strdup(path);
@@ -369,6 +390,7 @@ static gboolean resolve_destination(const char *path, Destination *destination, 
     return FALSE;
 }
 
+/** Checks whether recorded destination symlink components remain unchanged. */
 static gboolean same_links(const GArray *first, const GArray *second)
 {
     if (first == NULL || second == NULL) {
@@ -388,6 +410,7 @@ static gboolean same_links(const GArray *first, const GArray *second)
     return TRUE;
 }
 
+/** Rejects unsafe destination replacement or symlink changes before publication. */
 static gboolean validate_destination(const char *path, const Destination *initial,
                                      const ExportSource *source, GError **error)
 {
@@ -423,6 +446,7 @@ static gboolean validate_destination(const char *path, const Destination *initia
     return FALSE;
 }
 
+/** Applies permitted destination metadata without broadening file access. */
 static gboolean preserve_permissions(int output, const Destination *destination, GError **error)
 {
     const struct stat *existing = &destination->existing;
@@ -472,6 +496,7 @@ static gboolean preserve_permissions(int output, const Destination *destination,
     return TRUE;
 }
 
+/** Flushes and atomically publishes a fully validated staged output file. */
 static gboolean finalize_staging(int output, const Destination *destination, GError **error)
 {
     if (destination->file >= 0 && !preserve_permissions(output, destination, error)) {
@@ -484,6 +509,7 @@ static gboolean finalize_staging(int output, const Destination *destination, GEr
     return TRUE;
 }
 
+/** Removes a temporary export directory only after its files are closed. */
 static void remove_staging_directory(int parent, const char *name, const struct stat *created)
 {
     struct stat current;
@@ -494,6 +520,7 @@ static void remove_staging_directory(int parent, const char *name, const struct 
     }
 }
 
+/** Copies to bounded staging and publishes without exposing partial output. */
 static gboolean copy_and_publish(int *input, const struct stat *initial, const char *path,
                                  const Destination *destination, const ExportSource *source,
                                  int staging_directory, GCancellable *cancel, GError **error)
@@ -540,6 +567,7 @@ static gboolean copy_and_publish(int *input, const struct stat *initial, const c
     return committed;
 }
 
+/** Performs the guarded native destination replacement transaction. */
 static gboolean replace_native(int *input, const struct stat *initial, const char *path,
                                const ExportSource *source, GCancellable *cancel, GError **error)
 {
@@ -594,6 +622,7 @@ static gboolean replace_native(int *input, const struct stat *initial, const cha
     return committed;
 }
 
+/** Releases the native source pin and any owned file descriptors. */
 void image_export_source_free(ExportSource *source)
 {
     if (source == NULL) {
@@ -608,6 +637,7 @@ void image_export_source_free(ExportSource *source)
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(ExportSource, image_export_source_free)
 
+/** Duplicates the pinned source descriptor; caller owns the returned descriptor. */
 int image_export_source_dup(const ExportSource *source, GError **error)
 {
     gint64 started = g_get_monotonic_time();
@@ -619,6 +649,7 @@ int image_export_source_dup(const ExportSource *source, GError **error)
     return fd;
 }
 
+/** Releases the resources retained while preparing a source pin. */
 static void release_preparation(gpointer data)
 {
     ExportPreparation *preparation = data;
@@ -627,6 +658,7 @@ static void release_preparation(gpointer data)
     g_free(preparation);
 }
 
+/** Validates source/destination identities and constructs an export source pin. */
 static void run_preparation(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
 {
     (void)object;
@@ -669,6 +701,7 @@ static void run_preparation(GTask *task, gpointer object, gpointer data, GCancel
                           (GDestroyNotify)image_export_source_free);
 }
 
+/** Begins asynchronous export-source validation and descriptor pinning. */
 void image_export_prepare_async(GFile *source, GFile *destination, GCancellable *cancel,
                                 GAsyncReadyCallback callback, gpointer user_data)
 {
@@ -692,11 +725,13 @@ void image_export_prepare_async(GFile *source, GFile *destination, GCancellable 
     g_task_run_in_thread(task, run_preparation);
 }
 
+/** Returns the prepared source pin or NULL for a non-native source. */
 ExportSource *image_export_prepare_finish(GAsyncResult *result, GError **error)
 {
     return g_task_propagate_pointer(G_TASK(result), error);
 }
 
+/** Transfers the staged worker output and verifies safe publication state. */
 static void run_transfer(GTask *task, gpointer source, gpointer task_data, GCancellable *cancel)
 {
     (void)source;
@@ -735,6 +770,7 @@ static void run_transfer(GTask *task, gpointer source, gpointer task_data, GCanc
     }
 }
 
+/** Begins a guarded transfer to the requested GIO destination. */
 void image_export_transfer_async(const char *path, GFile *destination,
                                  const ExportSource *source, gint64 limit,
                                  GCancellable *cancel, GAsyncReadyCallback callback,
@@ -752,6 +788,7 @@ void image_export_transfer_async(const char *path, GFile *destination,
     g_task_run_in_thread(task, run_transfer);
 }
 
+/** Returns owned bytes for remote publication or NULL after native publication. */
 GBytes *image_export_transfer_finish(GAsyncResult *result, GError **error)
 {
     return g_task_propagate_pointer(G_TASK(result), error);

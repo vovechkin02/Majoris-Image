@@ -6,10 +6,18 @@ namespace ImageKit {
         private static int64 next_eviction;
         private WorkerClient worker = new WorkerClient ();
 
+        /**
+         * Generates or retrieves a validated thumbnail for the source. Errors propagate to the
+         * caller.
+         */
         public async Bytes generate (ImageSource source, int edge, Cancellable? cancel = null) throws Error {
             return yield generate_page (source, edge, 0, cancel);
         }
 
+        /**
+         * Generates a thumbnail for a specified zero-based document page. Errors propagate to
+         * the caller.
+         */
         public async Bytes generate_page (ImageSource source, int edge, int page,
                                           Cancellable? cancel = null) throws Error {
             if (edge < 1 || edge > 1024 || page < 0) {
@@ -127,6 +135,7 @@ namespace ImageKit {
             }
         }
 
+        /** Reads a thumbnail only when its cached metadata and PNG bytes are valid. */
         private static async Bytes? read_cached (File saved, int edge, Cancellable stop) throws Error {
             try {
                 var value = yield WorkerClient.read_output (saved.get_path (), MAX_PNG, stop);
@@ -141,13 +150,17 @@ namespace ImageKit {
             return null;
         }
 
+        /** Obtains the cache-generation lock without blocking competing producers indefinitely. */
         [CCode (cname = "image_cache_try_lock")]
         private extern static int try_lock (string path);
+        /** Releases the thumbnail cache lock owned by this producer. */
         [CCode (cname = "image_cache_unlock")]
         private extern static void release_lock (int fd);
+        /** Atomically publishes a completed thumbnail into the shared cache. */
         [CCode (cname = "image_cache_publish_async", finish_name = "image_cache_publish_finish")]
         private extern static async void publish (string path, Bytes png, Cancellable stop) throws Error;
 
+        /** Retrieves source change information for thumbnail cache freshness validation. */
         internal static string source_stamp (File file, FileInfo info) {
             if (info.get_file_type () != FileType.REGULAR ||
                 (info.get_etag () == null && !info.has_attribute (FileAttribute.TIME_MODIFIED))) {
@@ -163,14 +176,17 @@ namespace ImageKit {
                 info.get_attribute_uint32 (FileAttribute.TIME_CHANGED_USEC).to_string ());
         }
 #if HAVE_GLYCIN
+        /** Encodes preview pixels as an sRGB PNG for desktop thumbnail consumers. */
         [CCode (cname = "image_glycin_png")]
         private extern static Bytes encode_srgb_png (Bytes pixels, int width, int height,
                                                       string uri, string mtime, Cancellable stop) throws Error;
 #endif
 
+        /** Validates PNG structure before accepting an existing cached thumbnail. */
         [CCode (cname = "image_thumbnail_valid")]
         private extern static bool valid_png (Bytes png, int edge);
 
+        /** Removes stale thumbnail entries according to the cache policy. */
         private static async void evict (File directory) {
             try {
                 var entries = new Gee.ArrayList<FileInfo> ();

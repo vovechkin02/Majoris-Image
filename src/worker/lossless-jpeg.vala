@@ -1,12 +1,15 @@
 namespace ImageKit {
     // Worker-only coefficient transform; publication, source pinning and cancellation
     // remain in EncoderRegistry's existing export transaction.
+    /** Performs perfect coefficient-domain JPEG quarter-turn export when supported. */
     internal class LosslessJpeg : Object {
+        /** Runs a perfect JPEG coefficient transform, rejecting lossy fallbacks. */
         [CCode (cname = "image_jpeg_transform", cheader_filename = "lossless-jpeg.h")]
         private static extern bool transform_file (string source, string target, int orientation,
                                                     int turns, out int width, out int height)
             throws Error;
 
+        /** Writes output using the selected codec while preserving validated export settings. */
         internal static void write (string source, string target, ExportOptions options,
                                     RenderOptions transform) throws Error {
             options.validate ();

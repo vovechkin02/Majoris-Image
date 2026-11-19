@@ -1,4 +1,5 @@
 namespace ImageKit {
+    /** Writes validated bytes to a non-native destination and checks close-time errors. */
     internal async void publish_non_native_async (File destination, Bytes payload,
                                                   Cancellable stop) throws Error {
         stop.set_error_if_cancelled ();

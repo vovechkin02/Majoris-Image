@@ -4,6 +4,7 @@
 
 #include "bridge.h"
 
+/** Renders a bounded region of SVG source to the requested raster size. */
 VipsImage *image_codec_svg_region(const char *path, double x, double y, double width, double height,
                                   int source_width, int source_height, int size, GError **error)
 {

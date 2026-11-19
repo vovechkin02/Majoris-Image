@@ -1,11 +1,17 @@
 namespace ImageKit {
+    /** Applies decoded pixel transforms and requests native export codecs. */
     public class ImageProcessor : Object {
+        /** Maps native codec return statuses to consistent ImageKit errors. */
         public static void check (int result) throws Error {
             if (result != 0) {
                 throw new ImageError.EXPORT ("%s", Vips.error_buffer ());
             }
         }
 
+        /**
+         * Renders a source or applies an image recipe and returns validated pixels. Errors
+         * propagate to the caller.
+         */
         public static Vips.Image render (string source, RenderOptions recipe, int preview = 0) throws Error {
             recipe.validate ();
             var image = Vips.Image.from_file (source, null);
@@ -16,6 +22,10 @@ namespace ImageKit {
             return render_image (image, recipe, preview);
         }
 
+        /**
+         * Applies decoded rendering transforms before export or preview. Errors propagate to the
+         * caller.
+         */
         public static Vips.Image render_image (Vips.Image input, RenderOptions recipe,
             int preview = 0) throws Error {
             Vips.Image image = input;
@@ -73,6 +83,7 @@ namespace ImageKit {
             return next;
         }
 
+        /** Prepares image samples for codec-specific output. Errors propagate to the caller. */
         public static void export_image (string source, string target, RenderOptions recipe,
             bool strip = false, int depth = 16) throws Error {
             var options = new ExportOptions ();

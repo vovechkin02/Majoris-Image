@@ -1,5 +1,10 @@
 namespace ImageKit {
+    /** Applies tonal adjustments to float image samples. */
     public class ToneAdjustments : Object {
+        /**
+         * Applies the owning image-processing adjustment stage to current float samples. Errors
+         * propagate to the caller.
+         */
         public static Vips.Image apply (Vips.Image image, RenderOptions recipe) throws Error {
             if (recipe.exposure == 0 && recipe.brightness == 0 && recipe.contrast == 1 &&
                 recipe.highlights == 0 && recipe.shadows == 0 && recipe.whites == 0 && recipe.blacks == 0) {

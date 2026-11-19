@@ -3,18 +3,21 @@
 
 #include "bridge.h"
 
+/** Adds a named string field to the RAW metadata JSON object. */
 static void string_member(JsonBuilder *b, const char *name, const char *value)
 {
     json_builder_set_member_name(b, name);
     json_builder_add_string_value(b, value ? value : "");
 }
 
+/** Adds a named integer field to the RAW metadata JSON object. */
 static void int_member(JsonBuilder *b, const char *name, int value)
 {
     json_builder_set_member_name(b, name);
     json_builder_add_int_value(b, value);
 }
 /* Header inspection and thumbnail extraction run only inside the decoder sandbox. */
+/** Returns JSON metadata describing the RAW source or available camera information. */
 char *image_codec_raw_info(const char *source)
 {
     libraw_data_t *raw = libraw_init(0);
@@ -75,6 +78,7 @@ char *image_codec_raw_info(const char *source)
     return text;
 }
 
+/** Extracts an available embedded RAW preview into the specified file. */
 gboolean image_codec_raw_preview(const char *source, const char *target, GError **error)
 {
     libraw_data_t *raw = libraw_init(0);

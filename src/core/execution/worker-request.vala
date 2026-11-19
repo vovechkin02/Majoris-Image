@@ -1,17 +1,27 @@
 namespace ImageKit {
+    /** Versioned request sent to the isolated image worker. */
     internal sealed class WorkerRequest : Object {
+        /** Version of this request or edit recipe used for compatibility validation. */
         public int version { get; set; default = 1; }
+        /** Serialized rendering recipe applied by the worker. */
         public RenderOptions transform { get; set; default = new RenderOptions (); }
+        /** Decoder options embedded in the worker request. */
         public DecodeOptions options { get; set; default = new DecodeOptions (); }
+        /** Export settings embedded in the worker request. */
         public ExportOptions export_options { get; set; default = new ExportOptions (); }
+        /** Source URI used for thumbnail cache metadata. */
         public string thumbnail_uri { get; set; default = ""; }
+        /** Source modification time recorded in thumbnail metadata. */
         public string thumbnail_mtime { get; set; default = ""; }
         // Request-only hint, to skip scanning a floating-point file on each tile.
+        /** Internal worker hint indicating how HDR content should be interpreted. */
         public int hdr_hint { get; set; default = -1; }
 
+        /** Requested frame count for sequence decoding; internal worker hint. */
         public int sequence_frames { get; set; }
 
 #if !WORKER_PROCESS
+        /** Encodes the current request, probe or recipe using its versioned JSON schema. */
         public string serialize () {
             var node = Json.gobject_serialize (this);
             RenderOptions.translate_recipe (node.get_object ().get_member ("transform"), true);
@@ -20,6 +30,10 @@ namespace ImageKit {
 #endif
 
 #if !CORE_WORKER_CLIENT
+        /**
+         * Parses and validates a versioned JSON representation, rejecting malformed fields.
+         * Errors propagate to the caller.
+         */
         public static WorkerRequest deserialize (string text) throws Error {
             var parser = new Json.Parser ();
             parser.load_from_data (text);

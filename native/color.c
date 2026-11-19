@@ -4,6 +4,7 @@
 
 #include "bridge.h"
 
+/** Holds color-profile transfer state retained for lazy libvips generation. */
 typedef struct {
     int transfer;
     int primaries;
@@ -12,6 +13,7 @@ typedef struct {
     double luminance_scale;
     cmsHTRANSFORM transform;
 } LinearContext;
+/** Releases transform state and embedded profiles owned by the color conversion. */
 static void free_context(void *data)
 {
     LinearContext *ctx = data;
@@ -21,6 +23,7 @@ static void free_context(void *data)
     g_free(ctx);
 }
 
+/** Constructs a float-compatible LittleCMS profile transform. */
 static cmsHTRANSFORM float_profile_transform(VipsImage *image)
 {
     const void *data;
@@ -51,6 +54,7 @@ static cmsHTRANSFORM float_profile_transform(VipsImage *image)
     return transform;
 }
 
+/** Generates a color-transformed libvips image region in bounded rows. */
 static int linear_generate(VipsRegion *out, void *sequence, void *a, void *b, gboolean *stop)
 {
     (void)a;
@@ -120,6 +124,7 @@ static int linear_generate(VipsRegion *out, void *sequence, void *a, void *b, gb
     return 0;
 }
 
+/** Converts image pixels to linear-light float samples while retaining color metadata. */
 VipsImage *image_codec_to_linear(VipsImage *image, GError **error)
 {
     if (vips_image_get_typeof(image, "majoris-image-working-linear")) {

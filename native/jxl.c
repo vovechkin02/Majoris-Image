@@ -6,6 +6,7 @@
 
 #include "bridge.h"
 
+/** Encodes a JPEG XL image using the requested bit depth, quality and lossless policy. */
 gboolean image_codec_jxl_encode(VipsImage *image, const char *path, int depth, int quality,
                                 gboolean lossless, GError **error)
 {

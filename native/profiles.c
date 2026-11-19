@@ -5,6 +5,7 @@
 
 #include "bridge.h"
 
+/** Tags the output image with linear-light sRGB profile metadata. */
 void image_codec_tag_linear(VipsImage *image)
 {
     cmsCIExyY white = {.3127, .3290, 1};
@@ -26,6 +27,7 @@ void image_codec_tag_linear(VipsImage *image)
     cmsCloseProfile(profile);
 }
 
+/** Creates the output ICC profile corresponding to the requested color mode. */
 static cmsHPROFILE make_profile(const char *name)
 {
     if (!strcmp(name, "srgb") || !strcmp(name, "source")) {
@@ -61,6 +63,7 @@ static cmsHPROFILE make_profile(const char *name)
     return result;
 }
 
+/** Exports a converted image into the encoded ICC profile representation. */
 static VipsImage *export_profile(VipsImage *linear, const char *path, int depth)
 {
     g_autoptr(VipsImage) color = NULL;
@@ -94,6 +97,7 @@ static VipsImage *export_profile(VipsImage *linear, const char *path, int depth)
     return output;
 }
 
+/** Converts linear-light samples into the requested output profile and precision. */
 VipsImage *image_codec_convert_profile(VipsImage *linear, const char *profile_name, int depth,
                                        GError **error)
 {
@@ -156,6 +160,7 @@ fail:
     return NULL;
 }
 
+/** Reports whether the codec can encode the requested output extension. */
 gboolean image_codec_encoder_available(const char *extension)
 {
     if (!strcmp(extension, "exr") || !strcmp(extension, "uhdr")) {

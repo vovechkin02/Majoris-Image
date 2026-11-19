@@ -56,6 +56,7 @@ def run(
     timeout: int = TOOL_TIMEOUT_SECONDS,
     capture: bool = False,
 ) -> str:
+    """Runs an installed-consumer command and raises on nonzero exit status."""
     with start_command(list(args), env, capture=capture) as process:
         output, _ = process.communicate(timeout=timeout)
         if process.returncode:
@@ -64,6 +65,7 @@ def run(
 
 
 def check_headless(env: dict[str, str]) -> None:
+    """Builds and exercises a Core-only consumer without pulling in GTK dependencies."""
     for package in (CORE_PACKAGE, GTK_PACKAGE):
         run(env, "pkg-config", "--atleast-version=2.0.0", package)
     core_libdir = Path(
@@ -102,6 +104,7 @@ def check_headless(env: dict[str, str]) -> None:
 
 
 def check_gtk(env: dict[str, str], large: Path) -> None:
+    """Builds and exercises installed GTK and Vala image-view consumers."""
     png = FIXTURES / "rgb16.png"
     exr = FIXTURES / "multipart.exr"
     flags = run(env, "pkg-config", "--cflags", "--libs", GTK_PACKAGE, capture=True)
@@ -152,6 +155,9 @@ def check_gtk(env: dict[str, str], large: Path) -> None:
 
 def check_stress(env: dict[str, str]) -> None:
     # Independent processes deliberately share the worker staging directory.
+    """Exercises repeated viewer lifecycle and thumbnail operations using installed
+    packages.
+    """
     work = Path.cwd() / "work"
     work.mkdir()
     png = FIXTURES / "rgb16.png"
@@ -193,6 +199,7 @@ def check_stress(env: dict[str, str]) -> None:
 
 
 def check_introspection_and_thumbnail(env: dict[str, str]) -> None:
+    """Verifies GIR/GtkBuilder access and installed thumbnail integration."""
     checks = RELEASE / "installed_gi.py"
     run(
         env,
@@ -217,6 +224,7 @@ def check_introspection_and_thumbnail(env: dict[str, str]) -> None:
 
 
 def check_gainmap(env: dict[str, str]) -> None:
+    """Checks installed gain-map codec behavior when the optional feature is enabled."""
     run(
         env,
         "valac",
@@ -230,10 +238,12 @@ def check_gainmap(env: dict[str, str]) -> None:
 
 
 def interrupted(signum: int, _frame: object) -> None:
+    """Handles a termination signal without leaving child workers running."""
     raise SystemExit(128 + signum)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Selects and runs installed API and package integration checks."""
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument(

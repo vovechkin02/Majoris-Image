@@ -2,9 +2,11 @@
 namespace ImageKit {
     /** The original file or GVfs URI. The decoder receives a read-only mount. */
     public sealed class ImageSource : Object {
+        /** Underlying GIO file identifying the image source. */
         public File file { get; construct; }
         // The last ImageSource reference releases storage owned by stream and memory sources.
         private bool remove_after_use;
+        /** Creates a source wrapper around a GIO file. */
         public ImageSource (File file) {
             Object (file: file);
         }
@@ -50,14 +52,17 @@ namespace ImageKit {
             }
         }
 
+        /** Creates a source from a finite in-memory buffer. Errors propagate to the caller. */
         public static async ImageSource from_bytes (Bytes bytes, Cancellable? cancel = null) throws Error {
             return yield from_stream (new MemoryInputStream.from_bytes (bytes), cancel);
         }
 
+        /** Rejects files that are unsuitable for safe native decoder access. */
         internal async void validate_regular (Cancellable stop) throws Error {
             yield query_regular_info (FileAttribute.STANDARD_TYPE, stop);
         }
 
+        /** Returns a source-identity stamp for detecting changes during operations. */
         internal async string stamp (Cancellable stop) throws Error {
             var info = yield query_regular_info (ThumbnailService.STAMP_ATTRIBUTES, stop);
             int64 started = OperationProfile.begin ();
@@ -66,6 +71,7 @@ namespace ImageKit {
             return stamp;
         }
 
+        /** Queries regular-file identity and type for source validation. */
         private async FileInfo query_regular_info (string attributes, Cancellable stop)
             throws Error {
             int64 started = OperationProfile.begin ();

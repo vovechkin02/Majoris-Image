@@ -1,9 +1,11 @@
 namespace ImageKit {
     /** Bounded cache for adjacent document previews. Use one instance per navigation session. */
     public sealed class PreloadManager : Object {
+        /** One cached or in-flight preload request and its retained cancellation state. */
         private class Entry : Object {
             public string key;
             public ImageDocument document;
+            /** Initializes the preload entry with its source and cancellation state. */
             public Entry (string key, ImageDocument document) {
                 this.key = key;
                 this.document = document;
@@ -12,6 +14,7 @@ namespace ImageKit {
 
         private DecoderRegistry registry;
 
+        /** Initializes the bounded cache for upcoming image documents. */
         public PreloadManager () {
             registry = new DecoderRegistry ();
         }
@@ -26,6 +29,7 @@ namespace ImageKit {
         private uint generation;
         private size_t bytes;
 
+        /** Cancels pending work and drops cached entries belonging to this owner. */
         public void clear () {
             generation++;
             pending.cancel ();
@@ -34,6 +38,10 @@ namespace ImageKit {
             bytes = 0;
         }
 
+        /**
+         * Returns an already preloaded document or opens it while respecting cache ownership.
+         * Errors propagate to the caller.
+         */
         public async ImageDocument open (ImageSource source, DecodeOptions? options = null,
                                          Cancellable? cancel = null) throws Error {
             var request = (options ?? new DecodeOptions ()).copy ();
@@ -59,6 +67,7 @@ namespace ImageKit {
             return yield registry.open (source, request, stop);
         }
 
+        /** Starts a bounded background open for a likely next image. */
         public async void preload (ImageSource[] neighbors, DecodeOptions? options = null) {
             clear ();
             var stop = pending;
@@ -97,6 +106,7 @@ namespace ImageKit {
             }
         }
 
+        /** Builds a stable cache key from source identity and decoding parameters. */
         private async string? key_for (ImageSource source, DecodeOptions options,
             Cancellable stop) throws Error {
             int64 started = OperationProfile.begin ();

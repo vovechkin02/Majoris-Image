@@ -1,4 +1,5 @@
 namespace ImageKit {
+    /** Parses the worker command and transfers control to the validated dispatcher. */
     public int main (string[] args) {
 #if WORKER_PROFILING
         int64 started = get_monotonic_time ();

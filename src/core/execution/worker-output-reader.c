@@ -12,23 +12,27 @@
 
 #define OUTPUT_CHUNK_BYTES (256 * 1024)
 
+/** Captures one bounded output-read request including its owned path. */
 typedef struct {
     gint64 limit;
     char path[];
 } OutputRead;
 
+/** Converts an errno failure into its stable GIO error code and diagnostic. */
 static void set_io_error(GError **error, const char *operation, int saved_errno)
 {
     g_set_error(error, G_IO_ERROR, g_io_error_from_errno(saved_errno), "%s: %s", operation,
                 g_strerror(saved_errno));
 }
 
+/** Reports untrusted or malformed worker output without accepting partial bytes. */
 static void invalid_output(GError **error, const char *message)
 {
     g_set_error_literal(error, IMAGE_KIT_IMAGE_ERROR, IMAGE_KIT_IMAGE_ERROR_INVALID_RESPONSE,
                         message);
 }
 
+/** Opens a worker output using bounded, non-following regular-file validation. */
 static int open_output(const OutputRead *request, struct stat *initial, GCancellable *cancel,
                        GError **error)
 {
@@ -63,6 +67,7 @@ static int open_output(const OutputRead *request, struct stat *initial, GCancell
     return fd;
 }
 
+/** Reads the next bounded chunk while honoring cancellation. */
 static ssize_t read_chunk(int fd, void *data, gsize count, GCancellable *cancel, GError **error)
 {
     while (!g_cancellable_set_error_if_cancelled(cancel, error)) {
@@ -78,6 +83,7 @@ static ssize_t read_chunk(int fd, void *data, gsize count, GCancellable *cancel,
     return -1;
 }
 
+/** Compares file metadata after reading to detect truncated or changed output. */
 static gboolean verify_output(int fd, const struct stat *initial, GError **error)
 {
     struct stat final;
@@ -97,6 +103,7 @@ static gboolean verify_output(int fd, const struct stat *initial, GError **error
     return TRUE;
 }
 
+/** Reads and validates a bounded worker result in a single allocated buffer. */
 static GBytes *read_output(int fd, const struct stat *initial, gint64 limit, GCancellable *cancel,
                            GError **error)
 {
@@ -143,6 +150,7 @@ static GBytes *read_output(int fd, const struct stat *initial, gint64 limit, GCa
     return g_bytes_new_take(g_steal_pointer(&data), size);
 }
 
+/** Executes output reading off the caller context and transfers the owned result. */
 static void read_output_thread(GTask *task, gpointer source, gpointer task_data,
                                GCancellable *cancel)
 {
@@ -172,6 +180,7 @@ static void read_output_thread(GTask *task, gpointer source, gpointer task_data,
     }
 }
 
+/** Starts bounded asynchronous reading of a validated worker output file. */
 void worker_output_read_async(const char *path, gint64 limit, GCancellable *cancel,
                               GAsyncReadyCallback callback, gpointer user_data)
 {
@@ -184,6 +193,7 @@ void worker_output_read_async(const char *path, gint64 limit, GCancellable *canc
     g_task_run_in_thread(task, read_output_thread);
 }
 
+/** Returns validated bytes owned by the caller or propagates the read failure. */
 GBytes *worker_output_read_finish(GAsyncResult *result, GError **error)
 {
     return g_task_propagate_pointer(G_TASK(result), error);

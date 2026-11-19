@@ -1,13 +1,13 @@
 # Contributing
 
-Apply Majoris Cross-Project Engineering Standards v1.7 using the
-[versioned repository copy](docs/engineering-standards-v1.7.md) (SHA-256
-`4caf0e4ddeb61344b7cd7898475d92f581cbea3f1628c0bb880f8a8eb844333f`).
+Apply Majoris Cross-Project Engineering Standards v1.8 using the
+[versioned repository copy](docs/engineering-standards-v1.8.md) (SHA-256
+`ac5bd2d3ac2d877603090dfaec315c8f5d6263dddf8fb480201948c3bd5b8979`).
 This pinned copy permits offline development and source-archive review; the
 organization's approved master remains authoritative for future revisions.
 The [current project architecture decisions](docs/architecture.md)
 and [historical adoption evidence](docs/verification/verification-gof-vala.md) record its application.
-README files also follow the standards v1.7 §15.5 organization-wide template;
+README files also follow the standards v1.8 §15.5 organization-wide template;
 keep format and public API claims sourced from the current implementation.
 
 Prefer `var` for clearly inferred Vala locals and typed collection iteration.
@@ -23,6 +23,10 @@ lifecycle and signal facilities. Keep implementation labels at the private
 `DecoderRoute.from_label` boundary instead of adding label comparisons to
 consumers. Do not add an abstraction to pixel, tile, or frame hot loops without
 matched correctness, latency, and memory evidence.
+
+Use Valadoc, gtk-doc/gi-docgen, Doxygen, and PEP 257 summaries for every handwritten
+class, method, property, signal, and function (§15.2). Verify coverage with
+`python3 tests/release/check_source_docs.py` before submitting documentation changes.
 
 Use four spaces in C, C++, Vala, and Python, and two spaces in Meson.
 Keep control-flow bodies multiline and braced in C, C++, and Vala.

@@ -1,9 +1,5 @@
 using ImageKit;
 
-/** Forces GObject disposal to validate release of image-view-owned resources. */
-[CCode (cname = "g_object_run_dispose", cheader_filename = "glib-object.h")]
-private extern void force_dispose (Object object);
-
 /** Reads one Linux process-residency counter, in KiB, without changing allocations. */
 private int64 memory_kib (string field) throws Error {
     string contents;
@@ -26,7 +22,7 @@ private async void quiesce () {
     yield;
 }
 
-/** Measures host-memory high-water and post-disposal residency across viewer cycles. */
+/** Measures simultaneous-viewer memory and post-release residency across cycles. */
 private async void measure_lifecycle (File file, int cycles, int viewers_per_cycle)
     throws Error {
     int64 initial = memory_kib ("VmRSS");
@@ -37,27 +33,36 @@ private async void measure_lifecycle (File file, int cycles, int viewers_per_cyc
         var parent = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0);
         window.child = parent;
         window.present ();
+        var views = new Gee.ArrayList<ImageView> ();
         for (int viewer = 0; viewer < viewers_per_cycle; viewer++) {
             var view = new ImageView ();
             parent.append (view);
+            views.add (view);
             yield view.load_file (file);
             if (view.document == null) {
                 throw new IOError.FAILED ("Viewer did not load the benchmark image");
             }
-            parent.remove (view);
-            force_dispose (view);
-            if (view.document != null || view.metadata != null) {
-                throw new IOError.FAILED ("Disposed viewer retained its public document state");
-            }
         }
+        // Keep every viewer alive simultaneously before sampling host memory.
+        // This exercises per-view caches rather than sequentially disposing them.
+        yield quiesce ();
+        int64 live = memory_kib ("VmRSS");
+        foreach (var view in views) {
+            parent.remove (view);
+        }
+        // Normal reference release is the measured path; do not force dispose.
+        views.clear ();
         window.destroy ();
+        // Let delayed GObject and GTK finalization finish before the next cycle.
+        yield quiesce ();
         yield quiesce ();
         int64 current = memory_kib ("VmRSS");
         int64 peak = memory_kib ("VmHWM");
         stdout.printf (
-            "Viewer-memory cycle=%d rss_kib=%" + int64.FORMAT +
+            "Viewer-memory cycle=%d live_rss_kib=%" + int64.FORMAT +
+            " settled_rss_kib=%" + int64.FORMAT +
             " peak_rss_kib=%" + int64.FORMAT + "\n",
-            cycle + 1, current, peak);
+            cycle + 1, live, current, peak);
     }
     int64 settled = memory_kib ("VmRSS");
     stdout.printf ("Viewer-memory final_rss_kib=%" + int64.FORMAT +

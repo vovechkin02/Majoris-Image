@@ -72,6 +72,11 @@ namespace ImageKit {
         private string identity;
         // Never exported: one incremental Glycin decoder, owned by this document.
         internal GlycinFrameCursor? glycin_cursor;
+        // Order by invocation, not completion, so a stale concurrent decode cannot
+        // replace a newer cursor. A subsequent deliberate rewind is still publishable.
+        private Mutex glycin_cursor_mutex;
+        private uint64 next_glycin_request;
+        private uint64 latest_glycin_publication;
 
         /** Creates a document from a verified probe and preview with retained source identity. */
         internal ImageDocument (ImageSource source, ImageProbe probe, PixelBuffer preview,
@@ -142,10 +147,40 @@ namespace ImageKit {
             return yield open_index (index, cancel, true);
         }
 
+        /** Assigns a publication order before any asynchronous APNG source operations. */
+        private uint64 begin_glycin_request () {
+            glycin_cursor_mutex.lock ();
+            uint64 sequence = ++next_glycin_request;
+            glycin_cursor_mutex.unlock ();
+            return sequence;
+        }
+
+        /** Holds a strong reference to the currently retained decoder while opening a frame. */
+        private GlycinFrameCursor? current_glycin_cursor () {
+            glycin_cursor_mutex.lock ();
+            var current = glycin_cursor;
+            glycin_cursor_mutex.unlock ();
+            return current;
+        }
+
+        /** Publishes only the newest completed request, including intentional later rewinds. */
+        private void publish_glycin_cursor (uint64 sequence, GlycinFrameCursor candidate) {
+            glycin_cursor_mutex.lock ();
+            if (sequence > latest_glycin_publication) {
+                glycin_cursor = candidate;
+                latest_glycin_publication = sequence;
+            }
+            glycin_cursor_mutex.unlock ();
+        }
+
         /** Opens a particular page/frame index according to decoder capabilities. */
         private async ImageDocument open_index (int index, Cancellable? cancel,
             bool animation_frame = false) throws Error {
             var stop = cancel ?? new Cancellable ();
+            // Capture invocation order before the first yield. Completion order is
+            // nondeterministic when two APNG frames are requested concurrently.
+            uint64 publication_order = animated && mime_type == "image/apng"
+                ? begin_glycin_request () : 0;
             yield verify_source (stop);
             var route = DecoderRoute.from_label (decoder);
             if (route == DecoderRoute.FALLBACK && !animated && index == 0) {
@@ -161,11 +196,12 @@ namespace ImageKit {
                 try {
                     var opened = yield GlycinFallback.open (source, requested, stop,
                         new ImageError.CODEC_MISSING ("APNG frame decoding requires Glycin"),
-                        120, probe, null, false, glycin_cursor);
+                        120, probe, null, false, current_glycin_cursor ());
                     // The first fallback frame may originate from a native APNG
-                    // preview. Share the verified cursor across its frame requests.
+                    // preview. Publish only the newest initiated successful request;
+                    // a later rewind takes precedence over older in-flight frames.
                     if (opened.glycin_cursor != null) {
-                        glycin_cursor = opened.glycin_cursor;
+                        publish_glycin_cursor (publication_order, opened.glycin_cursor);
                     }
                     return opened;
                 } catch (ImageError.CODEC_MISSING error) {

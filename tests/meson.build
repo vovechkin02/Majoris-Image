@@ -12,6 +12,12 @@ if get_option('tests')
     ],
     suite: 'unit',
   )
+  test(
+    'Performance baseline acceptance policy',
+    python,
+    args: [meson.current_source_dir() / 'release/test_compare_performance.py'],
+    suite: 'unit',
+  )
   fs = import('fs')
   isolated = files('support/run_isolated.py')
   fixture_dir = meson.current_source_dir() / 'fixtures'

@@ -221,7 +221,7 @@ if get_option('gtk')
     lifecycle_benchmark = executable(
       'benchmark-viewer-lifecycle',
       'benchmark-viewer-lifecycle.vala',
-      dependencies: gtk_api,
+      dependencies: [gtk_api, gee],
     )
     benchmark(
       'GTK ImageView repeated disposal and RSS',

@@ -374,17 +374,46 @@ unrelated code, and verify any source moves in all Meson targets.
 
 The optional Glycin path has deterministic 10-, 50-, and 100-frame APNG
 workloads. The performance suite also measures cancellation-heavy scheduler
-queues and repeated ImageView disposal. Execute both native build profiles with:
+queues and **eight simultaneously loaded ImageView instances**, followed by
+normal reference-release and host-memory quiescence. A completed build or a
+successful benchmark command is not a performance pass: the qualification
+gate requires independently collected results from a matched earlier source.
+
+First prepare the previous source with the **identical benchmark harness**
+(without modifying its production code), then capture its baseline:
+
+```sh
+python3 tests/release/prepare_baseline.py \
+  --archive /path/to/Majoris-Image\(20261119-040730\).zip \
+  --candidate . --destination /tmp/majoris-image-reference \
+  --report /tmp/majoris-reference-setup.json
+python3 tests/release/qualify_performance.py \
+  --source /tmp/majoris-image-reference \
+  --workdir /tmp/majoris-image-reference-build \
+  --record-baseline /tmp/majoris-image-baseline.json \
+  --output /tmp/majoris-image-reference-status.json
+```
+
+Run the candidate against that baseline on the **same machine and toolchain**:
 
 ```sh
 python3 tests/release/qualify_performance.py \
-  --source . --workdir /tmp/majoris-image-qualify \
-  --output /tmp/majoris-image-qualify.json
+  --source . --workdir /tmp/majoris-image-candidate-build \
+  --baseline /tmp/majoris-image-baseline.json \
+  --output /tmp/majoris-image-candidate-status.json
 ```
 
-See [qualification implementation](docs/verification/verification-performance-qualification-v1.8.md).
-Benchmark registration does not establish a performance improvement without
-recorded runs. Host RSS under Xvfb does not measure physical GPU memory.
+Baseline capture records `baseline_recorded`, **not** `passed`. A missing,
+unmatched or noisy baseline cannot pass. The default gate allows no more than
+15% median timing regression, 20% median-absolute-deviation fraction, and
+64 MiB additional settled viewer RSS; all limits are explicit in the report.
+The gate also records separate APNG color-probe/source-stamp costs, output
+fingerprints and scheduler queue/cancellation/drain timing. It never silently
+changes ICC validation or source freshness to improve benchmark scores.
+
+See [the next-pass qualification contract](docs/verification/verification-performance-next-pass-v1.8.md)
+and the [earlier qualification implementation](docs/verification/verification-performance-qualification-v1.8.md).
+Host RSS under Xvfb does not measure physical GPU memory.
 For hardware-supported NVIDIA GPU-memory measurements in an actual desktop
 session, use `tests/benchmarks/measure_gpu_memory.py` with the compiled
 `benchmark-viewer-lifecycle` executable. Unsupported drivers and unavailable

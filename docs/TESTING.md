@@ -324,6 +324,30 @@ python3 tests/benchmarks/benchmark_worker_output.py \
 See [worker output verification](verification/verification-worker-output.md) for the
 security contract, measured results, and release checks.
 
+### Matched performance release acceptance (v1.8)
+
+The separate `tests/release/compare_performance.py` gate rejects timing
+regressions, incompatible environments, changed fixture/output hashes,
+missing workloads, and high measurement variance. Its acceptance behavior is
+exercised in the `Performance baseline acceptance policy` unit test. Run
+`python3 tests/release/test_compare_performance.py` without compiling if needed.
+
+A baseline **must** use the same benchmark implementations as the candidate;
+`prepare_baseline.py` produces an isolated previous-source tree with the six
+benchmark/fixture-harness files synchronized, while verifying that every other
+file is byte-for-byte unchanged. Do not compare historical sequential-viewer
+measurements against the new simultaneous-viewer benchmark.
+
+The full workflow and its `--record-baseline`/`--baseline` commands are in the
+[README](../README.md#performance-qualification-for-glycinapng-and-gtk-lifecycles).
+`qualify_performance.py` writes independent measurements, a comparison report
+and per-stage logs. It returns nonzero for unavailable compilers, failed builds,
+failed tests, missing measurements, incompatible baselines or regressions.
+Without `--baseline` it never declares performance qualified. Physical GPU
+usage is recorded separately and remains `not_measured` unless sampled under a
+real compositor with appropriate driver telemetry. Do not report the host-RSS
+gate as proof of GPU-memory reclamation.
+
 ## Installed tests and release qualification
 
 Build stock Debian packages with `dpkg-buildpackage -us -uc -b`. Build the

@@ -47,7 +47,8 @@ namespace ImageKit {
         public double center_y;
 
         /** Calculates tile coverage for the visible image and surrounding prefetch area. */
-        public static TileCoverage plan (TileBounds bounds, int width, int height, double zoom, bool vector) {
+        public static TileCoverage plan (TileBounds bounds, int width, int height,
+            double zoom, bool vector) {
             TileCoverage coverage = {};
             if (width <= 0 || height <= 0 || !zoom.is_finite () || zoom <= 0 ||
                 !bounds.left.is_finite () || !bounds.top.is_finite () ||
@@ -79,7 +80,8 @@ namespace ImageKit {
                 int first_y = (int) top / extent * extent;
                 int64 columns = ((int64) coverage.end_x - first_x + extent - 1) / extent;
                 int64 rows = ((int64) coverage.end_y - first_y + extent - 1) / extent;
-                int64 edge = (int64) Math.ceil (int64.min (dimension, (int64) extent + 2L * bleed) * level);
+                int64 edge = (int64) Math.ceil (
+                    int64.min (dimension, (int64) extent + 2L * bleed) * level);
                 // Include worst-case alignment so a pan does not switch
                 // sampling levels merely because it crosses a grid edge.
                 int64 max_columns = (int64) Math.ceil ((right - left) / extent) + 1;
@@ -182,7 +184,8 @@ namespace ImageKit {
                 planned_visible = visible.read_only_view;
                 return;
             }
-            var plan = TileCoverage.plan (bounds, document.width, document.height, zoom, document.vector);
+            var plan = TileCoverage.plan (bounds, document.width, document.height,
+                zoom, document.vector);
             var keep = new Gee.HashSet<ImageTile> ();
             int64 visible_bytes = 0;
             if (plan.count > 0) {
@@ -258,7 +261,8 @@ namespace ImageKit {
                     (int64) x + tile.width + plan.bleed) - tile.decode_x;
                 tile.decode_height = (int) int64.min (document.height,
                     (int64) y + tile.height + plan.bleed) - tile.decode_y;
-                tile.edge = (int) Math.ceil (int.max (tile.decode_width, tile.decode_height) * plan.level);
+                tile.edge = (int) Math.ceil (
+                    int.max (tile.decode_width, tile.decode_height) * plan.level);
                 tile.charge = (int64) tile.edge * tile.edge * 16;
                 reserved_bytes += tile.charge;
                 tiles[key] = tile;
@@ -334,7 +338,8 @@ namespace ImageKit {
                     pixels.bytes.get_size () > tile.charge) {
                     throw new ImageError.INVALID_RESPONSE ("Region decoder exceeded the tile allocation");
                 }
-                if (!stop.is_cancelled () && generation == request_generation && tiles[tile.key] == tile) {
+                if (!stop.is_cancelled () && generation == request_generation &&
+                    tiles[tile.key] == tile) {
                     tile.texture = texture_for_pixels (pixels);
                 }
             } catch (Error e) {

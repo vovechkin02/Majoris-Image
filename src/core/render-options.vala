@@ -89,7 +89,8 @@ namespace ImageKit {
                     !crop_height.is_finite () ||
                 crop_x < 0 || crop_y < 0 || crop_width <= 0 || crop_height <= 0 ||
                 crop_x + crop_width > 1.000001 || crop_y + crop_height > 1.000001 ||
-                exposure < -10 || exposure > 10 || contrast < 0 || contrast > 4 || angle < -45 || angle > 45) {
+                exposure < -10 || exposure > 10 || contrast < 0 || contrast > 4 ||
+                angle < -45 || angle > 45) {
                 throw new ImageError.INVALID_RECIPE ("Invalid edit parameters");
             }
         }

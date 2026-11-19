@@ -48,7 +48,9 @@ def compiler_version(command: str) -> str | None:
 
 
 def qualify(root: Path, workdir: Path, baseline: Path | None,
-            record_baseline: Path | None, samples: int) -> dict:
+            record_baseline: Path | None, samples: int,
+            raw_fixtures: Path | None = None,
+            raw_manifest: Path | None = None) -> dict:
     """Qualify both builds and enforce matched benchmark acceptance when requested."""
     result = {
         "source": str(root), "platform": platform.platform(),
@@ -58,7 +60,17 @@ def qualify(root: Path, workdir: Path, baseline: Path | None,
             "not_measured: requires a supported physical GPU/compositor"
         ),
         "performance_status": "not_measured",
+        "raw_qualification": "not_measured: external licensed RAW samples not supplied",
     }
+    if raw_fixtures is not None:
+        from verify_raw_fixtures import verify
+        manifest = raw_manifest or root / "tests/fixtures/raw-qualification.tsv"
+        checked = verify(raw_fixtures, manifest)
+        result["raw_qualification"] = checked
+        if checked["status"] != "verified":
+            result["status"] = "blocked"
+            result["reason"] = checked["reason"]
+            return result
     if any(result["tools"][name] is None for name in ("meson", "valac", "ninja")):
         result["status"] = "blocked"
         result["reason"] = "The Meson, Vala, and Ninja native toolchain is required"
@@ -69,12 +81,18 @@ def qualify(root: Path, workdir: Path, baseline: Path | None,
         build.mkdir(parents=True, exist_ok=True)
         profile = {"build_directory": str(build), "stages": []}
         result["profiles"][name] = profile
+        options = [f"-Draw_fixtures={raw_fixtures}"] if raw_fixtures is not None else []
         steps = [
             ["meson", "setup", str(build), str(root), "-Dgtk=true", "-Dtests=true",
-             f"-Dglycin={name}", "-Dworker_profiling=true"],
+             f"-Dglycin={name}", "-Dworker_profiling=true"] + options,
             ["meson", "compile", "-C", str(build)],
             ["meson", "test", "-C", str(build), "--no-rebuild", "--print-errorlogs"],
         ]
+        if raw_fixtures is not None:
+            steps.append([
+                "meson", "test", "-C", str(build), "--no-rebuild",
+                "--suite", "interoperability", "--print-errorlogs",
+            ])
         if name == "enabled":
             # Meson benchmarks execute only after a successful test-qualified build.
             steps.append([
@@ -92,6 +110,8 @@ def qualify(root: Path, workdir: Path, baseline: Path | None,
     if not all(p["status"] == "passed" for p in result["profiles"].values()):
         result["status"] = "failed"
         return result
+    if raw_fixtures is not None:
+        result["raw_qualification"]["native_tests"] = "passed_in_both_profiles"
 
     # Meson's benchmark suite is a correctness/execution check. The explicit
     # collector supplies independent timings to the fail-closed comparison gate.
@@ -168,6 +188,8 @@ def main() -> int:
     policy.add_argument("--record-baseline", type=Path,
                         help="Capture reference results; does NOT qualify a release")
     parser.add_argument("--samples", type=int, default=7)
+    parser.add_argument("--raw-fixtures", type=Path,
+                        help="External licensed RAW samples; verified against manifest")
     args = parser.parse_args()
     if not 3 <= args.samples <= 30:
         parser.error("3–30 independent samples required")
@@ -181,7 +203,9 @@ def main() -> int:
     baseline = args.baseline.resolve() if args.baseline is not None else None
     recorded = (args.record_baseline.resolve()
                 if args.record_baseline is not None else None)
-    result = qualify(source, workdir, baseline, recorded, args.samples)
+    raw = args.raw_fixtures.resolve() if args.raw_fixtures else None
+    result = qualify(source, workdir, baseline, recorded, args.samples,
+                     raw_fixtures=raw)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))

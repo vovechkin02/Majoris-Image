@@ -14,6 +14,15 @@ import zipfile
 from pathlib import Path
 
 
+# The reference archive predates this qualification suite; it does not
+# contain these release-only helpers. They must be installed alongside the
+# matched Meson test registration, without modifying its production source.
+NEW_SUPPORT_FILES = (
+    "tests/release/test_platform_qualification.py",
+    "tests/release/qualify_matched.py",
+    "tests/release/verify_raw_fixtures.py",
+)
+
 HARNESS_FILES = (
     "tests/benchmarks/benchmark-viewer-lifecycle.vala",
     "tests/benchmarks/benchmark-scheduler.vala",
@@ -24,7 +33,7 @@ HARNESS_FILES = (
     "tests/support/make_apng_benchmarks.py",
     "tests/support/make-fixtures.c",
     "tests/release/collect_performance.py",
-)
+) + NEW_SUPPORT_FILES
 
 
 def prepare(archive: Path, candidate: Path, destination: Path) -> dict:
@@ -43,7 +52,7 @@ def prepare(archive: Path, candidate: Path, destination: Path) -> dict:
             raise ValueError("Earlier archive is corrupt")
         files = set(source.namelist())
         for name in HARNESS_FILES:
-            if name not in files:
+            if name not in files and name not in NEW_SUPPORT_FILES:
                 raise ValueError(f"Earlier archive lacks required benchmark {name}")
         for member in source.infolist():
             path = destination / member.filename
@@ -63,6 +72,7 @@ def prepare(archive: Path, candidate: Path, destination: Path) -> dict:
             path.write_bytes(data)
             path.chmod(mode & 0o777 or 0o644)
     for name in HARNESS_FILES:
+        destination.joinpath(name).parent.mkdir(parents=True, exist_ok=True)
         destination.joinpath(name).write_bytes((candidate / name).read_bytes())
     # No runtime source changed. Only these benchmark and measurement files are patched.
     for path in destination.rglob("*"):

@@ -353,6 +353,14 @@ For independent installed-consumer verification, see
 Follow [docs/TESTING.md](docs/TESTING.md) for supported commands and suite
 registration, including sanitizer, GTK/Wayland and benchmark requirements.
 
+For a matched Debian 13 qualification of the previous and current revisions,
+use `python3 tests/release/qualify_matched.py --baseline-archive OLD.zip
+--source . --workdir /tmp/majoris-image-matched-RUN --output /tmp/majoris-image-report.json`.
+The workflow builds both Glycin profiles and rejects missing baseline evidence;
+optional `--raw-fixtures /absolute/path` verifies the nine licensed camera
+inputs, and `--require-gpu` requires measured GPU memory on the actual Majoris
+desktop. See the [platform qualification guide](docs/TESTING.md#matched-debian-and-physical-gpu-qualification-v18).
+
 **Do not interpret included historical verification reports as passing tests
 for a newly reorganized source archive.** Build, ABI baseline comparison,
 GIR/VAPI checks and installed-consumer verification must be repeated against

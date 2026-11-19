@@ -18,6 +18,12 @@ if get_option('tests')
     args: [meson.current_source_dir() / 'release/test_compare_performance.py'],
     suite: 'unit',
   )
+  test(
+    'RAW fixture and physical GPU preflight policy',
+    python,
+    args: [meson.current_source_dir() / 'release/test_platform_qualification.py'],
+    suite: 'unit',
+  )
   fs = import('fs')
   isolated = files('support/run_isolated.py')
   fixture_dir = meson.current_source_dir() / 'fixtures'

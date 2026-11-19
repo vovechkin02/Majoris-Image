@@ -4,7 +4,9 @@ namespace ImageKit {
         /** Zero-based page index requested or represented by this image. */
         public int page { get; set; }
         /** Decoder capability flags required for this request. */
-        public ImageCapabilities required_capabilities { get; set; default = ImageCapabilities.STILL; }
+        public ImageCapabilities required_capabilities {
+            get; set; default = ImageCapabilities.STILL;
+        }
         /** Whether region decoding is acceptable when supported by the backend. */
         public bool allow_regions { get; set; default = true; }
         /** Maximum preview edge in pixels passed to the decoder. */

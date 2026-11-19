@@ -20,7 +20,8 @@ namespace ImageKit {
                 int64 staging = OperationProfile.begin ();
                 size_t total = 0;
                 while (true) {
-                    var bytes = yield stream.read_bytes_async (256 * 1024, Priority.DEFAULT, cancel);
+                    var bytes = yield stream.read_bytes_async (
+                        256 * 1024, Priority.DEFAULT, cancel);
                     if (bytes.get_size () == 0) {
                         break;
                     }
@@ -53,7 +54,8 @@ namespace ImageKit {
         }
 
         /** Creates a source from a finite in-memory buffer. Errors propagate to the caller. */
-        public static async ImageSource from_bytes (Bytes bytes, Cancellable? cancel = null) throws Error {
+        public static async ImageSource from_bytes (Bytes bytes,
+            Cancellable? cancel = null) throws Error {
             return yield from_stream (new MemoryInputStream.from_bytes (bytes), cancel);
         }
 

@@ -407,3 +407,77 @@ benchmarks, and prolonged fuzzing.
 Before producing a release source archive, use
 `python3 tests/release/check_release_modes.py archive.tar.gz` on a POSIX host to verify
 the executable bits in Git, the archive, and its extracted scripts.
+
+## Matched Debian and physical-GPU qualification (v1.8)
+
+The release comparison must build an **earlier implementation and the current
+implementation on the same Debian machine**, using an identical copied
+benchmark harness. Do not use historical measurements from another machine
+or older instrumentation as the baseline. The earlier archive is never edited;
+`prepare_baseline.py` creates a separate reference source tree and records the
+source SHA-256 values. Runtime C/C++/Vala implementations are not substituted.
+
+From a clean checkout, on Debian 13 with all required native development
+packages installed, run:
+
+```sh
+python3 tests/release/qualify_matched.py \
+  --baseline-archive /path/to/earlier-Majoris-Image.zip \
+  --source "$PWD" \
+  --workdir /tmp/majoris-image-matched-$(date +%s) \
+  --output /tmp/majoris-image-matched-report.json \
+  --samples 7
+```
+
+The command builds Core, GTK and tests with **Glycin enabled and disabled**,
+runs their registered tests, runs the Glycin-enabled performance suite,
+captures separate 10/50/100-frame APNG, scheduler and multi-viewer memory
+measurements, and enforces schema-3 regression comparison. It records the
+source and archive fingerprints, command logs, measurement files, and explicit
+status for both native build profiles. Its final `passed_cpu_only` status
+requires successful matched CPU/RSS comparisons; this is **not** GPU or RAW
+qualification. A missing native compiler, library, baseline, or result is
+`blocked`/`failed`, never a pass. Use a fresh work directory for each run.
+
+### Real-camera RAW interoperability
+
+Supply the nine independently licensed real-camera source files named in
+`tests/fixtures/raw-qualification.tsv`. Files are **not** downloaded by the
+qualification scripts. The preflight checks filename, metadata fields,
+license/provenance, SHA-256 and symlink avoidance before native tests begin:
+
+```sh
+python3 tests/release/verify_raw_fixtures.py \
+  --root /absolute/path/to/licensed-raw-samples \
+  --output /tmp/majoris-image-raw-preflight.json
+```
+
+Pass `--raw-fixtures /absolute/path/to/licensed-raw-samples` to
+`qualify_matched.py` to enable real-camera RAW interoperability tests in **both**
+Glycin build configurations and validate the same files against the same
+manifest. Without supplied samples, the JSON reports `not_measured`; do not
+interpret the synthetic RAW/unit fixtures as a substitute.
+
+### Physical graphics-memory measurement
+
+Run from a **real X11/Wayland session** on the target Majoris GPU rather than
+Xvfb with the Cairo software renderer. Add `--require-gpu` to the matched
+qualification command. Once the candidate native build passes, the command
+locates the compiled viewer-lifecycle benchmark via Meson introspection and
+executes its eight-viewer tiled workload under the current session.
+
+The collector first attempts Linux DRM fdinfo **resident** memory grouped by
+GPU client and device (where drivers expose those counters), then an NVIDIA
+`nvidia-smi` compute-process fallback. It does not substitute driver-wide
+allocation counters, assume compositor allocations belong to ImageKit, or
+claim physical HDR scanout. A driver that exposes neither usable per-process
+counter, or reports no nonzero residency, produces `not_measured` and makes
+`--require-gpu` fail closed. Preserve the compositor/driver versions and the
+collected JSON with the release evidence. The GPU check is a standalone
+**candidate** measurement; it is not a matched GPU-regression comparison and
+cannot certify a universal per-process GPU-memory budget across drivers.
+
+A missing or unverified graphics session must be recorded as blocked. No
+benchmark can prove GPU resource reclamation for every driver from host RSS
+alone. Review `docs/verification/verification-platform-qualification-v1.8.md`
+for the environment and remaining native release gates.

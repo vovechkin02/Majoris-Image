@@ -46,7 +46,13 @@ namespace ImageKit {
             }
         }
 
-        /** Waits for a scheduler slot and returns a ticket that releases it on disposal. */
+        /**
+         * Waits asynchronously for admission to the shared worker pool.
+         *
+         * The caller must invoke release() after a successful admission.
+         * Cancellation removes a pending request, or releases admission if
+         * cancellation occurs after it was granted.
+         */
         internal async void acquire (int priority, Cancellable cancel) throws Error {
             cancel.set_error_if_cancelled ();
             var ticket = new JobTicket ();
@@ -103,7 +109,10 @@ namespace ImageKit {
             }
         }
 
-        /** Returns this ticket to the shared admission pool without double release. */
+        /**
+         * Releases one previously granted worker admission and dispatches
+         * the next eligible waiting request. Call exactly once per admission.
+         */
         internal void release () {
             mutex.lock ();
             active--;

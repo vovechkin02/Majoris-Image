@@ -36,7 +36,8 @@ namespace ImageKit {
         }
 
         /** Reads output capability information without changing the current presentation. */
-        internal static PresentationDecision inspect (Gtk.Widget view, PresentationPolicy policy, bool hdr) {
+        internal static PresentationDecision inspect (Gtk.Widget view,
+            PresentationPolicy policy, bool hdr) {
             return choose (policy, hdr, output_capability (view));
         }
 #endif
@@ -48,7 +49,8 @@ namespace ImageKit {
             if (!hdr) {
                 result.status = PresentationStatus.SDR;
                 result.diagnostic = "SDR source.";
-            } else if (policy != PresentationPolicy.SDR && output == OutputCapability.VERIFIED_HDR) {
+            } else if (policy != PresentationPolicy.SDR &&
+                       output == OutputCapability.VERIFIED_HDR) {
                 result.status = PresentationStatus.NATIVE_HDR;
                 result.diagnostic = "Native HDR presentation verified.";
             } else {
@@ -84,8 +86,8 @@ namespace ImageKit {
         }
 
         /** Converts a decoded buffer into a texture for the selected output color state. */
-        internal static async PixelBuffer render_pixels (ImageDocument document, PresentationDecision decision,
-                                                   Cancellable stop) throws Error {
+        internal static async PixelBuffer render_pixels (ImageDocument document,
+            PresentationDecision decision, Cancellable stop) throws Error {
             return yield document.render_preview (decision.tone_map, stop);
         }
 #endif

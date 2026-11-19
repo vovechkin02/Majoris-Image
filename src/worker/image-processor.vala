@@ -12,7 +12,8 @@ namespace ImageKit {
          * Renders a source or applies an image recipe and returns validated pixels. Errors
          * propagate to the caller.
          */
-        public static Vips.Image render (string source, RenderOptions recipe, int preview = 0) throws Error {
+        public static Vips.Image render (string source, RenderOptions recipe,
+            int preview = 0) throws Error {
             recipe.validate ();
             var image = Vips.Image.from_file (source, null);
             if (image == null) {
@@ -33,12 +34,16 @@ namespace ImageKit {
             Vips.Image next;
             check (Vips.autorot (image, out next, null));
             image = next;
-            int x = int.min (image.width () - 1, (int) Math.floor (recipe.crop_x * image.width () + 1e-7));
-            int y = int.min (image.height () - 1, (int) Math.floor (recipe.crop_y * image.height () + 1e-7));
+            int x = int.min (image.width () - 1,
+                (int) Math.floor (recipe.crop_x * image.width () + 1e-7));
+            int y = int.min (image.height () - 1,
+                (int) Math.floor (recipe.crop_y * image.height () + 1e-7));
             int w = int.max (1,
-                int.min ((int) Math.floor (recipe.crop_width * image.width () + 1e-7), image.width () - x));
+                int.min ((int) Math.floor (recipe.crop_width * image.width () + 1e-7),
+                    image.width () - x));
             int h = int.max (1,
-                int.min ((int) Math.floor (recipe.crop_height * image.height () + 1e-7), image.height () - y));
+                int.min ((int) Math.floor (recipe.crop_height * image.height () + 1e-7),
+                    image.height () - y));
             check (Vips.crop (image, out next, x, y, w, h, null));
             image = next;
             if (recipe.turns % 4 != 0) {
@@ -59,7 +64,8 @@ namespace ImageKit {
             }
             image = ImageNative.to_linear (image);
             if (preview > 0 && (image.width () > preview || image.height () > preview)) {
-                double factor = double.min ((double)preview/image.width (), (double)preview/image.height ());
+                double factor = double.min (
+                    (double) preview / image.width (), (double) preview / image.height ());
                 var alpha = image.has_alpha ();
                 if (alpha) {
                     check (Vips.premultiply (image, out next, "max_alpha", 1.0, null));

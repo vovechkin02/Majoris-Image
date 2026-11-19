@@ -1,4 +1,4 @@
-"""Measure per-process NVIDIA GPU memory during real-compositor ImageView lifecycles."""
+"""Measure physical GPU memory using DRM fdinfo or NVIDIA process telemetry."""
 
 import argparse
 import json
@@ -42,11 +42,81 @@ def gpu_process_mib(pid: int) -> float | None:
     return None
 
 
+def parse_drm_resident_mib(contents: str) -> tuple[str, float] | None:
+    """Parse driver-reported DRM resident memory for a single GPU client.
+
+    Linux drivers may expose per-region ``drm-resident-*`` counters in fdinfo.
+    Non-resident allocation counters are intentionally not substituted because
+    they do not measure the same quantity.
+    """
+    fields = dict(
+        line.split(":", 1) for line in contents.splitlines() if ":" in line
+    )
+    driver = fields.get("drm-driver", "").strip()
+    if not driver:
+        return None
+    resident = 0.0
+    found = False
+    for key, value in fields.items():
+        if not key.startswith("drm-resident-"):
+            continue
+        items = value.strip().split()
+        if len(items) != 2 or items[1] not in ("B", "KiB", "MiB", "GiB"):
+            return None
+        try:
+            count = int(items[0])
+        except ValueError:
+            return None
+        if count < 0:
+            return None
+        scale = {"B": 1 / (1024 * 1024), "KiB": 1 / 1024,
+                 "MiB": 1, "GiB": 1024}[items[1]]
+        resident += count * scale
+        found = True
+    return (driver, resident) if found else None
+
+
+def drm_process_mib(pid: int) -> tuple[float, str] | None:
+    """Sum unique DRM client residency from procfs without double-counting FDs.
+
+    DRM client IDs are scoped to the driver/device. The result omits the
+    compositor and shared allocations not attributed to this process.
+    """
+    directory = Path("/proc") / str(pid) / "fdinfo"
+    clients = {}
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return None
+    for entry in entries:
+        try:
+            contents = entry.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        measured = parse_drm_resident_mib(contents)
+        if measured is None:
+            continue
+        driver, amount = measured
+        fields = dict(
+        line.split(":", 1) for line in contents.splitlines() if ":" in line
+    )
+        client = fields.get("drm-client-id", "").strip()
+        device = fields.get("drm-pdev", "").strip()
+        if not client:
+            continue
+        clients[(driver, device, client)] = max(
+            amount, clients.get((driver, device, client), 0.0)
+        )
+    if not clients:
+        return None
+    return sum(clients.values()), "Linux DRM fdinfo resident per-client memory"
+
+
 def profile(executable: Path, fixture: Path, cycles: int, viewers: int,
             mode: str) -> dict:
     """Collect host RSS and supported GPU samples from a real display session."""
     status = {
-        "driver": "NVIDIA nvidia-smi compute-app per-process telemetry",
+        "driver": "unavailable",
         "host_rss_peak_kib": None, "gpu_memory_peak_mib": None,
         "gpu_samples": 0, "host_samples": 0,
         "gpu_scope": (
@@ -64,8 +134,17 @@ def profile(executable: Path, fixture: Path, cycles: int, viewers: int,
                 status["host_rss_peak_kib"] = max(
                     status["host_rss_peak_kib"] or 0, host
                 )
-            gpu = gpu_process_mib(process.pid)
+            drm = drm_process_mib(process.pid)
+            if drm is not None:
+                gpu, method = drm
+            else:
+                gpu = (
+                    gpu_process_mib(process.pid)
+                    if shutil.which("nvidia-smi") else None
+                )
+                method = "NVIDIA compute-app process telemetry"
             if gpu is not None:
+                status["driver"] = method
                 status["gpu_samples"] += 1
                 status["gpu_memory_peak_mib"] = max(
                     status["gpu_memory_peak_mib"] or 0, gpu
@@ -75,7 +154,8 @@ def profile(executable: Path, fixture: Path, cycles: int, viewers: int,
     status["exit_code"] = process.returncode
     status["output"] = output
     status["qualification"] = (
-        "measured" if process.returncode == 0 and status["gpu_samples"] > 0
+        "measured" if process.returncode == 0 and status["gpu_samples"] > 0 and
+        (status["gpu_memory_peak_mib"] or 0) > 0
         else "not_measured" if process.returncode == 0 else "failed"
     )
     return status
@@ -99,11 +179,8 @@ def main() -> int:
         parser.error("A real graphical session is required; Xvfb is not a GPU test")
     if os.environ.get("GSK_RENDERER") == "cairo":
         parser.error("A Cairo renderer cannot qualify physical GPU allocations")
-    if not shutil.which("nvidia-smi"):
-        result = {"qualification": "not_measured", "reason": "nvidia-smi not available"}
-    else:
-        result = profile(args.executable.resolve(), args.fixture.resolve(),
-                         args.cycles, args.viewers, args.mode)
+    result = profile(args.executable.resolve(), args.fixture.resolve(),
+                     args.cycles, args.viewers, args.mode)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))

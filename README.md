@@ -373,8 +373,11 @@ unrelated code, and verify any source moves in all Meson targets.
 ### Performance qualification for Glycin/APNG and GTK lifecycles
 
 The optional Glycin path has deterministic 10-, 50-, and 100-frame APNG
-workloads. The performance suite also measures cancellation-heavy scheduler
-queues and **eight simultaneously loaded ImageView instances**, followed by
+workloads plus a larger 512 × 384 partially updated, composited animation.
+Every APNG frame contributes its geometry, timing and pixels to one output
+fingerprint. The performance suite also measures cancellation-heavy scheduler
+queues and **eight simultaneously loaded ImageView instances**, in both a
+small-preview workload and a high-resolution tiled-TIFF workload, followed by
 normal reference-release and host-memory quiescence. A completed build or a
 successful benchmark command is not a performance pass: the qualification
 gate requires independently collected results from a matched earlier source.
@@ -405,18 +408,24 @@ python3 tests/release/qualify_performance.py \
 
 Baseline capture records `baseline_recorded`, **not** `passed`. A missing,
 unmatched or noisy baseline cannot pass. The default gate allows no more than
-15% median timing regression, 20% median-absolute-deviation fraction, and
-64 MiB additional settled viewer RSS; all limits are explicit in the report.
+15% median timing/live-RSS regression, 20% median-absolute-deviation fraction,
+64 MiB additional settled viewer RSS and 128 MiB additional live viewer RSS;
+all limits are explicit in the report. The gate rejects missing tiled-viewer
+results, missing APNG frame fingerprints, mismatched units and changed
+collector/fixture methodology. Host RSS is not physical GPU memory.
 The gate also records separate APNG color-probe/source-stamp costs, output
 fingerprints and scheduler queue/cancellation/drain timing. It never silently
 changes ICC validation or source freshness to improve benchmark scores.
 
-See [the next-pass qualification contract](docs/verification/verification-performance-next-pass-v1.8.md)
+See [the final qualification gate corrections](docs/verification/verification-performance-gates-v1.8.md),
+[the next-pass qualification contract](docs/verification/verification-performance-next-pass-v1.8.md)
 and the [earlier qualification implementation](docs/verification/verification-performance-qualification-v1.8.md).
 Host RSS under Xvfb does not measure physical GPU memory.
 For hardware-supported NVIDIA GPU-memory measurements in an actual desktop
 session, use `tests/benchmarks/measure_gpu_memory.py` with the compiled
-`benchmark-viewer-lifecycle` executable. Unsupported drivers and unavailable
+`benchmark-viewer-lifecycle` executable and the generated `large.tiff` fixture.
+The profiler now passes its `--mode tiled` setting to the benchmark by default.
+Unsupported drivers and unavailable
 per-process counters are reported as `not_measured`, not as passing results.
 
 ## License

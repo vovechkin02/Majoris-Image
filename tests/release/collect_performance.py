@@ -24,15 +24,21 @@ VIEWER_FINAL = re.compile(
     r"Viewer-memory final_rss_kib=(\d+) retained_delta_kib=(-?\d+)"
 )
 VIEWER_LIVE = re.compile(r"Viewer-memory cycle=\d+ live_rss_kib=(\d+)")
+VIEWER_TILES = re.compile(r"Viewer-tiles cycle=\d+ ready_viewers=(\d+)")
 
 
 def benchmark_harness_hash(root: Path) -> str:
-    """Require identical workload implementations across both source revisions."""
+    """Bind comparisons to collectors, workload sources and fixture definitions."""
     paths = (
+        "tests/release/collect_performance.py",
         "tests/benchmarks/run_benchmarks.py",
         "tests/benchmarks/benchmark.vala",
         "tests/benchmarks/benchmark-scheduler.vala",
         "tests/benchmarks/benchmark-viewer-lifecycle.vala",
+        "tests/benchmarks/meson.build",
+        "tests/meson.build",
+        "tests/support/make_apng_benchmarks.py",
+        "tests/support/make-fixtures.c",
     )
     sha = hashlib.sha256()
     for filename in paths:
@@ -112,6 +118,7 @@ def record_apng(
 ) -> tuple[dict, dict]:
     """Measure long-frame APNGs using the existing sandbox-aware benchmark runner."""
     fixtures = [build / "tests" / f"animation-{count}.apng" for count in (10, 50, 100)]
+    fixtures.append(build / "tests/animation-composite.apng")
     for path in fixtures:
         if not path.is_file():
             raise RuntimeError(f"Missing generated APNG fixture: {path}")
@@ -124,15 +131,18 @@ def record_apng(
         "--samples", str(samples), "--output", str(report_path),
     ] + [
         f"animation-apng-{count}={path}"
-        for count, path in zip((10, 50, 100), fixtures)
-    ]
+        for count, path in zip((10, 50, 100), fixtures[:3], strict=True)
+    ] + [f"animation-apng-composite={fixtures[3]}"]
     execute(command, root, workdir / "apng-run.log", timeout=2700)
     source = json.loads(report_path.read_text(encoding="utf-8"))
     results = {}
-    for name in ("animation-apng-10", "animation-apng-50", "animation-apng-100"):
+    for name in (
+        "animation-apng-10", "animation-apng-50", "animation-apng-100",
+        "animation-apng-composite",
+    ):
         record = source["workloads"][name]
-        if not record.get("animation_last_sha256"):
-            raise RuntimeError(f"Missing APNG output fingerprint for {name}")
+        if not record.get("animation_all_sha256"):
+            raise RuntimeError(f"Missing all-frame APNG fingerprint for {name}")
         stages = {}
         for stage in (
             "glycin-source-stamp", "glycin-loader-discovery", "glycin-color-probe",
@@ -152,7 +162,7 @@ def record_apng(
         if any(value <= 0 for value in values):
             raise RuntimeError(f"Invalid APNG wall time for {name}")
         results[name] = summarize(values, record["fixture_sha256"],
-                                  record["animation_last_sha256"])
+                                  record["animation_all_sha256"])
         results[name]["fixture_sha256"] = record["fixture_sha256"]
         results[name]["stages"] = stages
         setup_us = sum(stages[stage]["median_us"] for stage in (
@@ -197,42 +207,55 @@ def record_scheduler(root: Path, build: Path, workdir: Path, samples: int) -> di
 
 
 def record_viewers(root: Path, build: Path, workdir: Path, samples: int) -> dict:
-    """Measure simultaneous GTK viewers after normal reference-release cycles."""
+    """Compare small-preview and tiled large-image RSS under matched conditions."""
     xvfb = shutil.which("xvfb-run")
     if not xvfb:
         raise RuntimeError("xvfb-run required for matched GTK lifecycle measurements")
     executable = artifact(build, "benchmark-viewer-lifecycle")
-    fixture = root / "tests/fixtures/rgb16.png"
-    if not fixture.is_file():
-        raise RuntimeError(f"Missing benchmark fixture: {fixture}")
-    retained, live = [], []
-    for sample in range(samples):
-        env = dict(
-            os.environ,
-            MAJORIS_IMAGE_WORKER=str(artifact(build, "majoris-image-worker")),
-            GDK_BACKEND="x11", GDK_SCALE="1", GSK_RENDERER="cairo",
-            G_DEBUG="fatal-criticals",
-        )
-        stdout = execute([
-            xvfb, "-a", "-s", "-screen 0 1600x900x24", str(executable),
-            str(fixture), "6", "8",
-        ], root, workdir / f"viewer-{sample:02d}.log", env=env, timeout=600)
-        final = VIEWER_FINAL.search(stdout)
-        if final is None:
-            raise RuntimeError("Missing post-release GTK memory report")
-        views = [int(value) for value in VIEWER_LIVE.findall(stdout)]
-        if len(views) != 6:
-            raise RuntimeError("Expected six simultaneous-viewer memory samples")
-        retained.append(float(max(0, int(final.group(2)))))
-        live.append(float(max(views)))
-    source_sha = hashlib.sha256(fixture.read_bytes()).hexdigest()
-    config = f"simultaneous-8-viewers:6-cycles:{source_sha}"
-    result = {
-        "viewer-retained-rss": summarize(retained, config),
-        "viewer-live-rss": summarize(live, config),
-    }
-    for stats in result.values():
-        stats["unit"] = "KiB"
+    fixtures = (
+        ("viewer", root / "tests/fixtures/rgb16.png", False),
+        ("viewer-large", build / "tests/large.tiff", True),
+    )
+    env = dict(
+        os.environ,
+        MAJORIS_IMAGE_WORKER=str(artifact(build, "majoris-image-worker")),
+        GDK_BACKEND="x11", GDK_SCALE="1", GSK_RENDERER="cairo",
+        G_DEBUG="fatal-criticals",
+    )
+    result = {}
+    for label, fixture, tiled in fixtures:
+        if not fixture.is_file():
+            raise RuntimeError(f"Missing benchmark fixture: {fixture}")
+        retained, live = [], []
+        for sample in range(samples):
+            stdout = execute([
+                xvfb, "-a", "-s", "-screen 0 1600x900x24", str(executable),
+                str(fixture), "6", "8", "tiled" if tiled else "preview",
+            ], root, workdir / f"{label}-{sample:02d}.log", env=env,
+                timeout=900 if tiled else 600)
+            final = VIEWER_FINAL.search(stdout)
+            if final is None:
+                raise RuntimeError(
+                    f"Missing post-release GTK memory report for {label}"
+                )
+            views = [int(value) for value in VIEWER_LIVE.findall(stdout)]
+            if len(views) != 6:
+                raise RuntimeError(
+                    f"Expected six simultaneous-viewer samples for {label}"
+                )
+            tiled_counts = [int(value) for value in VIEWER_TILES.findall(stdout)]
+            if tiled and tiled_counts != [8] * 6:
+                raise RuntimeError(
+                    "Large-image workload did not render tiles in all viewers"
+                )
+            retained.append(float(max(0, int(final.group(2)))))
+            live.append(float(max(views)))
+        source_sha = hashlib.sha256(fixture.read_bytes()).hexdigest()
+        mode = "tiled" if tiled else "preview"
+        config = f"simultaneous-8-viewers:6-cycles:{mode}:{source_sha}"
+        for suffix, measures in (("retained-rss", retained), ("live-rss", live)):
+            result[f"{label}-{suffix}"] = summarize(measures, config)
+            result[f"{label}-{suffix}"]["unit"] = "KiB"
     return result
 
 
@@ -240,7 +263,7 @@ def collect(root: Path, build: Path, workdir: Path, samples: int) -> dict:
     """Combine matching hardware and build metadata with all required measurements."""
     apng, source = record_apng(root, build, workdir, samples)
     result = {
-        "schema": 1, "version": source["version"],
+        "schema": 2, "version": source["version"],
         "harness_sha256": benchmark_harness_hash(root),
         "environment": {
             "system": source["environment"]["system"],

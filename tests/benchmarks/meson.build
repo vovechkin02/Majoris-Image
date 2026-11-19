@@ -116,6 +116,7 @@ if get_option('glycin').enabled()
     'animation-apng-10=' + apng_perf_fixtures[0],
     'animation-apng-50=' + apng_perf_fixtures[1],
     'animation-apng-100=' + apng_perf_fixtures[2],
+    'animation-apng-composite=' + apng_perf_fixtures[3],
   ]
 endif
 if get_option('raw_fixtures') != ''
@@ -230,7 +231,19 @@ if get_option('gtk')
       timeout: 600,
       args: isolated + [
         xvfb.full_path(), '-a', '-s', '-screen 0 1600x900x24',
-        lifecycle_benchmark, fixture_dir / 'rgb16.png', '6', '8',
+        lifecycle_benchmark, fixture_dir / 'rgb16.png', '6', '8', 'preview',
+      ],
+      depends: [worker, fixtures],
+      env: view_benchmark_env,
+    )
+    benchmark(
+      'GTK ImageView eight large tiled images and RSS',
+      python,
+      suite: 'performance',
+      timeout: 900,
+      args: isolated + [
+        xvfb.full_path(), '-a', '-s', '-screen 0 1600x900x24',
+        lifecycle_benchmark, large_tiff_fixture, '6', '8', 'tiled',
       ],
       depends: [worker, fixtures],
       env: view_benchmark_env,

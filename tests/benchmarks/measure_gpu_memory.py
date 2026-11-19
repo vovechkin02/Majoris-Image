@@ -42,7 +42,8 @@ def gpu_process_mib(pid: int) -> float | None:
     return None
 
 
-def profile(executable: Path, fixture: Path, cycles: int, viewers: int) -> dict:
+def profile(executable: Path, fixture: Path, cycles: int, viewers: int,
+            mode: str) -> dict:
     """Collect host RSS and supported GPU samples from a real display session."""
     status = {
         "driver": "NVIDIA nvidia-smi compute-app per-process telemetry",
@@ -53,7 +54,7 @@ def profile(executable: Path, fixture: Path, cycles: int, viewers: int) -> dict:
         ),
     }
     with subprocess.Popen(
-        [str(executable), str(fixture), str(cycles), str(viewers)],
+        [str(executable), str(fixture), str(cycles), str(viewers), mode],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     ) as process:
         while process.poll() is None:
@@ -88,6 +89,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cycles", type=int, default=6)
     parser.add_argument("--viewers", type=int, default=8)
+    parser.add_argument("--mode", choices=("preview", "tiled"), default="tiled")
     args = parser.parse_args()
     if not (args.executable.is_file() and args.fixture.is_file()):
         parser.error("The compiled benchmark and image fixture must exist")
@@ -101,7 +103,7 @@ def main() -> int:
         result = {"qualification": "not_measured", "reason": "nvidia-smi not available"}
     else:
         result = profile(args.executable.resolve(), args.fixture.resolve(),
-                         args.cycles, args.viewers)
+                         args.cycles, args.viewers, args.mode)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))

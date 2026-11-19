@@ -94,11 +94,15 @@ if get_option('tests')
   wide_apng_fixture = extra_formats[26]
 
 
-  # Larger APNGs exercise forward-cursor scaling instead of the three-frame fixture.
+  # Long APNGs exercise cursor scaling; the larger composited source tests
+  # partial-frame blending and disposal behavior with realistic pixel regions.
   apng_perf_fixtures = custom_target(
     'APNG decoder scaling fixtures',
     input: 'support/make_apng_benchmarks.py',
-    output: ['animation-10.apng', 'animation-50.apng', 'animation-100.apng'],
+    output: [
+      'animation-10.apng', 'animation-50.apng', 'animation-100.apng',
+      'animation-composite.apng',
+    ],
     command: [python, '@INPUT@', '@OUTPUT@'],
   )
 

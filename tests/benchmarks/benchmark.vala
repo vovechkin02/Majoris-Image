@@ -268,17 +268,28 @@ private async void measure (string mode, ImageSource source, File? remote) throw
             case "animation-apng-10":
             case "animation-apng-50":
             case "animation-apng-100":
+            case "animation-apng-composite":
                 assert (document.animated && document.mime_type == "image/apng");
-                // Preserve the initial document as the owning cursor. Each forward
-                // request advances it once, and the final sample identifies output.
-                int count = int.parse (mode.substring ("animation-apng-".length));
+                // Hash every decoded frame, not just the last frame. Include
+                // ordering, timing, geometry and raw pixels in the streaming digest.
+                int count = mode == "animation-apng-composite" ? 24
+                    : int.parse (mode.substring ("animation-apng-".length));
                 assert (document.frame_count == count);
-                ImageDocument latest = document;
-                for (int frame = 1; frame < count; frame++) {
-                    latest = yield document.open_frame (frame);
+                var digest = new Checksum (ChecksumType.SHA256);
+                for (int frame = 0; frame < count; frame++) {
+                    ImageDocument decoded = document;
+                    if (frame > 0) {
+                        decoded = yield document.open_frame (frame);
+                    }
+                    var header = "%d:%d:%d:%d:%" + int64.FORMAT + ":%" + int64.FORMAT + ":";
+                    var description = header.printf (frame, decoded.preview.width,
+                        decoded.preview.height, decoded.preview.stride,
+                        decoded.frame_timestamp_us, decoded.frame_duration_us);
+                    digest.update (description.data, description.length);
+                    var pixels = decoded.preview.bytes;
+                    digest.update (pixels.get_data (), pixels.get_size ());
                 }
-                stdout.printf ("Animation-last-sha256 %s\n",
-                    Checksum.compute_for_bytes (ChecksumType.SHA256, latest.preview.bytes));
+                stdout.printf ("Animation-all-sha256 %s\n", digest.get_string ());
                 break;
             case "animation-apng":
                 assert (document.animated && document.mime_type == "image/apng");

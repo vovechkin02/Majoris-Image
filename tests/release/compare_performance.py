@@ -13,10 +13,17 @@ from pathlib import Path
 
 REQUIRED_WORKLOADS = (
     "animation-apng-10", "animation-apng-50", "animation-apng-100",
+    "animation-apng-composite",
     *(f"scheduler-{count}-{stage}" for count in (120, 1200, 4800)
       for stage in ("queue", "cancel", "drain")),
-    "viewer-retained-rss",
+    "viewer-retained-rss", "viewer-live-rss",
+    "viewer-large-retained-rss", "viewer-large-live-rss",
 )
+
+MEMORY_WORKLOADS = frozenset(name for name in REQUIRED_WORKLOADS
+                             if name.startswith("viewer-"))
+LIVE_MEMORY_WORKLOADS = frozenset(name for name in MEMORY_WORKLOADS
+                                  if name.endswith("-live-rss"))
 
 
 def comparable_environment(baseline: dict, current: dict) -> list[str]:
@@ -34,11 +41,13 @@ def comparable_environment(baseline: dict, current: dict) -> list[str]:
 
 def compare(baseline: dict, current: dict, max_regression: float = 0.15,
             max_mad_fraction: float = 0.20,
-            max_retained_growth_kib: int = 65536) -> dict:
+            max_retained_growth_kib: int = 65536,
+            max_live_growth_kib: int = 131072) -> dict:
     """Reject missing/incompatible/noisy results and measurable regressions.
 
-    Runtime ratios apply to independently collected median timings. Retained
-    host RSS uses an absolute allowance because its baseline can be near zero.
+    Runtime ratios apply to independently collected median timings. Live RSS
+    must satisfy both a relative and an absolute growth limit; retained RSS
+    uses an absolute allowance because its baseline can be near zero.
     Physical GPU memory remains outside the scope of this gate.
     """
     report = {
@@ -47,6 +56,7 @@ def compare(baseline: dict, current: dict, max_regression: float = 0.15,
             "max_regression_percent": max_regression * 100,
             "max_mad_fraction": max_mad_fraction,
             "max_retained_growth_kib": max_retained_growth_kib,
+            "max_live_growth_kib": max_live_growth_kib,
         },
         "gpu_memory_qualification": "not_measured",
     }
@@ -61,11 +71,25 @@ def compare(baseline: dict, current: dict, max_regression: float = 0.15,
         if not isinstance(older, dict) or not isinstance(newer, dict):
             record["reason"] = "Workload missing from matched baseline or current run"
             continue
+        if (not isinstance(older.get("fixture_sha256"), str) or
+                not older["fixture_sha256"]):
+            record["reason"] = "Missing benchmark fixture or request identity"
+            continue
         if older.get("fixture_sha256") != newer.get("fixture_sha256"):
             record["reason"] = "Different benchmark fixture or request configuration"
             continue
         if older.get("output_sha256") != newer.get("output_sha256"):
             record["reason"] = "Different output fingerprint"
+            continue
+        if workload.startswith("animation-") and (
+            not isinstance(older.get("output_sha256"), str) or
+            not older["output_sha256"]
+        ):
+            record["reason"] = "Missing complete animation-output fingerprint"
+            continue
+        unit = "KiB" if workload in MEMORY_WORKLOADS else "seconds"
+        if older.get("unit") != unit or newer.get("unit") != unit:
+            record["reason"] = f"Missing or incompatible measurement unit ({unit})"
             continue
         if min(older.get("count", 0), newer.get("count", 0)) < 3:
             record["reason"] = "Insufficient independent samples"
@@ -76,13 +100,22 @@ def compare(baseline: dict, current: dict, max_regression: float = 0.15,
                     for value in (before, after)) or before < 0 or after < 0):
             record["reason"] = "Missing or invalid sample medians"
             continue
-        if workload == "viewer-retained-rss":
+        if workload in MEMORY_WORKLOADS:
             growth = after - before
             record.update({"baseline_kib": before, "current_kib": after,
                            "growth_kib": growth})
-            record["status"] = (
-                "failed" if growth > max_retained_growth_kib else "passed"
-            )
+            if workload in LIVE_MEMORY_WORKLOADS:
+                if before <= 0:
+                    record["reason"] = "Live-memory baseline must be positive"
+                    continue
+                record["ratio"] = round(after / before, 4)
+                record["status"] = "failed" if (
+                    growth > max_live_growth_kib or after / before > 1 + max_regression
+                ) else "passed"
+            else:
+                record["status"] = (
+                    "failed" if growth > max_retained_growth_kib else "passed"
+                )
             continue
         if before <= 0:
             record["reason"] = "Baseline latency must be positive"
@@ -125,9 +158,11 @@ def main() -> int:
     parser.add_argument("--max-regression-percent", type=float, default=15.0)
     parser.add_argument("--max-mad-fraction", type=float, default=0.20)
     parser.add_argument("--max-retained-growth-kib", type=int, default=65536)
+    parser.add_argument("--max-live-growth-kib", type=int, default=131072)
     args = parser.parse_args()
     if not (0 <= args.max_regression_percent <= 100 and
-            0 < args.max_mad_fraction <= 1 and args.max_retained_growth_kib >= 0):
+            0 < args.max_mad_fraction <= 1 and
+            args.max_retained_growth_kib >= 0 and args.max_live_growth_kib >= 0):
         parser.error("Invalid performance acceptance budget")
     try:
         baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
@@ -137,7 +172,8 @@ def main() -> int:
     if not isinstance(baseline, dict) or not isinstance(current, dict):
         parser.error("Performance evidence must be JSON objects")
     report = compare(baseline, current, args.max_regression_percent / 100,
-                     args.max_mad_fraction, args.max_retained_growth_kib)
+                     args.max_mad_fraction, args.max_retained_growth_kib,
+                     args.max_live_growth_kib)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(report, indent=2, sort_keys=True))

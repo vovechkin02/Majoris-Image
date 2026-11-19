@@ -20,7 +20,10 @@ HARNESS_FILES = (
     "tests/benchmarks/benchmark.vala",
     "tests/benchmarks/run_benchmarks.py",
     "tests/benchmarks/meson.build",
+    "tests/meson.build",
     "tests/support/make_apng_benchmarks.py",
+    "tests/support/make-fixtures.c",
+    "tests/release/collect_performance.py",
 )
 
 
@@ -48,7 +51,9 @@ def prepare(archive: Path, candidate: Path, destination: Path) -> dict:
                 raise ValueError(f"Unsafe archive path: {member.filename}")
             mode = member.external_attr >> 16
             if stat.S_ISLNK(mode):
-                raise ValueError(f"Baseline archive contains a symbolic link: {member.filename}")
+                raise ValueError(
+                    f"Baseline archive contains a symbolic link: {member.filename}"
+                )
             if member.is_dir():
                 path.mkdir(parents=True, exist_ok=True)
                 continue
@@ -59,7 +64,7 @@ def prepare(archive: Path, candidate: Path, destination: Path) -> dict:
             path.chmod(mode & 0o777 or 0o644)
     for name in HARNESS_FILES:
         destination.joinpath(name).write_bytes((candidate / name).read_bytes())
-    # No runtime source changed. These six permitted files are the only patches.
+    # No runtime source changed. Only these benchmark and measurement files are patched.
     for path in destination.rglob("*"):
         if not path.is_file():
             continue

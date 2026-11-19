@@ -88,6 +88,14 @@ if get_option('tests')
   wide_apng_fixture = extra_formats[26]
 
 
+  # Larger APNGs exercise forward-cursor scaling instead of the three-frame fixture.
+  apng_perf_fixtures = custom_target(
+    'APNG decoder scaling fixtures',
+    input: 'support/make_apng_benchmarks.py',
+    output: ['animation-10.apng', 'animation-50.apng', 'animation-100.apng'],
+    command: [python, '@INPUT@', '@OUTPUT@'],
+  )
+
   worker_env = environment(
     {'MAJORIS_IMAGE_WORKER': worker.full_path(), 'G_DEBUG': 'fatal-criticals'},
   )

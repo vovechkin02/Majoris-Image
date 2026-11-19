@@ -297,6 +297,8 @@ def measure(
             fallback_metadata["output_sha256"] = line.split()[1]
         if line.startswith("Fallback-color "):
             fallback_metadata["color_diagnostic"] = line.removeprefix("Fallback-color ")
+        if line.startswith("Animation-last-sha256 "):
+            fallback_metadata["animation_last_sha256"] = line.split()[1]
     worker_launches = len(starts.read_text().splitlines())
     if operation == "cancel" and worker_launches != 1:
         raise RuntimeError("Worker cancellation requires exactly one sandbox launch")
@@ -544,6 +546,11 @@ def main() -> int:
                 ),
                 "samples": samples,
             }
+            if mode.startswith("animation-apng-"):
+                fingerprints = {sample.get("animation_last_sha256") for sample in samples}
+                if None in fingerprints or len(fingerprints) != 1:
+                    raise RuntimeError(f"APNG output changed between samples: {mode}")
+                stats["animation_last_sha256"] = fingerprints.pop()
             base = old.get("workloads", {}).get(mode)
             if base and base.get("fixture_sha256") == digest:
                 stats["baseline_median_ratio"] = median / base["median_seconds"]

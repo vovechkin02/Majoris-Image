@@ -370,6 +370,26 @@ Contribute according to the shared standards. Follow the Vala `var` inference
 policy, keep public ABI and protocol stable, avoid stylistic rewrites of
 unrelated code, and verify any source moves in all Meson targets.
 
+### Performance qualification for Glycin/APNG and GTK lifecycles
+
+The optional Glycin path has deterministic 10-, 50-, and 100-frame APNG
+workloads. The performance suite also measures cancellation-heavy scheduler
+queues and repeated ImageView disposal. Execute both native build profiles with:
+
+```sh
+python3 tests/release/qualify_performance.py \
+  --source . --workdir /tmp/majoris-image-qualify \
+  --output /tmp/majoris-image-qualify.json
+```
+
+See [qualification implementation](docs/verification/verification-performance-qualification-v1.8.md).
+Benchmark registration does not establish a performance improvement without
+recorded runs. Host RSS under Xvfb does not measure physical GPU memory.
+For hardware-supported NVIDIA GPU-memory measurements in an actual desktop
+session, use `tests/benchmarks/measure_gpu_memory.py` with the compiled
+`benchmark-viewer-lifecycle` executable. Unsupported drivers and unavailable
+per-process counters are reported as `not_measured`, not as passing results.
+
 ## License
 
 **GPL-3.0-or-later**; see [LICENSE](LICENSE) and
@@ -378,3 +398,4 @@ its recorded author and licensing history. Generated regression image fixtures
 identified in [tests/fixtures/README.md](tests/fixtures/README.md) are
 CC0-1.0. Consumers should assess GPL distribution obligations for their
 particular combination and distribution model.
+

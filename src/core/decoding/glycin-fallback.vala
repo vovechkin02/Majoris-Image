@@ -187,12 +187,16 @@ namespace ImageKit {
                 throw original;
             }
             OperationProfile.event ("glycin-attempt");
+            int64 profile_started = OperationProfile.begin ();
             var identity = yield source.stamp (stop);
+            OperationProfile.record ("glycin-source-stamp", profile_started);
             var mime = animation != null ? animation.mime : yield sniff (source.file, stop, preload);
             if (mime == "") {
                 throw original;
             }
+            profile_started = OperationProfile.begin ();
             var loaders = installed ();
+            OperationProfile.record ("glycin-loader-discovery", profile_started);
             if (!has_loader (mime, loaders)) {
                 throw original;
             }
@@ -214,7 +218,9 @@ namespace ImageKit {
             var retained = false;
             var completed = false;
             try {
+                profile_started = OperationProfile.begin ();
                 var color = yield color_metadata (source, job, preload);
+                OperationProfile.record ("glycin-color-probe", profile_started);
                 var tagged = color.get_boolean_member_with_default ("icc", false);
                 if (color.get_boolean_member_with_default ("icc-invalid", false)) {
                     throw new ImageError.COLOR_PROFILE ("Invalid embedded ICC profile");
@@ -247,8 +253,10 @@ namespace ImageKit {
                     throw new ImageError.COLOR_PROFILE ("Glycin 1 cannot attest the decoded color state");
                 }
 
+                profile_started = OperationProfile.begin ();
                 yield scheduler.acquire (preload ? JobScheduler.PRELOAD_PRIORITY :
                     JobScheduler.FOREGROUND_PRIORITY, job);
+                OperationProfile.record ("glycin-scheduler-admission", profile_started);
                 admitted = true;
                 Gly.Image image;
                 // Reuse only a document-owned forward cursor. Concurrent requests and
@@ -268,6 +276,7 @@ namespace ImageKit {
                 if ((uint64) image.get_width () * image.get_height () > 67108864) {
                     throw new ImageError.MEMORY ("Glycin image exceeds the fallback pixel budget");
                 }
+                profile_started = OperationProfile.begin ();
                 var frame = yield image.next_frame_async (job);
                 if (retained) {
                     // The first next_frame call advances from the retained cursor.
@@ -293,19 +302,24 @@ namespace ImageKit {
                         }
                     }
                 }
+                OperationProfile.record ("glycin-frame-advance", profile_started);
                 int width, height, depth;
+                profile_started = OperationProfile.begin ();
                 var bytes = yield convert (frame, request.preview_size, view.crop_x, view.crop_y,
                     view.crop_width, view.crop_height, view.nearest_neighbor,
                     color.get_boolean_member_with_default ("gray-icc", false), qoi_transfer == 1, job,
                     out width, out height, out depth);
+                OperationProfile.record ("glycin-pixel-conversion", profile_started);
                 if (source_depth > depth) {
                     throw new ImageError.UNSUPPORTED ("Glycin would reduce precision from the source samples");
                 }
                 job.set_error_if_cancelled ();
+                profile_started = OperationProfile.begin ();
                 if (identity != "" && identity != (yield source.stamp (job))) {
                     throw new ImageError.SOURCE_CHANGED ("Image changed during Glycin decoding");
                 }
 
+                OperationProfile.record ("glycin-final-source-stamp", profile_started);
                 var probe = new ImageProbe ();
                 probe.width = (int) frame.get_width ();
                 probe.height = (int) frame.get_height ();

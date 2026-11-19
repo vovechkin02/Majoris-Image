@@ -4,6 +4,21 @@ benchmark_program = executable(
   dependencies: core_api,
   vala_args: ['--pkg', 'posix'],
 )
+scheduler_benchmark = executable(
+  'benchmark-scheduler',
+  ['benchmark-scheduler.vala', '../../src/core/execution/job-scheduler.vala'],
+  dependencies: [gio, gee],
+)
+foreach count : ['120', '1200', '4800']
+  benchmark(
+    'Scheduler cancellation-heavy queue ' + count,
+    scheduler_benchmark,
+    args: [count, '75'],
+    suite: 'performance',
+    timeout: 120,
+  )
+endforeach
+
 native_benchmark = executable(
   'majoris-image-native-benchmark',
   'benchmark-native.c',
@@ -98,6 +113,9 @@ if get_option('glycin').enabled()
     'fallback=' + (fixture_build_dir / 'fallback.qoi'),
     'fallback16=' + (fixture_build_dir / 'glycin-rgb16.png'),
     'animation-apng=' + partial_apng_fixture,
+    'animation-apng-10=' + apng_perf_fixtures[0],
+    'animation-apng-50=' + apng_perf_fixtures[1],
+    'animation-apng-100=' + apng_perf_fixtures[2],
   ]
 endif
 if get_option('raw_fixtures') != ''
@@ -125,7 +143,7 @@ benchmark(
     '--executable',
     benchmark_program,
   ] + workloads,
-  depends: [fixtures, extra_formats, worker, worker_fault],
+  depends: [fixtures, extra_formats, apng_perf_fixtures, worker, worker_fault],
 )
 
 benchmark(
@@ -196,6 +214,23 @@ if get_option('gtk')
         '-screen 0 1920x1200x24',
         image_view_benchmark,
         large_tiff_fixture,
+      ],
+      depends: [worker, fixtures],
+      env: view_benchmark_env,
+    )
+    lifecycle_benchmark = executable(
+      'benchmark-viewer-lifecycle',
+      'benchmark-viewer-lifecycle.vala',
+      dependencies: gtk_api,
+    )
+    benchmark(
+      'GTK ImageView repeated disposal and RSS',
+      python,
+      suite: 'performance',
+      timeout: 600,
+      args: isolated + [
+        xvfb.full_path(), '-a', '-s', '-screen 0 1600x900x24',
+        lifecycle_benchmark, fixture_dir / 'rgb16.png', '6', '8',
       ],
       depends: [worker, fixtures],
       env: view_benchmark_env,

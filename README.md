@@ -441,6 +441,17 @@ See [the raw-timing and process-VmHWM qualification correction](docs/verificatio
 [the next-pass qualification contract](docs/verification/verification-performance-next-pass-v1.8.md)
 and the [earlier qualification implementation](docs/verification/verification-performance-qualification-v1.8.md).
 Host RSS under Xvfb does not measure physical GPU memory.
+For extended investigation of elevated post-release tiled-viewer RSS, use
+`tests/benchmarks/diagnose_viewer_memory.py` with a compiled GTK benchmark and
+`--cycles 20 --viewers 8 --mode tiled --xvfb`, or enable
+`--diagnose-viewer-memory` with the matched qualification command. This writes
+per-cycle `/proc/self/status`, `/proc/self/smaps_rollup`, texture-node counts,
+and weak-viewer lifetime evidence without changing the production renderer.
+High RSS is not automatically evidence of a leak; `VmHWM` anomalies are
+reported explicitly and cannot qualify the matched peak-RSS gate. The GPU
+profiler has bounded output, timeout and subprocess-group cleanup safeguards.
+See [the extended memory investigation](docs/TESTING.md#extended-tiled-viewer-memory-investigation).
+
 For hardware-supported NVIDIA GPU-memory measurements in an actual desktop
 session, use `tests/benchmarks/measure_gpu_memory.py` with the compiled
 `benchmark-viewer-lifecycle` executable and the generated `large.tiff` fixture.

@@ -359,7 +359,7 @@ exercised in the `Performance baseline acceptance policy` unit test. Run
 `python3 tests/release/test_compare_performance.py` without compiling if needed.
 
 A baseline **must** use the same benchmark implementations as the candidate;
-`prepare_baseline.py` produces an isolated previous-source tree with the nine
+`prepare_baseline.py` produces an isolated previous-source tree with the
 benchmark/fixture-harness files synchronized, while verifying that every other
 file is byte-for-byte unchanged. Do not compare historical sequential-viewer
 measurements against the new simultaneous-viewer benchmark.
@@ -481,3 +481,48 @@ A missing or unverified graphics session must be recorded as blocked. No
 benchmark can prove GPU resource reclamation for every driver from host RSS
 alone. Review `docs/verification/verification-platform-qualification-v1.8.md`
 for the environment and remaining native release gates.
+
+### Extended tiled-viewer memory investigation
+
+Use the **optional** diagnostic after native compilation when six-cycle tiled
+viewer RSS remains elevated, or when `VmHWM` disagrees with sampled `VmRSS`.
+It keeps the normal six-cycle matched release gate unchanged and adds an
+independent 20-cycle investigation with eight concurrently mounted viewers.
+Run with the built benchmark path obtained from Meson introspection:
+
+```sh
+python3 tests/benchmarks/diagnose_viewer_memory.py \
+  /absolute/path/to/benchmark-viewer-lifecycle \
+  /absolute/path/to/build/tests/large.tiff \
+  --cycles 20 --viewers 8 --mode tiled --xvfb \
+  --output /tmp/imagekit-viewer-diagnosis.json \
+  --log /tmp/imagekit-viewer-diagnosis.log
+```
+
+Alternatively, add `--diagnose-viewer-memory` to `qualify_matched.py` to
+execute the 20-cycle investigation **after** a successful matched CPU gate.
+Use `--diagnostic-cycles N` to select 5–50 cycles. The diagnostic enables
+`IMAGEKIT_MEMORY_DIAGNOSTICS=1` in the benchmark, which records `/proc/self/status`
+and `/proc/self/smaps_rollup` counters for initial, loaded, released, and final
+stages. It also counts rendered GSK texture nodes while the viewers are alive
+and requires normal weak-reference finalization after each cycle. A missing
+`smaps_rollup` field is recorded as unavailable, not silently treated as zero.
+
+Interpret retained anonymous, file-backed and private-dirty RSS, PSS and swap
+as **attribution clues**, not proof of a leak or of retained GPU allocations.
+The diagnostic separately flags a `VmHWM` counter smaller than sampled RSS;
+that evidence must not override the fail-closed peak-memory release gate.
+The diagnostic is not a substitute for identical baseline/candidate samples,
+a working physical-GPU measurement, or a leak profiler with allocation stacks.
+
+### GPU profiler subprocess safety
+
+`tests/benchmarks/measure_gpu_memory.py` now redirects child stdout to a
+temporary file, enforces a deadline (default 900 seconds), caps child-output
+size (default 8 MiB), and terminates/reaps its POSIX process group on timeout
+or output-limit failure. It retains at most the last 64 KiB of diagnostics in
+JSON. Override with `--timeout-seconds` and `--max-output-mib` within the
+supported bounds. The result is `failed` for timeouts or exceeded output
+limits and `not_measured` for a successful run lacking usable GPU counters.
+`measured` documents process-level GPU telemetry only; it does not mean that
+a matched baseline GPU-memory regression comparison has passed.

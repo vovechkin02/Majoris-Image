@@ -93,6 +93,38 @@ def qualify_gpu(result: dict, benchmark: Path, fixture: Path, output: Path) -> N
         result["status"] = "passed_cpu_and_gpu"
 
 
+def qualify_viewer_diagnostics(result: dict, build: Path, workdir: Path,
+                               cycles: int) -> None:
+    """Record optional long-cycle GTK evidence without calling it a leak test."""
+    from collect_performance import artifact
+
+    benchmark = artifact(build, "benchmark-viewer-lifecycle")
+    fixture = build / "tests/large.tiff"
+    output = workdir / "viewer-memory-diagnosis.json"
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve().parents[1] /
+            "benchmarks/diagnose_viewer_memory.py"),
+        str(benchmark), str(fixture), "--cycles", str(cycles),
+        "--viewers", "8", "--mode", "tiled", "--xvfb",
+        "--output", str(output),
+        "--log", str(workdir / "viewer-memory-diagnosis.log"),
+        "--timeout-seconds", "2400",
+    ]
+    completed = subprocess.run(
+        command, capture_output=True, text=True, check=False, timeout=2500,
+    )
+    if output.exists():
+        result["viewer_memory_diagnosis"] = json.loads(output.read_text())
+    else:
+        result["viewer_memory_diagnosis"] = {
+            "status": "blocked", "reason": completed.stderr.strip(),
+        }
+    if completed.returncode != 0:
+        result["status"] = "blocked"
+        result["reason"] = "Requested long-cycle viewer diagnosis is incomplete"
+
+
 def main() -> int:
     """Run a fresh matched qualification and save a complete, truthful report."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -110,9 +142,15 @@ def main() -> int:
                         help="Large TIFF image for physical GPU measurements")
     parser.add_argument("--require-gpu", action="store_true",
                         help="Only succeed if GPU per-process telemetry was measured")
+    parser.add_argument("--diagnose-viewer-memory", action="store_true",
+                        help="Record optional 20-cycle tiled-viewer memory diagnostics")
+    parser.add_argument("--diagnostic-cycles", type=int, default=20,
+                        help="Diagnostic cycles, between 5 and 50 (default: 20)")
     args = parser.parse_args()
     if not 3 <= args.samples <= 30:
         parser.error("3–30 samples required")
+    if not 5 <= args.diagnostic_cycles <= 50:
+        parser.error("Diagnostic cycles must be between 5 and 50")
     if (args.gpu_executable is None) != (args.gpu_fixture is None):
         parser.error("--gpu-executable and --gpu-fixture must be supplied together")
     source, archive, workdir = (value.resolve() for value in
@@ -139,6 +177,12 @@ def main() -> int:
                 fixture = build / "tests/large.tiff"
             if benchmark is not None and fixture is not None:
                 qualify_gpu(result, benchmark, fixture, workdir / "gpu-telemetry.json")
+        if (args.diagnose_viewer_memory and
+                result["status"] in ("passed_cpu_only", "passed_cpu_and_gpu")):
+            qualify_viewer_diagnostics(
+                result, workdir / "candidate-build/build-glycin-enabled",
+                workdir, args.diagnostic_cycles,
+            )
         if args.require_gpu and result["status"] != "passed_cpu_and_gpu":
             result["status"] = "blocked"
             result["reason"] = "Physical GPU telemetry unavailable or not qualified"

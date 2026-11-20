@@ -86,7 +86,7 @@ def qualify(root: Path, workdir: Path, baseline: Path | None,
             ["meson", "setup", str(build), str(root), "-Dgtk=true", "-Dtests=true",
              f"-Dglycin={name}", "-Dworker_profiling=true"] + options,
             ["meson", "compile", "-C", str(build)],
-            ["meson", "test", "-C", str(build), "--no-rebuild", "--print-errorlogs"],
+            ["meson", "test", "-C", str(build), "--print-errorlogs"],
         ]
         if raw_fixtures is not None:
             steps.append([

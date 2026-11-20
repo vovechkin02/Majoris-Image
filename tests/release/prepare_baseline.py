@@ -21,6 +21,10 @@ NEW_SUPPORT_FILES = (
     "tests/release/test_platform_qualification.py",
     "tests/release/qualify_matched.py",
     "tests/release/verify_raw_fixtures.py",
+    "tests/release/test_memory_diagnostics.py",
+    "tests/release/test_gpu_profiler.py",
+    "tests/benchmarks/diagnose_viewer_memory.py",
+    "tests/benchmarks/measure_gpu_memory.py",
 )
 
 HARNESS_FILES = (

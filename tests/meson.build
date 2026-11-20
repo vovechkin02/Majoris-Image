@@ -19,6 +19,18 @@ if get_option('tests')
     suite: 'unit',
   )
   test(
+    'Extended viewer-memory diagnostic policy',
+    python,
+    args: [meson.current_source_dir() / 'release/test_memory_diagnostics.py'],
+    suite: 'unit',
+  )
+  test(
+    'GPU profiling subprocess safety policy',
+    python,
+    args: [meson.current_source_dir() / 'release/test_gpu_profiler.py'],
+    suite: 'unit',
+  )
+  test(
     'RAW fixture and physical GPU preflight policy',
     python,
     args: [meson.current_source_dir() / 'release/test_platform_qualification.py'],

@@ -4,7 +4,9 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -98,8 +100,8 @@ def drm_process_mib(pid: int) -> tuple[float, str] | None:
             continue
         driver, amount = measured
         fields = dict(
-        line.split(":", 1) for line in contents.splitlines() if ":" in line
-    )
+            line.split(":", 1) for line in contents.splitlines() if ":" in line
+        )
         client = fields.get("drm-client-id", "").strip()
         device = fields.get("drm-pdev", "").strip()
         if not client:
@@ -112,51 +114,114 @@ def drm_process_mib(pid: int) -> tuple[float, str] | None:
     return sum(clients.values()), "Linux DRM fdinfo resident per-client memory"
 
 
+def stop_process_group(process: subprocess.Popen) -> None:
+    """Terminate and reap a timed-out profiler and its subprocesses.
+
+    The benchmark starts in a separate POSIX session, so signaling its process
+    group also covers worker processes that have not detached from the group.
+    """
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+    # A terminated group leader can leave descendants running. Signal the
+    # original group once more before returning and reaping the leader.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait()
+
+
+def read_output_tail(stream, limit: int = 65_536) -> tuple[str, bool, int]:
+    """Return a bounded diagnostic tail without loading unbounded child output."""
+    stream.flush()
+    stream.seek(0, os.SEEK_END)
+    size = stream.tell()
+    stream.seek(max(0, size - limit))
+    tail = stream.read(limit).decode("utf-8", errors="replace")
+    return tail, size > limit, size
+
+
 def profile(executable: Path, fixture: Path, cycles: int, viewers: int,
-            mode: str) -> dict:
-    """Collect host RSS and supported GPU samples from a real display session."""
+            mode: str, timeout_seconds: float = 900,
+            max_output_mib: int = 8) -> dict:
+    """Profile a bounded subprocess on a real GPU; record incomplete evidence honestly.
+
+    Output is redirected to a temporary file rather than an undrained pipe.
+    A deadline and maximum output size prevent an indefinitely blocked child,
+    and a separate process group permits worker subprocess cleanup on failure.
+    """
+    if timeout_seconds <= 0 or max_output_mib < 1:
+        raise ValueError("A positive deadline and bounded output limit are required")
     status = {
-        "driver": "unavailable",
-        "host_rss_peak_kib": None, "gpu_memory_peak_mib": None,
-        "gpu_samples": 0, "host_samples": 0,
+        "driver": "unavailable", "host_rss_peak_kib": None,
+        "gpu_memory_peak_mib": None, "gpu_samples": 0, "host_samples": 0,
         "gpu_scope": (
             "application process only; compositor allocations are not included"
         ),
+        "failure_reason": None,
     }
-    with subprocess.Popen(
-        [str(executable), str(fixture), str(cycles), str(viewers), mode],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-    ) as process:
-        while process.poll() is None:
-            host = rss_kib(process.pid)
-            if host is not None:
-                status["host_samples"] += 1
-                status["host_rss_peak_kib"] = max(
-                    status["host_rss_peak_kib"] or 0, host
-                )
-            drm = drm_process_mib(process.pid)
-            if drm is not None:
-                gpu, method = drm
-            else:
-                gpu = (
-                    gpu_process_mib(process.pid)
-                    if shutil.which("nvidia-smi") else None
-                )
-                method = "NVIDIA compute-app process telemetry"
-            if gpu is not None:
-                status["driver"] = method
-                status["gpu_samples"] += 1
-                status["gpu_memory_peak_mib"] = max(
-                    status["gpu_memory_peak_mib"] or 0, gpu
-                )
-            time.sleep(0.2)
-        output, _ = process.communicate(timeout=10)
-    status["exit_code"] = process.returncode
-    status["output"] = output
+    maximum_bytes = max_output_mib * 1024 * 1024
+    with tempfile.TemporaryFile(mode="w+b") as output_file:
+        process = subprocess.Popen(
+            [str(executable), str(fixture), str(cycles), str(viewers), mode],
+            stdout=output_file, stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        deadline = time.monotonic() + timeout_seconds
+        try:
+            while process.poll() is None:
+                if time.monotonic() >= deadline:
+                    status["failure_reason"] = "benchmark_timeout"
+                    break
+                if os.fstat(output_file.fileno()).st_size > maximum_bytes:
+                    status["failure_reason"] = "benchmark_output_limit"
+                    break
+                host = rss_kib(process.pid)
+                if host is not None:
+                    status["host_samples"] += 1
+                    status["host_rss_peak_kib"] = max(
+                        status["host_rss_peak_kib"] or 0, host
+                    )
+                drm = drm_process_mib(process.pid)
+                if drm is not None:
+                    gpu, method = drm
+                else:
+                    gpu = (
+                        gpu_process_mib(process.pid)
+                        if shutil.which("nvidia-smi") else None
+                    )
+                    method = "NVIDIA compute-app process telemetry"
+                if gpu is not None:
+                    status["driver"] = method
+                    status["gpu_samples"] += 1
+                    status["gpu_memory_peak_mib"] = max(
+                        status["gpu_memory_peak_mib"] or 0, gpu
+                    )
+                time.sleep(min(0.2, max(0, deadline - time.monotonic())))
+            if status["failure_reason"] is None:
+                process.wait(timeout=2)
+                if os.fstat(output_file.fileno()).st_size > maximum_bytes:
+                    status["failure_reason"] = "benchmark_output_limit"
+        finally:
+            if status["failure_reason"] is not None or process.poll() is None:
+                stop_process_group(process)
+        status["exit_code"] = process.returncode
+        tail, truncated, output_bytes = read_output_tail(output_file)
+        status["output"] = tail
+        status["output_truncated"] = truncated
+        status["output_bytes"] = output_bytes
     status["qualification"] = (
-        "measured" if process.returncode == 0 and status["gpu_samples"] > 0 and
-        (status["gpu_memory_peak_mib"] or 0) > 0
-        else "not_measured" if process.returncode == 0 else "failed"
+        "measured" if status["failure_reason"] is None and status["exit_code"] == 0
+        and status["gpu_samples"] > 0 and (status["gpu_memory_peak_mib"] or 0) > 0
+        else "not_measured" if status["failure_reason"] is None
+        and status["exit_code"] == 0 else "failed"
     )
     return status
 
@@ -170,6 +235,8 @@ def main() -> int:
     parser.add_argument("--cycles", type=int, default=6)
     parser.add_argument("--viewers", type=int, default=8)
     parser.add_argument("--mode", choices=("preview", "tiled"), default="tiled")
+    parser.add_argument("--timeout-seconds", type=float, default=900)
+    parser.add_argument("--max-output-mib", type=int, default=8)
     args = parser.parse_args()
     if not (args.executable.is_file() and args.fixture.is_file()):
         parser.error("The compiled benchmark and image fixture must exist")
@@ -179,8 +246,12 @@ def main() -> int:
         parser.error("A real graphical session is required; Xvfb is not a GPU test")
     if os.environ.get("GSK_RENDERER") == "cairo":
         parser.error("A Cairo renderer cannot qualify physical GPU allocations")
-    result = profile(args.executable.resolve(), args.fixture.resolve(),
-                     args.cycles, args.viewers, args.mode)
+    if args.timeout_seconds <= 0 or not 1 <= args.max_output_mib <= 64:
+        parser.error("Deadline must be positive and output limit 1–64 MiB")
+    result = profile(
+        args.executable.resolve(), args.fixture.resolve(), args.cycles,
+        args.viewers, args.mode, args.timeout_seconds, args.max_output_mib,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))

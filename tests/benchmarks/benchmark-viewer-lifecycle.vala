@@ -126,17 +126,77 @@ private async void assert_viewers_released (Gee.ArrayList<ViewerLifetimeProbe> p
     throw new IOError.FAILED ("GTK retained one or more ImageView objects after release");
 }
 
-/** Reads one Linux process-residency counter, in KiB, without changing allocations. */
-private int64 memory_kib (string field) throws Error {
-    string contents;
-    FileUtils.get_contents ("/proc/self/status", out contents);
+/** Extracts a Linux memory counter from one procfs snapshot in KiB. */
+private int64 memory_field (string contents, string field) throws Error {
     foreach (var line in contents.split ("\n")) {
         if (line.has_prefix (field + ":")) {
-            var parts = line.substring (field.length + 1).strip ().split (" ");
-            return int64.parse (parts[0]);
+            var fields = line.substring (field.length + 1).strip ().split (" ");
+            return int64.parse (fields[0]);
         }
     }
-    throw new IOError.NOT_FOUND ("Missing Linux resident-memory counter %s", field);
+    throw new IOError.NOT_FOUND ("Missing Linux memory counter %s", field);
+}
+
+/** Reads resident and high-water RSS from the same Linux status snapshot. */
+private int64[] memory_pair () throws Error {
+    string contents;
+    FileUtils.get_contents ("/proc/self/status", out contents);
+    int64[] counters = {
+        memory_field (contents, "VmRSS"),
+        memory_field (contents, "VmHWM"),
+    };
+    return counters;
+}
+
+/** Samples independently reported Linux memory categories for diagnostics only.
+ *
+ * These measurements are deliberately not part of the matched six-cycle
+ * acceptance workload. They distinguish anonymous, file-backed and private
+ * residency but cannot by themselves prove that allocations are live leaks.
+ */
+private void report_memory_diagnostics (string stage, int cycle, int textures) {
+    try {
+        string status;
+        string rollup;
+        FileUtils.get_contents ("/proc/self/status", out status);
+        FileUtils.get_contents ("/proc/self/smaps_rollup", out rollup);
+        stdout.printf (
+            "Viewer-diagnostic stage=%s cycle=%d textures=%d " +
+            "rss_kib=%" + int64.FORMAT + " hwm_kib=%" + int64.FORMAT +
+            " anon_kib=%" + int64.FORMAT + " file_kib=%" + int64.FORMAT +
+            " smaps_rss_kib=%" + int64.FORMAT +
+            " smaps_pss_kib=%" + int64.FORMAT +
+            " private_dirty_kib=%" + int64.FORMAT +
+            " swap_kib=%" + int64.FORMAT + "\n",
+            stage, cycle, textures,
+            memory_field (status, "VmRSS"),
+            memory_field (status, "VmHWM"),
+            memory_field (status, "RssAnon"),
+            memory_field (status, "RssFile"),
+            memory_field (rollup, "Rss"),
+            memory_field (rollup, "Pss"),
+            memory_field (rollup, "Private_Dirty"),
+            memory_field (rollup, "Swap"));
+    } catch (Error error) {
+        // WSL and other Linux variants may omit the optional procfs fields.
+        // Report the limitation without making diagnostic mode look qualified.
+        stdout.printf ("Viewer-diagnostic stage=%s cycle=%d unavailable=1\n",
+            stage, cycle);
+    }
+}
+
+/** Counts snapshot texture nodes in live viewers without retaining the nodes. */
+private int count_view_textures (Gtk.Grid parent, Gee.ArrayList<ImageView> views) {
+    int total = 0;
+    foreach (var view in views) {
+        if (!view.get_mapped ()) {
+            continue;
+        }
+        var snapshot = new Gtk.Snapshot ();
+        parent.snapshot_child (view, snapshot);
+        total += count_textures (snapshot.to_node ());
+    }
+    return total;
 }
 
 /** Yields to GTK so asynchronous finalization and idle cleanup can complete. */
@@ -152,8 +212,13 @@ private async void quiesce () {
 private async void measure_lifecycle (File file, int cycles, int viewers_per_cycle,
                                       bool tiled)
     throws Error {
-    int64 initial = memory_kib ("VmRSS");
+    bool diagnostics = Environment.get_variable ("IMAGEKIT_MEMORY_DIAGNOSTICS") == "1";
+    int64[] initial_counters = memory_pair ();
+    int64 initial = initial_counters[0];
     stdout.printf ("Viewer-memory initial_rss_kib=%" + int64.FORMAT + "\n", initial);
+    if (diagnostics) {
+        report_memory_diagnostics ("initial", 0, 0);
+    }
     for (int cycle = 0; cycle < cycles; cycle++) {
         var window = new Gtk.Window ();
         window.set_default_size (1600, 900);
@@ -175,7 +240,12 @@ private async void measure_lifecycle (File file, int cycles, int viewers_per_cyc
             stdout.printf ("Viewer-tiles cycle=%d ready_viewers=%d\n",
                 cycle + 1, views.size);
         }
-        int64 live = memory_kib ("VmRSS");
+        int64[] live_counters = memory_pair ();
+        int64 live = live_counters[0];
+        if (diagnostics) {
+            report_memory_diagnostics (
+                "live", cycle + 1, count_view_textures (parent, views));
+        }
         foreach (var view in views) {
             parent.remove (view);
         }
@@ -186,15 +256,27 @@ private async void measure_lifecycle (File file, int cycles, int viewers_per_cyc
         // RSS alone cannot distinguish allocator arenas from retained objects.
         yield assert_viewers_released (probes, cycle + 1);
         yield quiesce ();
-        int64 current = memory_kib ("VmRSS");
-        int64 peak = memory_kib ("VmHWM");
+        int64[] settled_counters = memory_pair ();
+        int64 current = settled_counters[0];
+        int64 peak = live_counters[1] > settled_counters[1]
+            ? live_counters[1] : settled_counters[1];
+        if (diagnostics) {
+            report_memory_diagnostics ("settled", cycle + 1, 0);
+            if (peak < live || peak < current) {
+                stdout.printf ("Viewer-high-water-anomaly cycle=%d\n", cycle + 1);
+            }
+        }
         stdout.printf (
             "Viewer-memory cycle=%d live_rss_kib=%" + int64.FORMAT +
             " settled_rss_kib=%" + int64.FORMAT +
             " peak_rss_kib=%" + int64.FORMAT + "\n",
             cycle + 1, live, current, peak);
     }
-    int64 settled = memory_kib ("VmRSS");
+    int64[] final_counters = memory_pair ();
+    int64 settled = final_counters[0];
+    if (diagnostics) {
+        report_memory_diagnostics ("final", cycles, 0);
+    }
     stdout.printf ("Viewer-memory final_rss_kib=%" + int64.FORMAT +
         " retained_delta_kib=%" + int64.FORMAT + "\n", settled, settled - initial);
 }
